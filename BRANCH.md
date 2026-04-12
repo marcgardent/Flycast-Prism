@@ -8,9 +8,9 @@ Ce document centralise la stratégie technique pour permettre l'utilisation de s
 
 L'objectif est d'exposer la texture de profondeur sans impacter les performances par défaut.
 
-Localisation : core/rend/vulkan/vulkan_renderer.cpp et vulkan_context.cpp.
+Localisation : core/rend/vulkan/drawer.cpp, core/rend/vulkan/oit/oit_drawer.cpp et shell/libretro/libretro.cpp.
 
-Action : Ajouter VK_IMAGE_USAGE_SAMPLED_BIT au VkImageCreateInfo du tampon de profondeur.
+Action : Ajouter vk::ImageUsageFlagBits::eSampled au FramebufferAttachment du tampon de profondeur.
 
 Toggle : Implémenter une option bool config.ExposeDepth dans les Core Options de Libretro.
 
@@ -53,27 +53,15 @@ Edge Smoothing (Anti-Aliasing de profondeur) : Détecter les contours réels des
 Pour exposer la texture, la modification principale se situe lors de l'initialisation des ressources graphiques.
 
 ```
-// Exemple de modification dans le setup du Depth Buffer (vulkan_context.cpp)
+// Exemple de modification dans le setup du Depth Buffer (drawer.cpp)
 
-VkImageCreateInfo imageInfo = {};
-imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-imageInfo.imageType = VK_IMAGE_TYPE_2D;
-imageInfo.extent.width = width;
-imageInfo.extent.height = height;
-imageInfo.extent.depth = 1;
-imageInfo.mipLevels = 1;
-imageInfo.arrayLayers = 1;
-imageInfo.format = depthFormat;
-imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+if (config::ExposeDepth)
+    usage |= vk::ImageUsageFlagBits::eSampled;
+else
+    usage |= vk::ImageUsageFlagBits::eTransientAttachment;
 
-// MODIFICATION WARRIOR : Ajout du bit SAMPLED pour lecture externe
-imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-
-imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-vkCreateImage(device, &imageInfo, nullptr, &depthImage);
+depthAttachment->Init(width, height, format, usage, "DEPTH ATTACHMENT");
 ```
 
 ## IV. Scripts de Shading (Slang)
