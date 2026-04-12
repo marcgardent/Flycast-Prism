@@ -369,7 +369,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	u32 dst = pp.tsp.DstInstr;
 	vk::PipelineColorBlendAttachmentState pipelineColorBlendAttachmentState
 	{
-	  true,                          // blendEnable
+	  !config::ShowDepth,            // blendEnable
 	  getBlendFactor(src, true),     // srcColorBlendFactor
 	  getBlendFactor(dst, false),    // dstColorBlendFactor
 	  vk::BlendOp::eAdd,             // colorBlendOp
@@ -408,7 +408,8 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	params.useAlpha = pp.tsp.UseAlpha;
 	params.palette = gpuPalette;
 	params.divPosZ = divPosZ;
-	params.dithering = dithering;
+	params.dithering = dithering && !config::ShowDepth;
+	params.showDepth = config::ShowDepth;
 	vk::ShaderModule fragment_module = shaderManager->GetFragmentShader(params);
 
 	std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {

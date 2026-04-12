@@ -292,7 +292,7 @@ void main()
 #endif
 	gl_FragDepth = log2(1.0 + max(w, -0.999999)) / 34.0;
 
-#if DITHERING == 1
+	#if DITHERING == 1
 	float ditherTable[16] = float[](
 		5., 13.,  7., 15.,
 		9.,  1., 11.,  3.,
@@ -302,6 +302,11 @@ void main()
 	float r = ditherTable[int(mod(gl_FragCoord.y, 4.)) * 4 + int(mod(gl_FragCoord.x, 4.))];
 	vec4 dv = vec4(r, r, r, 1.) / uniformBuffer.ditherDivisor;
 	color = clamp(floor(color * 255. + dv) / 255., 0., 1.);
+#endif
+#if ShowDepth == 1
+	// On affiche la profondeur logarithmique réelle calculée par Flycast
+	color.rgb = vec3(gl_FragDepth);
+	color.a = 1.0;
 #endif
 	gl_FragColor = color;
 }
@@ -761,6 +766,7 @@ vk::UniqueShaderModule ShaderManager::compileShader(const FragmentShaderParams& 
 		.addConstant("pp_Palette", params.palette)
 		.addConstant("DIV_POS_Z", (int)params.divPosZ)
 		.addConstant("DITHERING", (int)params.dithering)
+		.addConstant("ShowDepth", (int)params.showDepth)
 		.addSource(GouraudSource)
 		.addSource(FragmentShaderTop)
 		.addSource(FragmentShaderCommon)

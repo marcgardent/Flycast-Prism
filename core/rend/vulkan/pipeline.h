@@ -274,6 +274,7 @@ private:
 		hash |= (u64)(!settings.platform.isNaomi2() && config::NativeDepthInterpolation) << 30;
 		hash |= (u64)(pp->tcw.PixelFmt == PixelBumpMap) << 31;
 		hash |= (u64)dithering << 32;
+		hash |= (u64)config::ShowDepth << 33;
 
 		return hash;
 	}
