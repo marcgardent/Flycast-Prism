@@ -380,7 +380,7 @@ void input_sdl_handle()
 							break;
 
 						// Graphics debug shortcuts: Alt+0, Alt+1, Alt+2
-						if (event.key.keysym.mod & KMOD_ALT)
+						if ((event.key.keysym.mod & KMOD_ALT) && config::RendererType == RenderType::Vulkan_GBuffer)
 						{
 							if (event.key.keysym.sym == SDLK_0)
 							{

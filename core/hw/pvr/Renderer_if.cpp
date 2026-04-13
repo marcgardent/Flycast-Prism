@@ -278,6 +278,7 @@ Renderer* rend_GL4();
 Renderer* rend_norend();
 Renderer* rend_Vulkan();
 Renderer* rend_OITVulkan();
+Renderer* rend_GBufferVulkan();
 Renderer* rend_DirectX9();
 Renderer* rend_DirectX11();
 Renderer* rend_OITDirectX11();
@@ -306,6 +307,9 @@ static void rend_create_renderer()
 		break;
 	case RenderType::Vulkan_OIT:
 		renderer = rend_OITVulkan();
+		break;
+	case RenderType::Vulkan_GBuffer:
+		renderer = rend_GBufferVulkan();
 		break;
 #endif
 #ifdef USE_DX9

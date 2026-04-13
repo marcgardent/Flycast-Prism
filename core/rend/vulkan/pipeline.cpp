@@ -215,9 +215,7 @@ void PipelineManager::CreateDepthPassPipeline(int cullMode, bool naomi2)
 	  stencilOpState                              // back
 	);
 
-	// Color flags and blending
-	vk::ColorComponentFlags colorComponentFlags((vk::ColorComponentFlagBits)0);
-	vk::PipelineColorBlendAttachmentState pipelineColorBlendAttachmentState(
+	vk::PipelineColorBlendAttachmentState modVolColorBlendAttachmentState(
 		false,                              // blendEnable
 		vk::BlendFactor::eZero,             // srcColorBlendFactor
 		vk::BlendFactor::eZero,             // dstColorBlendFactor
@@ -225,15 +223,26 @@ void PipelineManager::CreateDepthPassPipeline(int cullMode, bool naomi2)
 		vk::BlendFactor::eZero,             // srcAlphaBlendFactor
 		vk::BlendFactor::eZero,             // dstAlphaBlendFactor
 		vk::BlendOp::eAdd,                  // alphaBlendOp
-		colorComponentFlags                 // colorWriteMask
+		(vk::ColorComponentFlags)0          // colorWriteMask
 	);
+
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+	if (config::RendererType == RenderType::Vulkan_GBuffer)
+	{
+		colorBlendAttachments.push_back(modVolColorBlendAttachmentState);
+		colorBlendAttachments.push_back(modVolColorBlendAttachmentState);
+	}
+	else
+	{
+		colorBlendAttachments.push_back(modVolColorBlendAttachmentState);
+	}
 
 	vk::PipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo
 	(
 		vk::PipelineColorBlendStateCreateFlags(),   // flags
 		false,                                      // logicOpEnable
 		vk::LogicOp::eNoOp,                         // logicOp
-		pipelineColorBlendAttachmentState,         // attachments
+		colorBlendAttachments,                     // attachments
 		{ { 1.0f, 1.0f, 1.0f, 1.0f } }              // blendConstants
 	);
 
@@ -379,12 +388,28 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	  colorComponentFlags            // colorWriteMask
 	};
 
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+	if (config::RendererType == RenderType::Vulkan_GBuffer)
+	{
+		// First attachment (Albedo) uses standard blending
+		colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
+		// Second attachment (Normals) uses no blending, just write
+		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
+			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			colorComponentFlags));
+	}
+	else
+	{
+		colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
+	}
+
 	vk::PipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo
 	(
 	  vk::PipelineColorBlendStateCreateFlags(),   // flags
 	  false,                                      // logicOpEnable
 	  vk::LogicOp::eNoOp,                         // logicOp
-	  pipelineColorBlendAttachmentState,         // attachments
+	  colorBlendAttachments,                     // attachments
 	  { { 1.0f, 1.0f, 1.0f, 1.0f } }              // blendConstants
 	);
 
@@ -412,6 +437,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	params.showDepth = config::ShowDepth;
 	params.isTranslucent = listType == ListType_Translucent && (config::ShowDepthOpaqueOnly || config::ShowNormals);
 	params.showNormals = config::ShowNormals;
+	params.gbuffer = config::RendererType == RenderType::Vulkan_GBuffer;
 	vk::ShaderModule fragment_module = shaderManager->GetFragmentShader(params);
 
 	std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {

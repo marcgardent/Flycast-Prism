@@ -47,6 +47,7 @@ void gui_settings_video()
 		perPixel = false;
 		break;
 	case RenderType::Vulkan_OIT:
+	case RenderType::Vulkan_GBuffer:
 		renderApi = Vulkan;
 		perPixel = true;
 		break;
@@ -85,6 +86,7 @@ void gui_settings_video()
 		header(T("Graphics API"));
 		{
 			ImGui::Columns(apiCount, "renderApi", false);
+			int oldRenderApi = renderApi;
 #ifdef USE_OPENGL
 			ImGui::RadioButton("OpenGL", &renderApi, OpenGL);
 			ImGui::NextColumn();
@@ -111,6 +113,25 @@ void gui_settings_video()
 			ImGui::NextColumn();
 #endif
 			ImGui::Columns(1, nullptr, false);
+
+			if (renderApi != oldRenderApi)
+			{
+				switch (renderApi)
+				{
+				case OpenGL:
+					config::RendererType = perPixel ? RenderType::OpenGL_OIT : RenderType::OpenGL;
+					break;
+				case Vulkan:
+					config::RendererType = perPixel ? RenderType::Vulkan_OIT : RenderType::Vulkan;
+					break;
+				case DirectX9:
+					config::RendererType = RenderType::DirectX9;
+					break;
+				case DirectX11:
+					config::RendererType = perPixel ? RenderType::DirectX11_OIT : RenderType::DirectX11;
+					break;
+				}
+			}
     	}
     }
     header(T("Transparent Sorting"));
@@ -138,16 +159,48 @@ void gui_settings_video()
     	case 0:
     		perPixel = false;
     		config::PerStripSorting.set(false);
+    		if (renderApi == Vulkan)
+    			config::RendererType = config::RendererType == RenderType::Vulkan_GBuffer ? RenderType::Vulkan_GBuffer : RenderType::Vulkan;
+    		else if (renderApi == OpenGL)
+    			config::RendererType = RenderType::OpenGL;
+    		else if (renderApi == DirectX11)
+    			config::RendererType = RenderType::DirectX11;
     		break;
     	case 1:
     		perPixel = false;
     		config::PerStripSorting.set(true);
+    		if (renderApi == Vulkan)
+    			config::RendererType = config::RendererType == RenderType::Vulkan_GBuffer ? RenderType::Vulkan_GBuffer : RenderType::Vulkan;
+    		else if (renderApi == OpenGL)
+    			config::RendererType = RenderType::OpenGL;
+    		else if (renderApi == DirectX11)
+    			config::RendererType = RenderType::DirectX11;
     		break;
     	case 2:
     		perPixel = true;
+    		if (renderApi == Vulkan)
+    			config::RendererType = config::RendererType == RenderType::Vulkan_GBuffer ? RenderType::Vulkan_GBuffer : RenderType::Vulkan_OIT;
+    		else if (renderApi == OpenGL)
+    			config::RendererType = RenderType::OpenGL_OIT;
+    		else if (renderApi == DirectX11)
+    			config::RendererType = RenderType::DirectX11_OIT;
     		break;
     	}
     }
+	if (renderApi == Vulkan)
+	{
+		ImGui::Spacing();
+		bool gbuffer = config::RendererType == RenderType::Vulkan_GBuffer;
+		if (ImGui::Checkbox("G-Buffer", &gbuffer))
+		{
+			if (gbuffer)
+				config::RendererType = RenderType::Vulkan_GBuffer;
+			else
+				config::RendererType = perPixel ? RenderType::Vulkan_OIT : RenderType::Vulkan;
+		}
+		ImGui::SameLine();
+		ShowHelpMarker(T("Use Deferred Rendering (G-Buffer) for advanced effects. Experimental."));
+	}
 	ImGui::Spacing();
 
     header(T("Rendering Options"));
@@ -418,6 +471,8 @@ void gui_settings_video()
 	}
 #endif
 
+    if (renderApi == Vulkan && config::RendererType == RenderType::Vulkan_GBuffer)
+    	return;
     switch (renderApi)
     {
     case OpenGL:

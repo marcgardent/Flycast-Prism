@@ -69,8 +69,13 @@ void main()
 )";
 
 static const char FragmentShaderTop[] = R"(
+#if GBUFFER == 1
+layout (location = 0) out vec4 FragColor;
+layout (location = 1) out vec4 NormalColor;
+#else
 layout (location = 0) out vec4 FragColor;
 #define gl_FragColor FragColor
+#endif
 
 layout (std140, set = 0, binding = 1) uniform FragmentShaderUniforms
 {
@@ -311,6 +316,21 @@ void main()
 	vec4 dv = vec4(r, r, r, 1.) / uniformBuffer.ditherDivisor;
 	color = clamp(floor(color * 255. + dv) / 255., 0., 1.);
 #endif
+
+#if GBUFFER == 1
+	vec3 normal;
+	if (length(vtx_normal) > 0.0)
+		normal = normalize(vtx_normal);
+	else
+		normal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
+	
+	NormalColor = vec4(normal * 0.5 + 0.5, 1.0);
+	
+	if (ShowDepth == 1)
+		FragColor = vec4(vec3(gl_FragDepth), 1.0);
+	else
+		FragColor = color;
+#else
 	#if ShowDepth == 1
 	// On affiche la profondeur logarithmique réelle calculée par Flycast
 	#if IS_TRANSLUCENT == 0
@@ -339,15 +359,16 @@ void main()
 	color.a = 1.0;
 #endif
 #if pp_BumpMap == 1
-	float s = PI / 2.0 * (texcol.a * 15.0 * 16.0 + texcol.r * 15.0) / 255.0;
-	float r = 2.0 * PI * (texcol.g * 15.0 * 16.0 + texcol.b * 15.0) / 255.0;
-	vec3 bumpNormal = vec3(sin(s) * cos(r), sin(s) * sin(r), cos(s));
+	float s_bump = PI / 2.0 * (texcol.a * 15.0 * 16.0 + texcol.r * 15.0) / 255.0;
+	float r_bump = 2.0 * PI * (texcol.g * 15.0 * 16.0 + texcol.b * 15.0) / 255.0;
+	vec3 bumpNormal = vec3(sin(s_bump) * cos(r_bump), sin(s_bump) * sin(r_bump), cos(s_bump));
 	#if ShowNormals == 1
 		color.rgb = bumpNormal * 0.5 + 0.5;
 		color.a = 1.0;
 	#endif
 #endif
-	gl_FragColor = color;
+	FragColor = color;
+#endif
 }
 )";
 
@@ -810,6 +831,7 @@ vk::UniqueShaderModule ShaderManager::compileShader(const FragmentShaderParams& 
 		.addConstant("ShowDepth", (int)params.showDepth)
 		.addConstant("IS_TRANSLUCENT", (int)params.isTranslucent)
 		.addConstant("ShowNormals", (int)params.showNormals)
+		.addConstant("GBUFFER", (int)params.gbuffer)
 		.addSource(GouraudSource)
 		.addSource(FragmentShaderTop)
 		.addSource(FragmentShaderCommon)

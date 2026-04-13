@@ -292,7 +292,7 @@ private:
 class ScreenDrawer : public Drawer
 {
 public:
-	void Init(SamplerManager *samplerManager, ShaderManager *shaderManager, const vk::Extent2D& viewport);
+	void Init(SamplerManager *samplerManager, ShaderManager *shaderManager, const vk::Extent2D& viewport, const std::vector<vk::Format>& colorFormats = {});
 
 	void Term()
 	{
@@ -309,14 +309,14 @@ public:
 
 	vk::RenderPass GetRenderPass() const { return *renderPassClear; }
 	void EndRenderPass() override;
-	bool PresentFrame()
+	bool PresentFrame(int attachmentIndex = 0)
 	{
 		EndRenderPass();
 		if (!frameRendered)
 			return false;
 		frameRendered = false;
-		GetContext()->PresentFrame(colorAttachments[GetCurrentImage()]->GetImage(),
-				colorAttachments[GetCurrentImage()]->GetImageView(), viewport, aspectRatio);
+		GetContext()->PresentFrame(colorAttachments[GetCurrentImage()][attachmentIndex]->GetImage(),
+				colorAttachments[GetCurrentImage()][attachmentIndex]->GetImageView(), viewport, aspectRatio);
 
 		return true;
 	}
@@ -331,8 +331,9 @@ private:
 	vk::UniqueRenderPass renderPassLoad;
 	vk::UniqueRenderPass renderPassClear;
 	std::vector<vk::UniqueFramebuffer> framebuffers;
-	std::vector<std::unique_ptr<FramebufferAttachment>> colorAttachments;
+	std::vector<std::vector<std::unique_ptr<FramebufferAttachment>>> colorAttachments;
 	std::unique_ptr<FramebufferAttachment> depthAttachment;
+	std::vector<vk::Format> colorFormats;
 	vk::Extent2D viewport;
 	ShaderManager *shaderManager = nullptr;
 	std::vector<bool> transitionNeeded;
