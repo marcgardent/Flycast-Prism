@@ -37,6 +37,7 @@ layout (location = 3) in mediump vec2 in_uv;
 layout (location = 0) INTERPOLATION out highp vec4 vtx_base;
 layout (location = 1) INTERPOLATION out highp vec4 vtx_offs;
 layout (location = 2) out highp vec3 vtx_uv;
+layout (location = 3) out highp vec3 vtx_pos;
 
 void main()
 {
@@ -48,6 +49,7 @@ void main()
 	vtx_base = in_base;
 	vtx_offs = in_offs;
 	vtx_uv = vec3(in_uv, vpos.z);
+	vtx_pos = vpos.xyz;
 #if pp_Gouraud == 1 && DIV_POS_Z != 1
 	vtx_base *= vpos.z;
 	vtx_offs *= vpos.z;
@@ -98,6 +100,7 @@ layout (set = 0, binding = 3) uniform sampler2D palette;
 layout (location = 0) INTERPOLATION in highp vec4 vtx_base;
 layout (location = 1) INTERPOLATION in highp vec4 vtx_offs;
 layout (location = 2) in highp vec3 vtx_uv;
+layout (location = 3) in highp vec3 vtx_pos;
 )";
 
 const char *FragmentShaderCommon = R"(
@@ -314,6 +317,15 @@ void main()
 			discard;
 		color.rgb = vec3(gl_FragDepth);
 	#endif
+	color.a = 1.0;
+#endif
+#if ShowNormals == 1
+	#if IS_TRANSLUCENT == 1
+		if (color.a < 0.2)
+			discard;
+	#endif
+	vec3 normal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
+	color.rgb = normal * 0.5 + 0.5;
 	color.a = 1.0;
 #endif
 	gl_FragColor = color;
@@ -651,6 +663,7 @@ layout (location = 4) in vec3         in_normal;
 layout (location = 0) INTERPOLATION out highp vec4 vtx_base;
 layout (location = 1) INTERPOLATION out highp vec4 vtx_offs;
 layout (location = 2) out highp vec3 vtx_uv;
+layout (location = 3) out highp vec3 vtx_pos;
 
 void wDivide(inout vec4 vpos)
 {
@@ -661,6 +674,7 @@ void wDivide(inout vec4 vpos)
 	vtx_offs *= vpos.z;
 #endif
 	vtx_uv = vec3(vtx_uv.xy * vpos.z, vpos.z);
+	vtx_pos = vpos.xyz;
 	vpos.w = 1.0;
 	vpos.z = 0.0;
 }
@@ -776,6 +790,7 @@ vk::UniqueShaderModule ShaderManager::compileShader(const FragmentShaderParams& 
 		.addConstant("DITHERING", (int)params.dithering)
 		.addConstant("ShowDepth", (int)params.showDepth)
 		.addConstant("IS_TRANSLUCENT", (int)params.isTranslucent)
+		.addConstant("ShowNormals", (int)params.showNormals)
 		.addSource(GouraudSource)
 		.addSource(FragmentShaderTop)
 		.addSource(FragmentShaderCommon)

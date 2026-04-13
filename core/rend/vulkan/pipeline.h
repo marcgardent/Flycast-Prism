@@ -275,7 +275,8 @@ private:
 		hash |= (u64)(pp->tcw.PixelFmt == PixelBumpMap) << 31;
 		hash |= (u64)dithering << 32;
 		hash |= (u64)config::ShowDepth << 33;
-		hash |= (u64)(listType == ListType_Translucent && config::ShowDepthOpaqueOnly) << 34;
+		hash |= (u64)(listType == ListType_Translucent && (config::ShowDepthOpaqueOnly || config::ShowNormals)) << 34;
+		hash |= (u64)config::ShowNormals << 35;
 		return hash;
 	}
 	u32 hash(ModVolMode mode, int cullMode, bool naomi2) const

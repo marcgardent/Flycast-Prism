@@ -111,6 +111,7 @@ Option<bool> ThreadedRendering("rend.ThreadedRendering", true);
 Option<bool> DupeFrames("rend.DupeFrames", false);
 Option<bool> ShowDepth("rend.ShowDepth", true);
 Option<bool> ShowDepthOpaqueOnly("rend.ShowDepthOpaqueOnly", true);
+Option<bool> ShowNormals("rend.ShowNormals", true);
 Option<int> PerPixelLayers("rend.PerPixelLayers", 32);
 #ifdef TARGET_UWP
 Option<bool> NativeDepthInterpolation("rend.NativeDepthInterpolation", true);

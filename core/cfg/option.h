@@ -472,6 +472,7 @@ extern Option<bool> ThreadedRendering;
 extern Option<bool> DupeFrames;
 extern Option<bool> ShowDepth;
 extern Option<bool> ShowDepthOpaqueOnly;
+extern Option<bool> ShowNormals;
 extern Option<bool> NativeDepthInterpolation;
 extern Option<bool> EmulateFramebuffer;
 extern Option<bool> FixUpscaleBleedingEdge;
