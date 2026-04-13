@@ -41,5 +41,11 @@ Utiliser les `VkSubpass` pour optimiser la consommation de bande passante mémoi
 ### D. Pipeline de Post-Process Dédié
 - Implémenter une passe de "Blit" finale ou un "Fullscreen Quad" qui prend en entrée la texture de profondeur du G-Buffer. Cela permettrait d'exporter la Z-Map vers un fichier ou une interface externe sans impacter le rendu principal de l'émulateur.
 
+### E. Motion Vectors (Nouveau)
+- **Implémentation** : Reconstruction via stockage des matrices $M_T$ et $M_{T-1}$ dans le `VulkanContext`.
+- **Réussite** : La centralisation dans le contexte global permet de maintenir la cohérence temporelle malgré les multiples passes de rendu interne de Flycast.
+- **Leçon apprise** : Ne jamais stocker de données temporelles dans des objets à cycle de vie court (comme le `Drawer`) sans un garde-fou global (`FrameCount`).
+- **Export** : Prêt pour être intégré dans un G-Buffer (R16G16_SFLOAT) pour du post-process temporel.
+
 ---
 *Document rédigé par Junie (Expert Vulkan Graphics Engineer)*
