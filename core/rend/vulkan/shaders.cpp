@@ -33,11 +33,13 @@ layout (location = 0) in vec4         in_pos;
 layout (location = 1) in vec4        in_base;
 layout (location = 2) in vec4        in_offs;
 layout (location = 3) in mediump vec2 in_uv;
+layout (location = 4) in vec3         in_normal;
 
 layout (location = 0) INTERPOLATION out highp vec4 vtx_base;
 layout (location = 1) INTERPOLATION out highp vec4 vtx_offs;
 layout (location = 2) out highp vec3 vtx_uv;
 layout (location = 3) out highp vec3 vtx_pos;
+layout (location = 4) out highp vec3 vtx_normal;
 
 void main()
 {
@@ -50,6 +52,8 @@ void main()
 	vtx_offs = in_offs;
 	vtx_uv = vec3(in_uv, vpos.z);
 	vtx_pos = vpos.xyz;
+	vtx_normal = in_normal;
+	
 #if pp_Gouraud == 1 && DIV_POS_Z != 1
 	vtx_base *= vpos.z;
 	vtx_offs *= vpos.z;
@@ -101,6 +105,7 @@ layout (location = 0) INTERPOLATION in highp vec4 vtx_base;
 layout (location = 1) INTERPOLATION in highp vec4 vtx_offs;
 layout (location = 2) in highp vec3 vtx_uv;
 layout (location = 3) in highp vec3 vtx_pos;
+layout (location = 4) in highp vec3 vtx_normal;
 )";
 
 const char *FragmentShaderCommon = R"(
@@ -324,9 +329,22 @@ void main()
 		if (color.a < 0.2)
 			discard;
 	#endif
-	vec3 normal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
+	vec3 normal;
+	if (length(vtx_normal) > 0.0)
+		normal = normalize(vtx_normal);
+	else
+		normal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
 	color.rgb = normal * 0.5 + 0.5;
 	color.a = 1.0;
+#endif
+#if pp_BumpMap == 1
+	float s = PI / 2.0 * (texcol.a * 15.0 * 16.0 + texcol.r * 15.0) / 255.0;
+	float r = 2.0 * PI * (texcol.g * 15.0 * 16.0 + texcol.b * 15.0) / 255.0;
+	vec3 bumpNormal = vec3(sin(s) * cos(r), sin(s) * sin(r), cos(s));
+	#if ShowNormals == 1
+		color.rgb = bumpNormal * 0.5 + 0.5;
+		color.a = 1.0;
+	#endif
 #endif
 	gl_FragColor = color;
 }
@@ -791,6 +809,7 @@ vk::UniqueShaderModule ShaderManager::compileShader(const FragmentShaderParams& 
 		.addConstant("ShowDepth", (int)params.showDepth)
 		.addConstant("IS_TRANSLUCENT", (int)params.isTranslucent)
 		.addConstant("ShowNormals", (int)params.showNormals)
+		.addConstant("pp_IsShadow", (int)params.isShadow)
 		.addSource(GouraudSource)
 		.addSource(FragmentShaderTop)
 		.addSource(FragmentShaderCommon)

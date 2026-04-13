@@ -315,16 +315,7 @@ private:
 		if (full)
 		{
 			attributeDescription = vertexInputAttributeDescriptions;
-
-			if (naomi2)
-			{
-				attributeDescriptionSize = std::size(vertexInputAttributeDescriptions);
-			}
-			else
-			{
-				// naomi2 normal not needed
-				attributeDescriptionSize = std::size(vertexInputAttributeDescriptions) - 1;
-			}
+			attributeDescriptionSize = std::size(vertexInputAttributeDescriptions);
 		}
 		
 

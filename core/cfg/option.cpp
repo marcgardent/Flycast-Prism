@@ -109,9 +109,9 @@ Option<int> AnisotropicFiltering("rend.AnisotropicFiltering", 1);
 Option<int> TextureFiltering("rend.TextureFiltering", 0); // Default
 Option<bool> ThreadedRendering("rend.ThreadedRendering", true);
 Option<bool> DupeFrames("rend.DupeFrames", false);
-Option<bool> ShowDepth("rend.ShowDepth", true);
+Option<bool> ShowDepth("rend.ShowDepth", false);
 Option<bool> ShowDepthOpaqueOnly("rend.ShowDepthOpaqueOnly", true);
-Option<bool> ShowNormals("rend.ShowNormals", true);
+Option<bool> ShowNormals("rend.ShowNormals", false);
 Option<int> PerPixelLayers("rend.PerPixelLayers", 32);
 #ifdef TARGET_UWP
 Option<bool> NativeDepthInterpolation("rend.NativeDepthInterpolation", true);
