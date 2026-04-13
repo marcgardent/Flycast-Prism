@@ -305,7 +305,15 @@ void main()
 #endif
 #if ShowDepth == 1
 	// On affiche la profondeur logarithmique réelle calculée par Flycast
-	color.rgb = vec3(gl_FragDepth);
+	#if IS_TRANSLUCENT == 0
+		color.rgb = vec3(gl_FragDepth);
+	#else
+		// Pour les translucides (poussière, fumée), on simule le comportement des arbres (Punch-Through)
+		// On ne garde que les fragments dont l'alpha est significatif (> 0.2 par exemple)
+		if (color.a < 0.2)
+			discard;
+		color.rgb = vec3(gl_FragDepth);
+	#endif
 	color.a = 1.0;
 #endif
 	gl_FragColor = color;
@@ -767,6 +775,7 @@ vk::UniqueShaderModule ShaderManager::compileShader(const FragmentShaderParams& 
 		.addConstant("DIV_POS_Z", (int)params.divPosZ)
 		.addConstant("DITHERING", (int)params.dithering)
 		.addConstant("ShowDepth", (int)params.showDepth)
+		.addConstant("IS_TRANSLUCENT", (int)params.isTranslucent)
 		.addSource(GouraudSource)
 		.addSource(FragmentShaderTop)
 		.addSource(FragmentShaderCommon)

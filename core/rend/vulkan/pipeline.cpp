@@ -410,6 +410,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	params.divPosZ = divPosZ;
 	params.dithering = dithering && !config::ShowDepth;
 	params.showDepth = config::ShowDepth;
+	params.isTranslucent = listType == ListType_Translucent && config::ShowDepthOpaqueOnly;
 	vk::ShaderModule fragment_module = shaderManager->GetFragmentShader(params);
 
 	std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {
