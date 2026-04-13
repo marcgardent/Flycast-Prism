@@ -378,6 +378,29 @@ void input_sdl_handle()
 						// Barcode scanner
 						if (card_reader::barcodeAvailable() && handleBarcodeScanner(event))
 							break;
+
+						// Graphics debug shortcuts: Alt+0, Alt+1, Alt+2
+						if (event.key.keysym.mod & KMOD_ALT)
+						{
+							if (event.key.keysym.sym == SDLK_0)
+							{
+								config::ShowDepth.set(false);
+								config::ShowNormals.set(false);
+								break;
+							}
+							if (event.key.keysym.sym == SDLK_1)
+							{
+								config::ShowDepth.set(true);
+								config::ShowNormals.set(false);
+								break;
+							}
+							if (event.key.keysym.sym == SDLK_2)
+							{
+								config::ShowDepth.set(false);
+								config::ShowNormals.set(true);
+								break;
+							}
+						}
 					}
 					if (!config::UseRawInput)
 						sdl_keyboard->input(event.key.keysym.scancode, event.type == SDL_KEYDOWN);
