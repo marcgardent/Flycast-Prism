@@ -6,6 +6,7 @@
 - **Invalidation Automatique du Cache** : L'intégration de l'option `ShowDepth` dans le hash du pipeline Vulkan a garanti que le changement d'option à la volée régénère correctement les shaders, évitant ainsi des états de pipeline incohérents.
 - **Filtrage par Liste de Rendu & Alpha Thresholding** : L'ajout de l'option `ShowDepthOpaqueOnly` permet d'exclure ou d'inclure les polygones translucides. La découverte clé a été d'appliquer un **Alpha Test forcé (seuil de 0.2)** sur les objets translucides (poussière, fumée) pour simuler le comportement du Punch-Through (arbres). Cela a produit un Z-Map géométrique extrêmement "propre" et sans compromis visuel.
 - **Découpage des Transparences** : En traitant les translucides comme des objets opaques avec `discard` binaire uniquement lors de l'affichage Z-Map, on obtient une carte de profondeur qui capture la structure des effets volumétriques tout en restant lisible.
+- **Suppression des Modifier Volumes** : Les ombres portées (Shadow Maps/Modifier Volumes) ont été désactivées lors de l'affichage du Z-Map car elles n'appartiennent pas à la géométrie physique et polluaient la lecture de la profondeur via des quads plein écran blendés.
 - **Découplage de la Visualisation** : Désactiver le blending et le dithering lors de l'activation du Z-Map a permis d'obtenir une carte de profondeur "propre", essentielle pour le debugging.
 
 ## 2. Ce qui n'a pas marché (Failures & Lessons Learned)

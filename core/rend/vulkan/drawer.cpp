@@ -442,7 +442,8 @@ bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 				current_pass.mvo_count - previous_pass.mvo_count, current_pass.autosort);
 		DrawList(cmdBuffer, ListType_Opaque, false, rendContext->global_param_op, previous_pass.op_count, current_pass.op_count);
 		DrawList(cmdBuffer, ListType_Punch_Through, false, rendContext->global_param_pt, previous_pass.pt_count, current_pass.pt_count);
-		DrawModVols(cmdBuffer, previous_pass.mvo_count, current_pass.mvo_count - previous_pass.mvo_count);
+		if (!config::ShowDepth)
+			DrawModVols(cmdBuffer, previous_pass.mvo_count, current_pass.mvo_count - previous_pass.mvo_count);
 		if (current_pass.autosort)
         {
 			if (!config::PerStripSorting)
