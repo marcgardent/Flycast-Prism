@@ -55,7 +55,6 @@ struct FragmentShaderParams
 	bool showDepth;
 	bool isTranslucent;
 	bool showNormals;
-	bool isShadow;
 
 	u32 hash()
 	{
@@ -64,8 +63,7 @@ struct FragmentShaderParams
 			| ((u32)offset << 7) | ((u32)fog << 8) | ((u32)gouraud << 10)
 			| ((u32)bumpmap << 11) | ((u32)clamping << 12) | ((u32)trilinear << 13)
 			| ((u32)palette << 14) | ((u32)divPosZ << 16) | ((u32)dithering << 17)
-			| ((u32)showDepth << 18) | ((u32)isTranslucent << 19) | ((u32)showNormals << 20)
-			| ((u32)isShadow << 21);
+			| ((u32)showDepth << 18) | ((u32)isTranslucent << 19) | ((u32)showNormals << 20);
 	}
 };
 

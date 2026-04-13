@@ -311,7 +311,7 @@ void main()
 	vec4 dv = vec4(r, r, r, 1.) / uniformBuffer.ditherDivisor;
 	color = clamp(floor(color * 255. + dv) / 255., 0., 1.);
 #endif
-#if ShowDepth == 1
+	#if ShowDepth == 1
 	// On affiche la profondeur logarithmique réelle calculée par Flycast
 	#if IS_TRANSLUCENT == 0
 		color.rgb = vec3(gl_FragDepth);
@@ -334,6 +334,7 @@ void main()
 		normal = normalize(vtx_normal);
 	else
 		normal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
+
 	color.rgb = normal * 0.5 + 0.5;
 	color.a = 1.0;
 #endif
@@ -809,7 +810,6 @@ vk::UniqueShaderModule ShaderManager::compileShader(const FragmentShaderParams& 
 		.addConstant("ShowDepth", (int)params.showDepth)
 		.addConstant("IS_TRANSLUCENT", (int)params.isTranslucent)
 		.addConstant("ShowNormals", (int)params.showNormals)
-		.addConstant("pp_IsShadow", (int)params.isShadow)
 		.addSource(GouraudSource)
 		.addSource(FragmentShaderTop)
 		.addSource(FragmentShaderCommon)
