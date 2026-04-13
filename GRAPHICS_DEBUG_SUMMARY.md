@@ -24,7 +24,20 @@ Ce document résume les tentatives, succès et échecs concernant l'implémentat
 
 ---
 
-## 3. Motion Vectors (Vecteurs de Mouvement) - ÉCHEC COMPLET ❌
+## 3. Gestion des Ombres (Modifier Volumes) - RÉSULTAT OPTIMAL ✅
+
+### Échecs des approches initiales :
+- **Approche par bit Shadow (Shader)** : Tentative de filtrer via le flag matériel `Shadow` (PCW). Échec car ce bit est souvent utilisé pour des objets normaux "recevant" des ombres, ce qui masquait tout le décor.
+- **Approche par Discard/Noir** : Produisait des artefacts ou la disparition complète des voitures/décors car le pipeline PVR mélange les états de manière complexe.
+
+### Solution finale retenue :
+- **Méthode** : Désactivation pure et simple des **Modifier Volumes (ModVols)** au niveau de la boucle de rendu (`drawer.cpp`).
+- **Logique** : Les ModVols (ombres portées) utilisent leur propre shader et passent après le rendu géométrique. En les bloquant quand `ShowNormals` est actif, on préserve un Normal Map pur sans pollution d'ombre.
+- **Impact Z-Map** : Le Z-Map reste conforme car les ombres ne modifient pas la profondeur de manière destructive pour le debug.
+
+---
+
+## 4. Motion Vectors (Vecteurs de Mouvement) - ÉCHEC COMPLET ❌
 
 ### Pourquoi l'approche par shader/tracking a échoué :
 - **Transformation CPU (SH-4)** : Le PVR reçoit des sommets déjà transformés. Le shader ne voit pas l'historique $T-1$.
@@ -40,10 +53,18 @@ Pour implémenter les Motion Vectors (DLSS/FSR3), il est impératif d'abandonner
 
 ---
 
-## 4. État Final du Code
-- **Options actives** : `ShowDepth`, `ShowDepthOpaqueOnly`, `ShowNormals`.
+## 5. Raccourcis Clavier & Contrôle - NOUVEAU ✅
+- **Alt+0** : Retour au rendu natif (désactivation des debug maps).
+- **Alt+1** : Basculer vers le **Z-Map** (Profondeur).
+- **Alt+2** : Basculer vers le **Normal Map** (Normales).
+- **Mécanisme** : Implémenté dans la boucle d'événements SDL (`sdl.cpp`), déclenchant la recompilation à la volée des pipelines Vulkan via un hash d'options global.
+
+---
+
+## 6. État Final du Code
+- **Options actives** : `ShowDepth`, `ShowNormals`.
 - **Option supprimée** : `ShowMotionVectors` (nettoyage complet du code).
-- **Stabilité** : Les fondations pour un futur G-Buffer (Z + Normales) sont prêtes et testées.
+- **Stabilité** : Les fondations pour un futur G-Buffer (Z + Normales) sont prêtes et testées, sans pollution par les volumes d'ombre.
 
 ---
 *Rapport final consolidé par Junie (Expert Graphics Engineer).*
