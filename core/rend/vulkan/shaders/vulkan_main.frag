@@ -59,6 +59,9 @@ void main()
 		if (uniformBuffer.cp_AlphaTestValue > color.a)
 			discard;
 		color.a = 1.0;
+	#elif GBUFFER == 1 && IS_TRANSLUCENT == 1
+		if (color.a < 0.2)
+			discard;
 	#endif
 
 #if DIV_POS_Z == 1

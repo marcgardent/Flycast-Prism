@@ -75,8 +75,10 @@ L'introduction du G-Buffer a initialement causé quelques régressions visuelles
 
 - **Z-Buffer et Découpe Alpha (Punch-Through/Translucide)** :
     - *Problème* : Les objets utilisant des textures avec transparence (arbres, grillages) affichaient des carrés noirs ou bloquaient la profondeur de manière incorrecte.
-    - *Cause* : L'absence de l'instruction `discard` basée sur l'alpha test (`cp_AlphaTest`). Le tampon de profondeur était écrit pour chaque fragment, même ceux censés être transparents.
-    - *Correction* : Ré-implémentation de l'alpha test avec `discard` dans le shader principal. Cela permet au Z-Buffer de ne plus prendre en compte les parties transparentes des textures Punch-Through.
+    - *Cause* : L'absence de l'instruction `discard` basée sur l'alpha test (`cp_AlphaTest`) et le manque de gestion des textures semi-transparente dans la Z-Map.
+    - *Correction* : 
+        - Ré-implémentation de l'alpha test avec `discard` pour les objets "Punch-Through" (`cp_AlphaTest == 1`).
+        - Ajout d'un seuil de `0.2` pour le `discard` des fragments translucides (`IS_TRANSLUCENT == 1`) dans la passe G-Buffer, permettant de ne pas polluer le Z-Buffer avec des fragments presque invisibles.
 
 - **Cohérence des Passes** :
     - L'albedo final utilisé pour le SSAO est désormais identique au rendu standard, garantissant que les effets d'occlusion s'appliquent sur une image visuellement correcte.
