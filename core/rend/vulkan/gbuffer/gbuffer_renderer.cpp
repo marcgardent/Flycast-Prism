@@ -41,6 +41,7 @@ extern "C" {
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <random>
 
 class SSAOPass
 {
@@ -55,20 +56,47 @@ public:
 
 		VulkanContext *ctx = VulkanContext::Instance();
 
-		// Descriptor set layout : binding 0 = depth, binding 1 = normals
-		std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
+		// Generation du kernel de 64 echantillons
+		std::uniform_real_distribution<float> randomFD(0.0, 1.0);
+		std::default_random_engine generator;
+		kernelSamples.clear();
+		for (int i = 0; i < 64; ++i) {
+			glm::vec3 sample(randomFD(generator) * 2.0 - 1.0, randomFD(generator) * 2.0 - 1.0, randomFD(generator));
+			sample = glm::normalize(sample);
+			sample *= randomFD(generator);
+			float scale = (float)i / 64.0f;
+			scale = 0.1f + (scale * scale) * (1.0f - 0.1f); // lerp
+			sample *= scale;
+			kernelSamples.push_back(glm::vec4(sample, 0.0f));
+		}
+
+		// Uniform buffer pour le kernel
+		kernelBuffer = std::make_unique<BufferData>(kernelSamples.size() * sizeof(glm::vec4), vk::BufferUsageFlagBits::eUniformBuffer);
+		kernelBuffer->upload(kernelSamples.size() * sizeof(glm::vec4), kernelSamples.data());
+
+		// Generation du bruit 4x4 dans un Uniform Buffer (evite tout probleme de tiling/staging)
+		std::vector<glm::vec4> noiseValues;
+		for (int i = 0; i < 16; i++)
+			noiseValues.push_back(glm::vec4(randomFD(generator) * 2.0f - 1.0f, randomFD(generator) * 2.0f - 1.0f, 0.0f, 0.0f));
+		noiseBuffer = std::make_unique<BufferData>(noiseValues.size() * sizeof(glm::vec4), vk::BufferUsageFlagBits::eUniformBuffer);
+		noiseBuffer->upload(noiseValues.size() * sizeof(glm::vec4), noiseValues.data());
+
+		// Descriptor set layout : binding 0 = depth, binding 1 = normals, binding 2 = noise UBO, binding 3 = kernel UBO
+		std::array<vk::DescriptorSetLayoutBinding, 4> bindings = {
 			vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
 			vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(2, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eFragment),
 		};
 		descSetLayout = ctx->GetDevice().createDescriptorSetLayoutUnique(
 			vk::DescriptorSetLayoutCreateInfo(vk::DescriptorSetLayoutCreateFlags(), bindings));
 
-		// Push constants : resolution + near/far + debug
+		// Push constants : resolution + near/far + bias + radius + debug
 		vk::PushConstantRange pushConstant(vk::ShaderStageFlagBits::eFragment, 0, sizeof(float) * 8);
 		pipelineLayout = ctx->GetDevice().createPipelineLayoutUnique(
 			vk::PipelineLayoutCreateInfo(vk::PipelineLayoutCreateFlags(), *descSetLayout, pushConstant));
 
-		// Sampler pour les normales
+		// Samplers
 		sampler = ctx->GetDevice().createSamplerUnique(
 			vk::SamplerCreateInfo(vk::SamplerCreateFlags(),
 				vk::Filter::eNearest, vk::Filter::eNearest,
@@ -79,7 +107,6 @@ public:
 				0.0f, false, 1.0f, false, vk::CompareOp::eNever,
 				0.0f, vk::LodClampNone, vk::BorderColor::eFloatOpaqueBlack));
 
-		// Sampler pour le depth
 		depthSampler = ctx->GetDevice().createSamplerUnique(
 			vk::SamplerCreateInfo(vk::SamplerCreateFlags(),
 				vk::Filter::eNearest, vk::Filter::eNearest,
@@ -89,7 +116,7 @@ public:
 				vk::SamplerAddressMode::eClampToEdge,
 				0.0f, false, 1.0f, false, vk::CompareOp::eNever,
 				0.0f, vk::LodClampNone, vk::BorderColor::eFloatOpaqueBlack));
-
+		
 		// Quad vertex buffer
 		quadBuffer = std::make_unique<QuadBuffer>();
 
@@ -141,6 +168,8 @@ public:
 		descSetLayout.reset();
 		sampler.reset();
 		depthSampler.reset();
+		noiseBuffer.reset();
+		kernelBuffer.reset();
 		quadBuffer.reset();
 		framebuffers.clear();
 		renderPass.reset();
@@ -175,9 +204,14 @@ public:
 		// Mise a jour des descriptors
 		vk::DescriptorImageInfo depthInfo(*depthSampler, depthView, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
 		vk::DescriptorImageInfo normalInfo(*sampler, normalView, vk::ImageLayout::eShaderReadOnlyOptimal);
-		std::array<vk::WriteDescriptorSet, 2> writes = {
+		vk::DescriptorBufferInfo noiseInfo(*noiseBuffer->buffer, 0, 16 * sizeof(glm::vec4));
+		vk::DescriptorBufferInfo kernelInfo(*kernelBuffer->buffer, 0, kernelSamples.size() * sizeof(glm::vec4));
+		
+		std::array<vk::WriteDescriptorSet, 4> writes = {
 			vk::WriteDescriptorSet(*descSet, 0, 0, vk::DescriptorType::eCombinedImageSampler, depthInfo),
 			vk::WriteDescriptorSet(*descSet, 1, 0, vk::DescriptorType::eCombinedImageSampler, normalInfo),
+			vk::WriteDescriptorSet(*descSet, 2, 0, vk::DescriptorType::eUniformBuffer, {}, noiseInfo),
+			vk::WriteDescriptorSet(*descSet, 3, 0, vk::DescriptorType::eUniformBuffer, {}, kernelInfo),
 		};
 		ctx->GetDevice().updateDescriptorSets(writes, nullptr);
 
@@ -194,19 +228,23 @@ public:
 		cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, showSSAO ? *debugPipeline : *pipeline);
 		cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descSet, nullptr);
 
-		// Push constants : resolution, near, far, showSSAO
+		// Push constants : resolution, near, far, bias, radius, showSSAO
 		struct PushConstants {
 			float resolution[2];
 			float nearPlane;
 			float farPlane;
+			float bias;
+			float radius;
 			int showSSAO;
-			int pad[3];
+			int pad[1];
 		} pc;
 		memset(&pc, 0, sizeof(pc));
 		pc.resolution[0] = (float)viewport.width;
 		pc.resolution[1] = (float)viewport.height;
 		pc.nearPlane = 0.001f;
 		pc.farPlane = 100000.f;
+		pc.bias = config::SSAOBias;
+		pc.radius = config::SSAORadius;
 		pc.showSSAO = showSSAO ? 1 : 0;
 		cmdBuffer.pushConstants(*pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(pc), &pc);
 
@@ -236,7 +274,11 @@ vk::PipelineColorBlendAttachmentState blendAttachment;
 if (debug) {
 blendAttachment = vk::PipelineColorBlendAttachmentState(false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 } else {
-blendAttachment = vk::PipelineColorBlendAttachmentState(true, vk::BlendFactor::eZero, vk::BlendFactor::eSrcColor, vk::BlendOp::eAdd, vk::BlendFactor::eZero, vk::BlendFactor::eSrcAlpha, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+// Blending multiplicatif : albedo.rgb *= ao (ao est dans le canal alpha du fragment SSAO)
+// src = vec4(1,1,1,ao), dst = albedo
+// RGB_final = src.rgb * 0 + dst.rgb * src.a  => albedo.rgb * ao
+// A_final   = src.a   * 0 + dst.a   * 1      => albedo.a inchange
+blendAttachment = vk::PipelineColorBlendAttachmentState(true, vk::BlendFactor::eZero, vk::BlendFactor::eSrcAlpha, vk::BlendOp::eAdd, vk::BlendFactor::eZero, vk::BlendFactor::eOne, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 }
 		vk::PipelineColorBlendStateCreateInfo colorBlend(
 			vk::PipelineColorBlendStateCreateFlags(), false, vk::LogicOp::eNoOp,
@@ -273,6 +315,176 @@ pipeline = ctx->GetDevice().createGraphicsPipelineUnique(ctx->GetPipelineCache()
 	vk::UniqueDescriptorSetLayout descSetLayout;
 	vk::UniqueSampler sampler;
 	vk::UniqueSampler depthSampler;
+	std::unique_ptr<BufferData> noiseBuffer;
+	std::vector<glm::vec4> kernelSamples;
+	std::unique_ptr<BufferData> kernelBuffer;
+	std::unique_ptr<QuadBuffer> quadBuffer;
+	std::vector<vk::UniqueDescriptorSet> descriptorSets;
+};
+
+class DoFPass
+{
+public:
+	void Init(ShaderManager *shaderManager, vk::Extent2D viewport,
+		const std::vector<vk::ImageView> &albedoViews)
+	{
+		NOTICE_LOG(RENDERER, "DoFPass::Init start (%dx%d)", viewport.width, viewport.height);
+		this->shaderManager = shaderManager;
+		this->viewport = viewport;
+
+		VulkanContext *ctx = VulkanContext::Instance();
+
+		// Binding 0: albedo (de l'image precedente), Binding 1: depth
+		std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
+			vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+		};
+		descSetLayout = ctx->GetDevice().createDescriptorSetLayoutUnique(
+			vk::DescriptorSetLayoutCreateInfo(vk::DescriptorSetLayoutCreateFlags(), bindings));
+
+		vk::PushConstantRange pushConstant(vk::ShaderStageFlagBits::eFragment, 0, sizeof(float) * 4);
+		pipelineLayout = ctx->GetDevice().createPipelineLayoutUnique(
+			vk::PipelineLayoutCreateInfo(vk::PipelineLayoutCreateFlags(), *descSetLayout, pushConstant));
+
+		sampler = ctx->GetDevice().createSamplerUnique(
+			vk::SamplerCreateInfo(vk::SamplerCreateFlags(),
+				vk::Filter::eLinear, vk::Filter::eLinear,
+				vk::SamplerMipmapMode::eLinear,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				0.0f, false, 1.0f, false, vk::CompareOp::eNever,
+				0.0f, vk::LodClampNone, vk::BorderColor::eFloatOpaqueBlack));
+
+		quadBuffer = std::make_unique<QuadBuffer>();
+
+		// Renderpass : On écrit sur le même albedo (donc LoadOp::eLoad)
+		vk::AttachmentDescription albedoDesc(
+			vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
+			vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+			vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::AttachmentReference albedoRef(0, vk::ImageLayout::eColorAttachmentOptimal);
+		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
+			nullptr, albedoRef, nullptr, nullptr);
+		
+		std::array<vk::SubpassDependency, 2> deps = {
+			vk::SubpassDependency(VK_SUBPASS_EXTERNAL, 0, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eColorAttachmentWrite, vk::DependencyFlagBits::eByRegion),
+			vk::SubpassDependency(0, VK_SUBPASS_EXTERNAL, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eColorAttachmentWrite, vk::AccessFlagBits::eShaderRead, vk::DependencyFlagBits::eByRegion)
+		};
+		
+		renderPass = ctx->GetDevice().createRenderPassUnique(
+			vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), albedoDesc, subpass, deps));
+
+		framebuffers.clear();
+		for (vk::ImageView albedoView : albedoViews)
+		{
+			framebuffers.push_back(ctx->GetDevice().createFramebufferUnique(
+				vk::FramebufferCreateInfo(vk::FramebufferCreateFlags(), *renderPass,
+					albedoView, viewport.width, viewport.height, 1)));
+		}
+
+		CreatePipeline();
+	}
+
+	void Term()
+	{
+		pipeline.reset();
+		pipelineLayout.reset();
+		descSetLayout.reset();
+		sampler.reset();
+		quadBuffer.reset();
+		framebuffers.clear();
+		renderPass.reset();
+		descriptorSets.clear();
+	}
+
+	bool IsInitialized() const { return pipeline && quadBuffer; }
+
+	void Draw(vk::CommandBuffer cmdBuffer, int imageIndex,
+		vk::ImageView albedoView, vk::ImageView depthView)
+	{
+		VulkanContext *ctx = VulkanContext::Instance();
+		if ((int)descriptorSets.size() <= imageIndex)
+			descriptorSets.resize(imageIndex + 1);
+
+		auto &descSet = descriptorSets[imageIndex];
+		if (!descSet)
+		{
+			descSet = std::move(ctx->GetDevice().allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(ctx->GetDescriptorPool(), *descSetLayout)).front());
+		}
+
+		vk::DescriptorImageInfo albedoInfo(*sampler, albedoView, vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::DescriptorImageInfo depthInfo(*sampler, depthView, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+		std::array<vk::WriteDescriptorSet, 2> writes = {
+			vk::WriteDescriptorSet(*descSet, 0, 0, vk::DescriptorType::eCombinedImageSampler, albedoInfo),
+			vk::WriteDescriptorSet(*descSet, 1, 0, vk::DescriptorType::eCombinedImageSampler, depthInfo),
+		};
+		ctx->GetDevice().updateDescriptorSets(writes, nullptr);
+
+		vk::ClearValue clearValue;
+		cmdBuffer.beginRenderPass(
+			vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex],
+				vk::Rect2D({0,0}, viewport), clearValue),
+			vk::SubpassContents::eInline);
+
+		cmdBuffer.setViewport(0, vk::Viewport(0.f, 0.f, (float)viewport.width, (float)viewport.height, 0.f, 1.f));
+		cmdBuffer.setScissor(0, vk::Rect2D({0,0}, viewport));
+		cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
+		cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descSet, nullptr);
+
+		struct {
+			float resolution[2];
+			float focus;
+			float intensity;
+		} pc;
+		pc.resolution[0] = (float)viewport.width;
+		pc.resolution[1] = (float)viewport.height;
+		pc.focus = config::DoFFocus;
+		pc.intensity = config::DoFBokehIntensity;
+		cmdBuffer.pushConstants(*pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(pc), &pc);
+
+		quadBuffer->Update(nullptr);
+		quadBuffer->Bind(cmdBuffer);
+		quadBuffer->Draw(cmdBuffer);
+
+		cmdBuffer.endRenderPass();
+	}
+
+private:
+	void CreatePipeline()
+	{
+		VulkanContext *ctx = VulkanContext::Instance();
+		vk::PipelineVertexInputStateCreateInfo vertexInput = GetQuadInputStateCreateInfo(true);
+		vk::PipelineInputAssemblyStateCreateInfo inputAssembly(vk::PipelineInputAssemblyStateCreateFlags(), vk::PrimitiveTopology::eTriangleStrip);
+		vk::PipelineViewportStateCreateInfo viewportState(vk::PipelineViewportStateCreateFlags(), 1, nullptr, 1, nullptr);
+		vk::PipelineRasterizationStateCreateInfo rasterization;
+		rasterization.lineWidth = 1.0f;
+		vk::PipelineMultisampleStateCreateInfo multisample;
+		vk::PipelineDepthStencilStateCreateInfo depthStencil;
+		vk::PipelineColorBlendAttachmentState blendAttachment(false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+		vk::PipelineColorBlendStateCreateInfo colorBlend(vk::PipelineColorBlendStateCreateFlags(), false, vk::LogicOp::eNoOp, blendAttachment, {{1.f, 1.f, 1.f, 1.f}});
+		std::array<vk::DynamicState, 2> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+		vk::PipelineDynamicStateCreateInfo dynamicState(vk::PipelineDynamicStateCreateFlags(), dynamicStates);
+
+		std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {
+			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex, shaderManager->GetQuadVertexShader(false), "main"),
+			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eFragment, shaderManager->GetDoFFragmentShader(), "main"),
+		};
+
+		pipeline = ctx->GetDevice().createGraphicsPipelineUnique(ctx->GetPipelineCache(),
+			vk::GraphicsPipelineCreateInfo(vk::PipelineCreateFlags(), stages, &vertexInput, &inputAssembly, nullptr, &viewportState, &rasterization, &multisample, &depthStencil, &colorBlend, &dynamicState, *pipelineLayout, *renderPass, 0)).value;
+	}
+
+	ShaderManager *shaderManager = nullptr;
+	vk::Extent2D viewport;
+	vk::UniqueRenderPass renderPass;
+	std::vector<vk::UniqueFramebuffer> framebuffers;
+	vk::UniquePipeline pipeline;
+	vk::UniquePipelineLayout pipelineLayout;
+	vk::UniqueDescriptorSetLayout descSetLayout;
+	vk::UniqueSampler sampler;
 	std::unique_ptr<QuadBuffer> quadBuffer;
 	std::vector<vk::UniqueDescriptorSet> descriptorSets;
 };
@@ -293,6 +505,7 @@ public:
 			BaseInit(screenDrawer.GetRenderPass());
 
 			initSSAO();
+			initDoF();
 
 			return true;
 		} catch (const vk::SystemError& err) {
@@ -306,6 +519,7 @@ public:
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Term");
 		GetContext()->WaitIdle();
 		ssaoPass.Term();
+		dofPass.Term();
 		texCommandPool.Term();
 		screenDrawer.Term();
 		shaderManager.term();
@@ -327,34 +541,6 @@ public:
 		screenDrawer.setRendContext(rendContext);
 		screenDrawer.Draw(fogTexture.get(), paletteTexture.get());
 
-		// Post-process SSAO : applique l'AO sur l'albedo en lisant depth + normals
-		if ((config::EnableSSAO || config::ShowSSAO) && ssaoPass.IsInitialized())
-		{
-			int imgIdx = screenDrawer.GetCurrentImageIndex();
-			FramebufferAttachment *depthAtt = screenDrawer.GetDepthAttachment();
-			FramebufferAttachment *normalAtt = screenDrawer.GetColorAttachment(imgIdx, 1);
-
-			if (depthAtt && normalAtt)
-			{
-				DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Render ssaoPass.Draw(imgIdx=%d)", imgIdx);
-				vk::CommandBuffer cmdBuffer = texCommandPool.Allocate(true);
-				if (!cmdBuffer) {
-					ERROR_LOG(RENDERER, "GBufferVulkanRenderer::Render: Failed to allocate command buffer");
-					return true;
-				}
-				cmdBuffer.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
-
-				ssaoPass.Draw(cmdBuffer, imgIdx,
-					depthAtt->GetImageView(),
-					normalAtt->GetImageView(),
-					config::ShowSSAO);
-
-				cmdBuffer.end();
-				texCommandPool.EndFrame();
-			} else {
-				DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Render: Skipping SSAO, missing attachments (depth: %p, normal: %p)", depthAtt, normalAtt);
-			}
-		}
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Render end");
 
 		return true;
@@ -363,11 +549,52 @@ public:
 	bool Present() override
 	{
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present start");
-		int attachmentIndex = 0;
-		if (config::ShowNormals)
-			attachmentIndex = 1;
-		// Pour Depth (ALT+1) et SSAO (ALT+3), on utilise l'attachment 0 (Albedo/Debug)
-		
+
+		int imgIdx = screenDrawer.GetCurrentImageIndex();
+		FramebufferAttachment *depthAtt = screenDrawer.GetDepthAttachment();
+		FramebufferAttachment *normalAtt = screenDrawer.GetColorAttachment(imgIdx, 1);
+		FramebufferAttachment *albedoAtt = screenDrawer.GetColorAttachment(imgIdx, 0);
+
+		// Initialisation lazy du SSAO si necessaire
+		if ((config::EnableSSAO || config::ShowSSAO) && !ssaoPass.IsInitialized())
+			initSSAO();
+
+		bool doSSAO = (config::EnableSSAO || config::ShowSSAO) && ssaoPass.IsInitialized() && depthAtt && normalAtt;
+		bool doDoF  = config::EnableDoF && dofPass.IsInitialized() && depthAtt && albedoAtt;
+
+		if (doSSAO || doDoF)
+		{
+			// Fermer le render pass G-Buffer sans soumettre le command buffer
+			// Les attachments passent en ShaderReadOnlyOptimal via la transition implicite du render pass
+			vk::CommandBuffer cmdBuf = screenDrawer.EndRenderPassOnly();
+			if (cmdBuf)
+			{
+				// SSAO : enregistre dans le meme command buffer, apres le render pass G-Buffer
+				if (doSSAO)
+				{
+					DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present ssaoPass.Draw(imgIdx=%d)", imgIdx);
+					ssaoPass.Draw(cmdBuf, imgIdx,
+						depthAtt->GetImageView(),
+						normalAtt->GetImageView(),
+						config::ShowSSAO);
+				}
+
+				// DoF : enregistre dans le meme command buffer, apres le SSAO
+				if (doDoF)
+				{
+					DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present dofPass.Draw(imgIdx=%d)", imgIdx);
+					dofPass.Draw(cmdBuf, imgIdx,
+						albedoAtt->GetImageView(),
+						depthAtt->GetImageView());
+				}
+				// Le command buffer sera soumis par PresentFrame() -> EndRenderPass()
+			}
+		}
+
+		// ALT+1 (Depth) et ALT+2 (Normals) : attachment 1
+		// ALT+0 (Normal) et ALT+3 (SSAO) : attachment 0 (Albedo)
+		int attachmentIndex = (config::ShowNormals || config::ShowDepth) ? 1 : 0;
+
 		bool ret = screenDrawer.PresentFrame(attachmentIndex);
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present end (%s)", ret ? "success" : "skipped");
 		return ret;
@@ -389,6 +616,7 @@ protected:
 		};
 		screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
 		initSSAO();
+		initDoF();
 	}
 
 private:
@@ -425,9 +653,37 @@ private:
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initSSAO end");
 	}
 
+	void initDoF()
+	{
+		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initDoF start");
+		if (!config::EnableDoF)
+		{
+			DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initDoF: DoF disabled");
+			dofPass.Term();
+			return;
+		}
+
+		int swapSize = (int)screenDrawer.GetSwapChainCount();
+		std::vector<vk::ImageView> albedoViews;
+		albedoViews.reserve(swapSize);
+		for (int i = 0; i < swapSize; ++i)
+		{
+			FramebufferAttachment *att = screenDrawer.GetColorAttachment(i, 0);
+			if (att)
+				albedoViews.push_back(att->GetImageView());
+		}
+
+		if (!albedoViews.empty())
+		{
+			dofPass.Init(&shaderManager, viewport, albedoViews);
+		}
+		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initDoF end");
+	}
+
 	SamplerManager samplerManager;
 	ScreenDrawer screenDrawer;
 	SSAOPass ssaoPass;
+	DoFPass dofPass;
 };
 
 void GBufferVulkanRenderer::ExportGBuffer()

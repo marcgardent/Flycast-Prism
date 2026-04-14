@@ -114,6 +114,11 @@ Option<bool> ShowDepthOpaqueOnly("rend.ShowDepthOpaqueOnly", true);
 Option<bool> ShowNormals("rend.ShowNormals", false);
 Option<bool, false> EnableSSAO("rend.EnableSSAO", false);
 Option<bool> ShowSSAO("rend.ShowSSAO", false);
+Option<float> SSAORadius("rend.SSAORadius", 0.05f);
+Option<float> SSAOBias("rend.SSAOBias", 0.001f);
+Option<bool> EnableDoF("rend.EnableDoF", false);
+Option<float> DoFFocus("rend.DoFFocus", 0.1f);
+Option<float> DoFBokehIntensity("rend.DoFBokehIntensity", 0.5f);
 Option<int> PerPixelLayers("rend.PerPixelLayers", 32);
 #ifdef TARGET_UWP
 Option<bool> NativeDepthInterpolation("rend.NativeDepthInterpolation", true);

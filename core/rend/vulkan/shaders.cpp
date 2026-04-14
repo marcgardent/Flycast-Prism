@@ -59,6 +59,10 @@ static const char SSAOFragmentShaderSource[] =
 #include "shaders/vulkan_ssao.frag"
 ;
 
+static const char DoFFragmentShaderSource[] = 
+#include "shaders/vulkan_dof.frag"
+;
+
 extern const char N2LightShaderSource[] = 
 #include "shaders/vulkan_n2_light.glsl"
 ;
@@ -157,5 +161,12 @@ vk::UniqueShaderModule ShaderManager::compileSSAOFragmentShader()
 {
 	VulkanSource src;
 	src.addSource(SSAOFragmentShaderSource);
+	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+}
+
+vk::UniqueShaderModule ShaderManager::compileDoFFragmentShader()
+{
+	VulkanSource src;
+	src.addSource(DoFFragmentShaderSource);
 	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
 }

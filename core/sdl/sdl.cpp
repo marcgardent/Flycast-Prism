@@ -424,6 +424,11 @@ void input_sdl_handle()
 									config::ShowSSAO.set(true);
 									break;
 								}
+								if (event.key.keysym.sym == SDLK_4)
+								{
+									config::EnableDoF.set(!config::EnableDoF);
+									break;
+								}
 							}
 						}
 					}

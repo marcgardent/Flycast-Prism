@@ -839,9 +839,16 @@ vk::CommandBuffer ScreenDrawer::BeginRenderPass()
 
 void ScreenDrawer::EndRenderPass()
 {
-	if (!renderPassStarted)
+	// Cas 1 : render pass encore ouvert, on le ferme
+	if (renderPassStarted)
+	{
+		currentCommandBuffer.endRenderPass();
+		renderPassStarted = false;
+		frameRendered = true;
+	}
+	// Cas 2 : render pass deja ferme via EndRenderPassOnly() mais cmdBuf pas encore soumis
+	if (!currentCommandBuffer)
 		return;
-	currentCommandBuffer.endRenderPass();
 	if (emulateFramebuffer)
 	{
 		scaleAndWriteFramebuffer(currentCommandBuffer, colorAttachments[GetCurrentImage()][0].get());
@@ -853,6 +860,4 @@ void ScreenDrawer::EndRenderPass()
 		aspectRatio = getOutputFramebufferAspectRatio();
 	}
 	currentCommandBuffer = nullptr;
-	Drawer::EndRenderPass();
-	frameRendered = true;
 }

@@ -309,6 +309,18 @@ public:
 
 	vk::RenderPass GetRenderPass() const { return *renderPassClear; }
 	void EndRenderPass() override;
+	// Termine le render pass sans soumettre le command buffer.
+	// Retourne le command buffer pour y enregistrer des commandes supplementaires.
+	// Appeler EndRenderPass() ou PresentFrame() pour soumettre.
+	vk::CommandBuffer EndRenderPassOnly()
+	{
+		if (!renderPassStarted)
+			return nullptr;
+		currentCommandBuffer.endRenderPass();
+		renderPassStarted = false;
+		frameRendered = true;
+		return currentCommandBuffer;
+	}
 	int GetCurrentImageIndex() const { return GetCurrentImage(); }
 	u32 GetSwapChainCount() const { return 2; }
 	FramebufferAttachment *GetDepthAttachment() const { return depthAttachment.get(); }

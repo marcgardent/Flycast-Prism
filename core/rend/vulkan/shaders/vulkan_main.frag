@@ -60,14 +60,13 @@ void main()
 	vec3 geoNormal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
 	vec3 N = (length(vtx_normal) > 0.001) ? normalize(vtx_normal) : geoNormal;
 
+	// Toujours écrire l'albedo dans FragColor (attachment 0) pour que le SSAO fonctionne correctement
+	FragColor = color;
 	if (ShowDepth == 1) {
-		FragColor = vec4(vec3(log_z), 1.0);
+		// Mode debug profondeur : on encode la profondeur dans NormalColor (attachment 1)
 		NormalColor = vec4(vec3(log_z), 1.0);
-	} else if (ShowNormals == 1) {
-		FragColor = vec4(N * 0.5 + 0.5, 1.0);
-		NormalColor = vec4(N * 0.5 + 0.5, 1.0);
 	} else {
-		FragColor = color;
+		// Mode normal ou ShowNormals : normales dans NormalColor (attachment 1)
 		NormalColor = vec4(N * 0.5 + 0.5, 1.0);
 	}
 #else

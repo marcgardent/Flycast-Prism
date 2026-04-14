@@ -3,34 +3,34 @@ precision highp float;
 precision highp int;
 
 // --- REGLAGES SSAO ---
-#define SSAO_SAMPLES   16
-#define SSAO_RADIUS    0.05      // Rayon en espace NDC
-#define SSAO_STRENGTH  2.5
-#define SSAO_BIAS      0.001
-#define SSAO_CONTRAST  1.5
+// On utilise maintenant les push constants pour ces parametres
+#define SSAO_SAMPLES   64
 #define PI             3.1415926
 
 layout (set = 0, binding = 0) uniform sampler2D depthTex;
 layout (set = 0, binding = 1) uniform sampler2D normalTex;
+layout (std140, set = 0, binding = 2) uniform NoiseBlock
+{
+	vec4 noise[16];
+} noiseBlock;
+
+layout (std140, set = 0, binding = 3) uniform KernelBlock
+{
+	vec4 samples[64];
+} kernel;
 
 layout (push_constant) uniform pushBlock
 {
 	vec2 resolution;
 	float nearPlane;
 	float farPlane;
+	float bias;
+	float radius;
 	int showSSAO;
 } pc;
 
 layout (location = 0) in vec2 inUV;
 layout (location = 0) out vec4 FragColor;
-
-// Reconstruit la position en espace view depuis la profondeur
-vec3 reconstructPosition(vec2 uv, float depth)
-{
-	// depth est en espace log, on le remet en NDC [-1,1]
-	vec2 ndc = uv * 2.0 - 1.0;
-	return vec3(ndc, depth);
-}
 
 void main()
 {
@@ -38,45 +38,40 @@ void main()
 	vec3 N = texture(normalTex, inUV).rgb * 2.0 - 1.0;
 	N = normalize(N);
 
-	vec3 pos = reconstructPosition(inUV, depth);
+	// Position en espace NDC (Z=depth)
+	vec3 pos = vec3(inUV * 2.0 - 1.0, depth);
+
+	// Bruit pour la rotation du kernel (index dans la grille 4x4)
+	ivec2 noiseCoord = ivec2(mod(gl_FragCoord.xy, 4.0));
+	int noiseIdx = noiseCoord.y * 4 + noiseCoord.x;
+	vec3 randomVec = noiseBlock.noise[noiseIdx].xyz;
+
+	// Construction de la matrice TBN
+	vec3 tangent = normalize(randomVec - N * dot(randomVec, N));
+	vec3 bitangent = cross(N, tangent);
+	mat3 TBN = mat3(tangent, bitangent, N);
 
 	float occlusion = 0.0;
-
-	// Bruit pseudo-aleatoire par fragment
-	float r1 = fract(sin(dot(gl_FragCoord.xy, vec2(127.1, 311.7))) * 43758.5453);
-	float r2 = fract(sin(dot(gl_FragCoord.xy, vec2(269.5, 183.3))) * 43758.5453);
-
-	// Construction d'un repere tangent autour de N
-	vec3 up = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
-	vec3 T = normalize(cross(up, N));
-	vec3 B = cross(N, T);
-
 	for (int i = 0; i < SSAO_SAMPLES; ++i)
 	{
-		float fi = float(i);
-		float phi = 2.0 * PI * (fi * 0.618033988 + r1);
-		float cosTheta = 1.0 - (fi + 0.5) / float(SSAO_SAMPLES);
-		float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
-
-		vec3 sampleDir = T * (cos(phi) * sinTheta)
-		               + B * (sin(phi) * sinTheta)
-		               + N * cosTheta;
+		// Echantillon dans l'espace tangent, puis vers l'espace NDC
+		vec3 samplePos = TBN * kernel.samples[i].xyz;
+		samplePos = pos + samplePos * pc.radius;
 
 		// Offset en espace UV
-		vec2 sampleUV = inUV + sampleDir.xy * SSAO_RADIUS;
-		sampleUV = clamp(sampleUV, vec2(0.0), vec2(1.0));
+		vec2 offsetUV = (samplePos.xy + 1.0) * 0.5;
+		offsetUV = clamp(offsetUV, vec2(0.0), vec2(1.0));
 
-		float sampleDepth = texture(depthTex, sampleUV).r;
+		float sampleDepth = texture(depthTex, offsetUV).r;
 
-		// Comparaison de profondeur : si le sample est plus proche (devant), il occlut
-		float rangeCheck = smoothstep(0.0, 1.0, SSAO_RADIUS / abs(depth - sampleDepth + 0.0001));
-		if (sampleDepth < depth - SSAO_BIAS)
+		// Comparaison de profondeur
+		float rangeCheck = smoothstep(0.0, 1.0, pc.radius / abs(depth - sampleDepth + 0.0001));
+		if (sampleDepth < samplePos.z - pc.bias)
 			occlusion += rangeCheck;
 	}
 
-	float ao = 1.0 - (occlusion / float(SSAO_SAMPLES)) * SSAO_STRENGTH;
+	float ao = 1.0 - (occlusion / float(SSAO_SAMPLES));
 	ao = clamp(ao, 0.0, 1.0);
-	ao = pow(ao, SSAO_CONTRAST);
 
 	if (pc.showSSAO == 1) {
 		FragColor = vec4(vec3(ao), 1.0);

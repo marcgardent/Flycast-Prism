@@ -203,7 +203,26 @@ void gui_settings_video()
 		if (gbuffer)
 		{
 			ImGui::Indent();
-			OptionCheckbox(T("SSAO"), config::EnableSSAO, T("Enable Screen Space Ambient Occlusion (Experimental)"));
+			{
+				header(T("G-Buffer & Post-Process"));
+				OptionCheckbox(T("Enable SSAO"), config::EnableSSAO);
+				ImGui::Indent();
+				{
+					DisabledScope scope(!config::EnableSSAO);
+					ImGui::SliderFloat(T("SSAO Bias"), &config::SSAOBias.get(), 0.0001f, 0.01f);
+					ImGui::SliderFloat(T("SSAO Radius"), &config::SSAORadius.get(), 0.01f, 0.5f);
+				}
+				ImGui::Unindent();
+
+				OptionCheckbox(T("Enable Depth of Field"), config::EnableDoF);
+				ImGui::Indent();
+				{
+					DisabledScope scope(!config::EnableDoF);
+					ImGui::SliderFloat(T("Focus Distance"), &config::DoFFocus.get(), 0.0f, 1.0f);
+					ImGui::SliderFloat(T("Bokeh Intensity"), &config::DoFBokehIntensity.get(), 0.0f, 1.0f);
+				}
+				ImGui::Unindent();
+			}
 			ImGui::Unindent();
 		}
 	}
