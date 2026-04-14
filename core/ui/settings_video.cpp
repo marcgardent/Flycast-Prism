@@ -209,8 +209,8 @@ void gui_settings_video()
 				ImGui::Indent();
 				{
 					DisabledScope scope(!config::EnableSSAO);
-					ImGui::SliderFloat(T("SSAO Bias"), &config::SSAOBias.get(), 0.0001f, 0.01f);
-					ImGui::SliderFloat(T("SSAO Radius"), &config::SSAORadius.get(), 0.01f, 0.5f);
+					OptionSliderFloat(T("SSAO Bias"), config::SSAOBias, 0.0001f, 0.01f, nullptr, "%.4f");
+					OptionSliderFloat(T("SSAO Radius"), config::SSAORadius, 0.01f, 0.5f);
 				}
 				ImGui::Unindent();
 
@@ -218,8 +218,8 @@ void gui_settings_video()
 				ImGui::Indent();
 				{
 					DisabledScope scope(!config::EnableDoF);
-					ImGui::SliderFloat(T("Focus Distance"), &config::DoFFocus.get(), 0.0f, 1.0f);
-					ImGui::SliderFloat(T("Bokeh Intensity"), &config::DoFBokehIntensity.get(), 0.0f, 1.0f);
+					OptionSliderFloat(T("Focus Distance"), config::DoFFocus, 0.0f, 1.0f);
+					OptionSliderFloat(T("Bokeh Intensity"), config::DoFBokehIntensity, 0.0f, 1.0f);
 				}
 				ImGui::Unindent();
 			}
