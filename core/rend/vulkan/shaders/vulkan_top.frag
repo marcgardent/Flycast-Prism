@@ -3,6 +3,7 @@ R"(
 layout (location = 0) out vec4 FragColor;
 layout (location = 1) out vec4 NormalColor;
 layout (location = 2) out uint MaterialColor;
+layout (location = 3) out vec2 MotionColor;
 #else
 layout (location = 0) out vec4 FragColor;
 #define gl_FragColor FragColor

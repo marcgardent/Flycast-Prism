@@ -478,6 +478,7 @@ extern Option<bool> EnableSSAO;
 extern Option<bool> ShowSSAO;
 extern Option<float> SSAORadius;
 extern Option<float> SSAOBias;
+extern Option<bool> ShowMotion;
 extern Option<bool> EnableDoF;
 extern Option<float> DoFFocus;
 extern Option<float> DoFBokehIntensity;

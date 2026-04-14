@@ -801,19 +801,20 @@ public:
 		NOTICE_LOG(RENDERER, "GBufferVulkanRenderer::Init");
 		try {
 			std::vector<vk::Format> formats = {
-				vk::Format::eR8G8B8A8Unorm,         // Albedo
-				vk::Format::eR16G16B16A16Sfloat,    // Normals
-				vk::Format::eR8Uint                 // Material ID
+				vk::Format::eR8G8B8A8Unorm,         // Albedo (0)
+				vk::Format::eR16G16B16A16Sfloat,    // Normals (1)
+				vk::Format::eR8Uint,                // Material ID (2)
+				vk::Format::eR16G16Sfloat           // Motion (velocity) (3)
 			};
 			screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
 			screenDrawer.SetCommandPool(&texCommandPool);
 			BaseInit(screenDrawer.GetRenderPass());
 
- 		initSSAO();
- 		initDoF();
- 		initMaterial();
+			initSSAO();
+			initDoF();
+			initMaterial();
 
- 		return true;
+			return true;
 		} catch (const vk::SystemError& err) {
 			ERROR_LOG(RENDERER, "Vulkan system error: %s", err.what());
 			return false;
@@ -918,7 +919,9 @@ public:
 
 		// ALT+1 (Depth) et ALT+2 (Normals) : attachment 1
 		// ALT+0 (Normal) et ALT+3 (SSAO) et ALT+5 (Material) : attachment 0 (Albedo)
-		int attachmentIndex = (config::ShowNormals || config::ShowDepth) ? 1 : 0;
+		// ALT+4 (Motion) : attachment 3
+		int attachmentIndex = config::ShowMotion ? 3
+			: (config::ShowNormals || config::ShowDepth) ? 1 : 0;
 
 		bool ret = screenDrawer.PresentFrame(attachmentIndex);
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present end (%s)", ret ? "success" : "skipped");
@@ -936,9 +939,10 @@ protected:
 		BaseVulkanRenderer::resize(w, h);
 		GetContext()->WaitIdle();
 		std::vector<vk::Format> formats = {
-			vk::Format::eR8G8B8A8Unorm,         // Albedo
-			vk::Format::eR16G16B16A16Sfloat,    // Normals
-			vk::Format::eR8Uint                 // Material ID
+			vk::Format::eR8G8B8A8Unorm,         // Albedo (0)
+			vk::Format::eR16G16B16A16Sfloat,    // Normals (1)
+			vk::Format::eR8Uint,                // Material ID (2)
+			vk::Format::eR16G16Sfloat           // Motion (velocity) (3)
 		};
 		screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
 		initSSAO();

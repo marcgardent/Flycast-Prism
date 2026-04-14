@@ -403,6 +403,11 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::ColorComponentFlagBits::eR));
+		// Fourth attachment (Motion/Velocity) RG only, no blending
+		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
+			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG));
 	}
 	else
 	{

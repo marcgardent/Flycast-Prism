@@ -137,6 +137,9 @@ void main()
 		matID |= 1u;
 	#endif
 	MaterialColor = matID;
+
+	// Motion buffer (attachment 3) : velocite ecran, initialisee a zero (base)
+	MotionColor = vec2(0.0);
 #else
 	#if DITHERING == 1
 	{
