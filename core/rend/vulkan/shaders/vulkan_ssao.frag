@@ -66,7 +66,7 @@ void main()
 
 		// Comparaison de profondeur
 		float rangeCheck = smoothstep(0.0, 1.0, pc.radius / abs(depth - sampleDepth + 0.0001));
-		if (sampleDepth < samplePos.z - pc.bias)
+		if (sampleDepth >= samplePos.z + pc.bias)
 			occlusion += rangeCheck;
 	}
 
