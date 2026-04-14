@@ -155,6 +155,12 @@ public:
 			return *quadFragmentShader;
 		}
 	}
+	vk::ShaderModule GetSSAOFragmentShader()
+	{
+		if (!ssaoFragmentShader)
+			ssaoFragmentShader = compileSSAOFragmentShader();
+		return *ssaoFragmentShader;
+	}
 
 	void term()
 	{
@@ -167,6 +173,7 @@ public:
 		quadRotateVertexShader.reset();
 		quadFragmentShader.reset();
 		quadNoAlphaFragmentShader.reset();
+		ssaoFragmentShader.reset();
 	}
 
 private:
@@ -186,6 +193,7 @@ private:
 	vk::UniqueShaderModule compileModVolFragmentShader(bool divPosZ);
 	vk::UniqueShaderModule compileQuadVertexShader(bool rotate);
 	vk::UniqueShaderModule compileQuadFragmentShader(bool ignoreTexAlpha);
+	vk::UniqueShaderModule compileSSAOFragmentShader();
 
 	std::map<u32, vk::UniqueShaderModule> vertexShaders;
 	std::map<u32, vk::UniqueShaderModule> fragmentShaders;
@@ -195,4 +203,5 @@ private:
 	vk::UniqueShaderModule quadRotateVertexShader;
 	vk::UniqueShaderModule quadFragmentShader;
 	vk::UniqueShaderModule quadNoAlphaFragmentShader;
+	vk::UniqueShaderModule ssaoFragmentShader;
 };

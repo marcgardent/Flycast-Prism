@@ -73,6 +73,7 @@ struct Renderer
 	// If both width and height are zero, the internal render resolution will be used.
 	// Otherwise either width or height will be used as the maximum width or height respectively.
 	virtual bool GetLastFrame(std::vector<u8>& data, int& width, int& height) { return false; }
+	virtual void ExportGBuffer() {}
 
 	virtual bool Present() { return true; }
 

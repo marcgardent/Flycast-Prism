@@ -61,7 +61,8 @@ namespace hostfs
 	std::string getTextureDumpPath();
 
 	std::string getShaderCachePath(const std::string& filename);
-	void saveScreenshot(const std::string& name, const std::vector<u8>& data);
+ void saveScreenshot(const std::string& name, const std::vector<u8>& data);
+ std::string getScreenshotsPath();
 
 	const std::vector<std::string>& getCdromDrives();
 #ifdef __ANDROID__

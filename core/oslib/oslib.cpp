@@ -325,7 +325,7 @@ static std::string runCommand(const std::string& cmd)
 	return result;
 }
 
-static std::string getScreenshotsPath()
+std::string getScreenshotsPath()
 {
 	std::string picturesPath = runCommand("xdg-user-dir PICTURES");
 	if (!picturesPath.empty())
@@ -376,7 +376,7 @@ void saveScreenshot(const std::string& name, const std::vector<u8>& data)
 
 #elif defined(_WIN32) && !defined(TARGET_UWP)
 
-static std::string getScreenshotsPath()
+std::string getScreenshotsPath()
 {
 	wchar_t *screenshotPath;
 	if (FAILED(SHGetKnownFolderPath(FOLDERID_Screenshots, KF_FLAG_CREATE, NULL, &screenshotPath))

@@ -55,6 +55,10 @@ static const char QuadFragmentShaderSource[] =
 #include "shaders/vulkan_quad.frag"
 ;
 
+static const char SSAOFragmentShaderSource[] = 
+#include "shaders/vulkan_ssao.frag"
+;
+
 extern const char N2LightShaderSource[] = 
 #include "shaders/vulkan_n2_light.glsl"
 ;
@@ -147,4 +151,11 @@ vk::UniqueShaderModule ShaderManager::compileQuadFragmentShader(bool ignoreTexAl
 	src.addConstant("IGNORE_TEX_ALPHA", (int)ignoreTexAlpha)
 			.addSource(QuadFragmentShaderSource);
 	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,src.generate());
+}
+
+vk::UniqueShaderModule ShaderManager::compileSSAOFragmentShader()
+{
+	VulkanSource src;
+	src.addSource(SSAOFragmentShaderSource);
+	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
 }

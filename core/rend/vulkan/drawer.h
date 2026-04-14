@@ -309,6 +309,15 @@ public:
 
 	vk::RenderPass GetRenderPass() const { return *renderPassClear; }
 	void EndRenderPass() override;
+	int GetCurrentImageIndex() const { return GetCurrentImage(); }
+	u32 GetSwapChainCount() const { return 2; }
+	FramebufferAttachment *GetDepthAttachment() const { return depthAttachment.get(); }
+	vk::Format GetDepthFormat() const { return depthAttachment ? depthAttachment->GetImageFormat() : vk::Format::eUndefined; }
+	FramebufferAttachment *GetColorAttachment(int imageIndex, int attachmentIndex) const {
+		if (imageIndex < 0 || imageIndex >= (int)colorAttachments.size()) return nullptr;
+		if (attachmentIndex < 0 || attachmentIndex >= (int)colorAttachments[imageIndex].size()) return nullptr;
+		return colorAttachments[imageIndex][attachmentIndex].get();
+	}
 	bool PresentFrame(int attachmentIndex = 0)
 	{
 		EndRenderPass();

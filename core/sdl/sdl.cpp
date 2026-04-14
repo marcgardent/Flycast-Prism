@@ -31,6 +31,7 @@
 #endif
 #include "dreamlink.h"
 #include "oslib/i18n.h"
+#include "hw/pvr/Renderer_if.h"
 #include <unordered_map>
 
 static SDL_Window* window = NULL;
@@ -379,36 +380,50 @@ void input_sdl_handle()
 						if (card_reader::barcodeAvailable() && handleBarcodeScanner(event))
 							break;
 
-						// Graphics debug shortcuts: Alt+0, Alt+1, Alt+2, Alt+3
-						if ((event.key.keysym.mod & KMOD_ALT) && config::RendererType == RenderType::Vulkan_GBuffer)
+						// Graphics debug shortcuts: Alt+0, Alt+1, Alt+2, Alt+3, Alt+9
+						bool alt_pressed = (event.key.keysym.mod & KMOD_ALT) != 0;
+						if (config::RendererType == RenderType::Vulkan_GBuffer)
 						{
-							if (event.key.keysym.sym == SDLK_0)
+							if (alt_pressed)
 							{
-								config::ShowDepth.set(false);
-								config::ShowNormals.set(false);
-								config::ShowSSAO.set(false);
-								break;
-							}
-							if (event.key.keysym.sym == SDLK_1)
-							{
-								config::ShowDepth.set(true);
-								config::ShowNormals.set(false);
-								config::ShowSSAO.set(false);
-								break;
-							}
-							if (event.key.keysym.sym == SDLK_2)
-							{
-								config::ShowDepth.set(false);
-								config::ShowNormals.set(true);
-								config::ShowSSAO.set(false);
-								break;
-							}
-							if (event.key.keysym.sym == SDLK_3)
-							{
-								config::ShowDepth.set(false);
-								config::ShowNormals.set(false);
-								config::ShowSSAO.set(true);
-								break;
+								DEBUG_LOG(RENDERER, "SDL: Alt pressed, symbol: %d, mod: 0x%X", event.key.keysym.sym, event.key.keysym.mod);
+								if (event.key.keysym.sym == SDLK_9)
+								{
+									DEBUG_LOG(RENDERER, "SDL: ALT+9 detected (ExportGBuffer)");
+									if (renderer != nullptr)
+										renderer->ExportGBuffer();
+									else
+										DEBUG_LOG(RENDERER, "SDL: renderer is null");
+									break;
+								}
+								if (event.key.keysym.sym == SDLK_0)
+								{
+									config::ShowDepth.set(false);
+									config::ShowNormals.set(false);
+									config::ShowSSAO.set(false);
+									break;
+								}
+								if (event.key.keysym.sym == SDLK_1)
+								{
+									config::ShowDepth.set(true);
+									config::ShowNormals.set(false);
+									config::ShowSSAO.set(false);
+									break;
+								}
+								if (event.key.keysym.sym == SDLK_2)
+								{
+									config::ShowDepth.set(false);
+									config::ShowNormals.set(true);
+									config::ShowSSAO.set(false);
+									break;
+								}
+								if (event.key.keysym.sym == SDLK_3)
+								{
+									config::ShowDepth.set(false);
+									config::ShowNormals.set(false);
+									config::ShowSSAO.set(true);
+									break;
+								}
 							}
 						}
 					}

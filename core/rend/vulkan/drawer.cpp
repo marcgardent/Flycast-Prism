@@ -635,6 +635,7 @@ void TextureDrawer::EndRenderPass()
 
 void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderManager, const vk::Extent2D& viewport, const std::vector<vk::Format>& colorFormats)
 {
+	DEBUG_LOG(RENDERER, "ScreenDrawer::Init start");
 	emulateFramebuffer = config::EmulateFramebuffer;
 	this->shaderManager = shaderManager;
 	bool formatsChanged = this->colorFormats != colorFormats;
@@ -660,7 +661,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 		depthAttachment = std::make_unique<FramebufferAttachment>(
 				GetContext()->GetPhysicalDevice(), GetContext()->GetDevice());
 		depthAttachment->Init(viewport.width, viewport.height, GetContext()->GetDepthFormat(),
-				vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
+				vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled,
 				"DEPTH ATTACHMENT");
 	}
 
@@ -697,9 +698,9 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 		// Depth attachment
 		attachmentDescriptions.push_back(
 			vk::AttachmentDescription(vk::AttachmentDescriptionFlags(), GetContext()->GetDepthFormat(), vk::SampleCountFlagBits::e1,
-					vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eDontCare,
-					vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eDontCare,
-					vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal));
+					vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
+					vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
+					vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilReadOnlyOptimal));
 		vk::AttachmentReference depthReference((u32)colorReferences.size(), vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
 		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
@@ -780,6 +781,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 		screenPipelineManager = std::make_unique<PipelineManager>();
 	screenPipelineManager->Init(shaderManager, *renderPassLoad);
 	Drawer::Init(samplerManager, screenPipelineManager.get());
+	DEBUG_LOG(RENDERER, "ScreenDrawer::Init end");
 }
 
 vk::CommandBuffer ScreenDrawer::BeginRenderPass()
