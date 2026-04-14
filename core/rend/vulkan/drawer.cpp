@@ -759,9 +759,9 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 				{
 					attachments.push_back(std::make_unique<FramebufferAttachment>(
 							GetContext()->GetPhysicalDevice(), GetContext()->GetDevice()));
-					attachments.back()->Init(viewport.width, viewport.height, this->colorFormats[i], 
-							vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
-							"COLOR ATTACHMENT " + std::to_string(colorAttachments.size()) + "_" + std::to_string(i));
+ 				attachments.back()->Init(viewport.width, viewport.height, this->colorFormats[i], 
+ 						vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+ 						"COLOR ATTACHMENT " + std::to_string(colorAttachments.size()) + "_" + std::to_string(i));
 					views.push_back(attachments.back()->GetImageView());
 				}
 			}

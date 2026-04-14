@@ -326,15 +326,17 @@ class DoFPass
 {
 public:
 	void Init(ShaderManager *shaderManager, vk::Extent2D viewport,
-		const std::vector<vk::ImageView> &albedoViews)
+		const std::vector<vk::ImageView> &albedoViews,
+		const std::vector<vk::Image> &albedoImages)
 	{
 		NOTICE_LOG(RENDERER, "DoFPass::Init start (%dx%d)", viewport.width, viewport.height);
 		this->shaderManager = shaderManager;
 		this->viewport = viewport;
+		this->albedoImages = albedoImages;
 
 		VulkanContext *ctx = VulkanContext::Instance();
 
-		// Binding 0: albedo (de l'image precedente), Binding 1: depth
+		// Binding 0: albedo source, Binding 1: depth
 		std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
 			vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
 			vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
@@ -358,30 +360,44 @@ public:
 
 		quadBuffer = std::make_unique<QuadBuffer>();
 
-		// Renderpass : On écrit sur le même albedo (donc LoadOp::eLoad)
-		vk::AttachmentDescription albedoDesc(
+		// Creer les images intermediaires (une par swap index) pour eviter le conflit read/write
+		// Le DoF lit l'albedo source et ecrit dans dofBuffers, puis on blit vers l'albedo
+		int swapSize = (int)albedoViews.size();
+		dofBuffers.clear();
+		dofBuffers.resize(swapSize);
+		dofImageViews.clear();
+		for (int i = 0; i < swapSize; ++i)
+		{
+			dofBuffers[i] = std::make_unique<FramebufferAttachment>(ctx->GetPhysicalDevice(), ctx->GetDevice());
+			dofBuffers[i]->Init(viewport.width, viewport.height, vk::Format::eR8G8B8A8Unorm,
+				vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc);
+			dofImageViews.push_back(dofBuffers[i]->GetImageView());
+		}
+
+		// Renderpass : ecriture dans l'image intermediaire (Undefined -> ColorAttachmentOptimal -> TransferSrcOptimal)
+		vk::AttachmentDescription dofDesc(
 			vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
-			vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eStore,
 			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
-			vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-		vk::AttachmentReference albedoRef(0, vk::ImageLayout::eColorAttachmentOptimal);
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+		vk::AttachmentReference dofRef(0, vk::ImageLayout::eColorAttachmentOptimal);
 		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
-			nullptr, albedoRef, nullptr, nullptr);
-		
+			nullptr, dofRef, nullptr, nullptr);
+
 		std::array<vk::SubpassDependency, 2> deps = {
 			vk::SubpassDependency(VK_SUBPASS_EXTERNAL, 0, vk::PipelineStageFlagBits::eFragmentShader, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eColorAttachmentWrite, vk::DependencyFlagBits::eByRegion),
-			vk::SubpassDependency(0, VK_SUBPASS_EXTERNAL, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader, vk::AccessFlagBits::eColorAttachmentWrite, vk::AccessFlagBits::eShaderRead, vk::DependencyFlagBits::eByRegion)
+			vk::SubpassDependency(0, VK_SUBPASS_EXTERNAL, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eTransfer, vk::AccessFlagBits::eColorAttachmentWrite, vk::AccessFlagBits::eTransferRead, vk::DependencyFlagBits::eByRegion)
 		};
-		
+
 		renderPass = ctx->GetDevice().createRenderPassUnique(
-			vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), albedoDesc, subpass, deps));
+			vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), dofDesc, subpass, deps));
 
 		framebuffers.clear();
-		for (vk::ImageView albedoView : albedoViews)
+		for (vk::ImageView dofView : dofImageViews)
 		{
 			framebuffers.push_back(ctx->GetDevice().createFramebufferUnique(
 				vk::FramebufferCreateInfo(vk::FramebufferCreateFlags(), *renderPass,
-					albedoView, viewport.width, viewport.height, 1)));
+					dofView, viewport.width, viewport.height, 1)));
 		}
 
 		CreatePipeline();
@@ -395,8 +411,11 @@ public:
 		sampler.reset();
 		quadBuffer.reset();
 		framebuffers.clear();
+		dofImageViews.clear();
+		dofBuffers.clear();
 		renderPass.reset();
 		descriptorSets.clear();
+		albedoImages.clear();
 	}
 
 	bool IsInitialized() const { return pipeline && quadBuffer; }
@@ -415,6 +434,7 @@ public:
 				vk::DescriptorSetAllocateInfo(ctx->GetDescriptorPool(), *descSetLayout)).front());
 		}
 
+		// Lire l'albedo source (ShaderReadOnlyOptimal apres le SSAO ou le G-Buffer)
 		vk::DescriptorImageInfo albedoInfo(*sampler, albedoView, vk::ImageLayout::eShaderReadOnlyOptimal);
 		vk::DescriptorImageInfo depthInfo(*sampler, depthView, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
 		std::array<vk::WriteDescriptorSet, 2> writes = {
@@ -423,6 +443,7 @@ public:
 		};
 		ctx->GetDevice().updateDescriptorSets(writes, nullptr);
 
+		// Render pass : ecriture dans l'image intermediaire dofBuffers[imageIndex]
 		vk::ClearValue clearValue;
 		cmdBuffer.beginRenderPass(
 			vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex],
@@ -450,6 +471,49 @@ public:
 		quadBuffer->Draw(cmdBuffer);
 
 		cmdBuffer.endRenderPass();
+
+		// Transition dofBuffer : ColorAttachmentOptimal -> TransferSrcOptimal
+		vk::ImageMemoryBarrier dofToSrc(
+			vk::AccessFlagBits::eColorAttachmentWrite, vk::AccessFlagBits::eTransferRead,
+			vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eTransferSrcOptimal,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			dofBuffers[imageIndex]->GetImage(),
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+		// Transition albedo : ShaderReadOnlyOptimal -> TransferDstOptimal
+		vk::ImageMemoryBarrier albedoToDst(
+			vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferWrite,
+			vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferDstOptimal,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			albedoImages[imageIndex],
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+		std::array<vk::ImageMemoryBarrier, 2> toTransfer = { dofToSrc, albedoToDst };
+		cmdBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eFragmentShader,
+			vk::PipelineStageFlagBits::eTransfer,
+			{}, nullptr, nullptr, toTransfer);
+
+		// Blit du dofBuffer vers l'albedo
+		vk::ImageBlit blitRegion(
+			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
+			{ vk::Offset3D(0,0,0), vk::Offset3D((int)viewport.width, (int)viewport.height, 1) },
+			vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1),
+			{ vk::Offset3D(0,0,0), vk::Offset3D((int)viewport.width, (int)viewport.height, 1) });
+		cmdBuffer.blitImage(
+			dofBuffers[imageIndex]->GetImage(), vk::ImageLayout::eTransferSrcOptimal,
+			albedoImages[imageIndex], vk::ImageLayout::eTransferDstOptimal,
+			blitRegion, vk::Filter::eNearest);
+
+		// Retransition albedo : TransferDstOptimal -> ShaderReadOnlyOptimal
+		vk::ImageMemoryBarrier albedoToShader(
+			vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead,
+			vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			albedoImages[imageIndex],
+			vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+		cmdBuffer.pipelineBarrier(
+			vk::PipelineStageFlagBits::eTransfer,
+			vk::PipelineStageFlagBits::eFragmentShader,
+			{}, nullptr, nullptr, albedoToShader);
 	}
 
 private:
@@ -487,6 +551,10 @@ private:
 	vk::UniqueSampler sampler;
 	std::unique_ptr<QuadBuffer> quadBuffer;
 	std::vector<vk::UniqueDescriptorSet> descriptorSets;
+	// Images intermediaires (ping-pong) pour eviter le conflit read/write
+	std::vector<std::unique_ptr<FramebufferAttachment>> dofBuffers;
+	std::vector<vk::ImageView> dofImageViews;
+	std::vector<vk::Image> albedoImages;
 };
 
 class GBufferVulkanRenderer final : public BaseVulkanRenderer
@@ -558,6 +626,12 @@ public:
 		// Initialisation lazy du SSAO si necessaire
 		if ((config::EnableSSAO || config::ShowSSAO) && !ssaoPass.IsInitialized())
 			initSSAO();
+
+		// Initialisation lazy du DoF si necessaire
+		if (config::EnableDoF && !dofPass.IsInitialized())
+			initDoF();
+		else if (!config::EnableDoF && dofPass.IsInitialized())
+			dofPass.Term();
 
 		bool doSSAO = (config::EnableSSAO || config::ShowSSAO) && ssaoPass.IsInitialized() && depthAtt && normalAtt;
 		bool doDoF  = config::EnableDoF && dofPass.IsInitialized() && depthAtt && albedoAtt;
@@ -665,17 +739,22 @@ private:
 
 		int swapSize = (int)screenDrawer.GetSwapChainCount();
 		std::vector<vk::ImageView> albedoViews;
+		std::vector<vk::Image> albedoImages;
 		albedoViews.reserve(swapSize);
+		albedoImages.reserve(swapSize);
 		for (int i = 0; i < swapSize; ++i)
 		{
 			FramebufferAttachment *att = screenDrawer.GetColorAttachment(i, 0);
 			if (att)
+			{
 				albedoViews.push_back(att->GetImageView());
+				albedoImages.push_back(att->GetImage());
+			}
 		}
 
 		if (!albedoViews.empty())
 		{
-			dofPass.Init(&shaderManager, viewport, albedoViews);
+			dofPass.Init(&shaderManager, viewport, albedoViews, albedoImages);
 		}
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initDoF end");
 	}
