@@ -378,7 +378,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	u32 dst = pp.tsp.DstInstr;
 	vk::PipelineColorBlendAttachmentState pipelineColorBlendAttachmentState
 	{
- 		!(config::ShowDepth || config::ShowNormals),            // blendEnable
+ 		!(config::ShowDepth || config::ShowNormals || config::ShowSSAO),            // blendEnable
 	  getBlendFactor(src, true),     // srcColorBlendFactor
 	  getBlendFactor(dst, false),    // dstColorBlendFactor
 	  vk::BlendOp::eAdd,             // colorBlendOp
@@ -433,11 +433,13 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	params.useAlpha = pp.tsp.UseAlpha;
 	params.palette = gpuPalette;
 	params.divPosZ = divPosZ;
-	params.dithering = dithering && !(config::ShowDepth || config::ShowNormals);
+	params.dithering = dithering && !(config::ShowDepth || config::ShowNormals || config::ShowSSAO);
 	params.showDepth = config::ShowDepth;
-	params.isTranslucent = listType == ListType_Translucent && (config::ShowDepthOpaqueOnly || config::ShowNormals);
+	params.isTranslucent = listType == ListType_Translucent && (config::ShowDepthOpaqueOnly || config::ShowNormals || config::ShowSSAO);
 	params.showNormals = config::ShowNormals;
 	params.gbuffer = config::RendererType == RenderType::Vulkan_GBuffer;
+	params.enableSSAO = config::EnableSSAO;
+	params.showSSAO = config::ShowSSAO;
 	vk::ShaderModule fragment_module = shaderManager->GetFragmentShader(params);
 
 	std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {

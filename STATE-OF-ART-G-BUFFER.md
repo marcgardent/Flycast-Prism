@@ -42,7 +42,24 @@ Les shaders Vulkan dans `core/rend/vulkan/shaders.cpp` ont été profondément r
 - **Système de Vertex** : Mise à jour de `core/hw/pvr/ta_vtx.cpp` pour assurer la transmission correcte des coordonnées `Z` et `W` nécessaires aux calculs de position dans les shaders.
 - **Fichiers supprimés** : Suppression de `FEASIBILITY.md` et d'autres fichiers temporaires de recherche au profit de cette implémentation concrète.
 
-#### 5. État d'Intégration et Prochaines Étapes
+#### 5. Screen Space Ambient Occlusion (SSAO)
+Un algorithme de SSAO personnalisé a été implémenté directement dans le fragment shader du G-Buffer.
+- **Méthode** : Échantillonnage pseudo-aléatoire (8 samples) autour du fragment.
+- **Calcul** : Utilise les dérivées de position (`dFdx`, `dFdy`) pour simuler le plan tangent et estimer l'occlusion locale par la courbure géométrique.
+- **Visualisation** : 
+    - `Alt+1` : Depth Map (Z-Buffer).
+    - `Alt+2` : Normal Map.
+    - `Alt+3` : SSAO Pur (Noir & Blanc).
+    - `Alt+0` : Rendu final (Albedo * AO).
 
-La branche `gbuffer` est désormais stable pour le rendu différé de base.
-- **Inclusion** : Support complet des normales et de la profondeur logarithmique.
+#### 6. État d'Intégration et Stabilité
+La branche `gbuffer` est désormais stable pour le rendu différé avec AO intégrée.
+- **Inclusion** : Support complet des normales, de la profondeur logarithmique et du SSAO expérimental.
+- **Persistance** : L'option SSAO est désormais sauvegardée globalement dans la configuration.
+- **Correction** : Nettoyage du code source des shaders pour corriger des erreurs de compilation (caractères spéciaux).
+- **Exclusion** : Les techniques d'Ambient Occlusion (CACAO) restent sur la branche `gbuffer-cacao`.
+
+#### 7. Refactorisation et Maintenance
+- **Externalisation** : Le code GLSL a été déplacé dans `core/rend/vulkan/shaders/` pour améliorer la lisibilité et faciliter l'édition avec coloration syntaxique.
+- **Inclusion** : Utilisation des littéraux de chaîne brute C++ (`R"(...)"`) dans les fichiers `.vert`/`.frag`/`.glsl` pour permettre l'inclusion directe par le préprocesseur via `#include`.
+- **Réglages SSAO** : Les paramètres de l'algorithme SSAO (samples, radius, strength, etc.) sont désormais regroupés en début de fichier `vulkan_main.frag`.

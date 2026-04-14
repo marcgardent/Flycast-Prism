@@ -379,25 +379,35 @@ void input_sdl_handle()
 						if (card_reader::barcodeAvailable() && handleBarcodeScanner(event))
 							break;
 
-						// Graphics debug shortcuts: Alt+0, Alt+1, Alt+2
+						// Graphics debug shortcuts: Alt+0, Alt+1, Alt+2, Alt+3
 						if ((event.key.keysym.mod & KMOD_ALT) && config::RendererType == RenderType::Vulkan_GBuffer)
 						{
 							if (event.key.keysym.sym == SDLK_0)
 							{
 								config::ShowDepth.set(false);
 								config::ShowNormals.set(false);
+								config::ShowSSAO.set(false);
 								break;
 							}
 							if (event.key.keysym.sym == SDLK_1)
 							{
 								config::ShowDepth.set(true);
 								config::ShowNormals.set(false);
+								config::ShowSSAO.set(false);
 								break;
 							}
 							if (event.key.keysym.sym == SDLK_2)
 							{
 								config::ShowDepth.set(false);
 								config::ShowNormals.set(true);
+								config::ShowSSAO.set(false);
+								break;
+							}
+							if (event.key.keysym.sym == SDLK_3)
+							{
+								config::ShowDepth.set(false);
+								config::ShowNormals.set(false);
+								config::ShowSSAO.set(true);
 								break;
 							}
 						}

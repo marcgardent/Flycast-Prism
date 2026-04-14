@@ -200,6 +200,12 @@ void gui_settings_video()
 		}
 		ImGui::SameLine();
 		ShowHelpMarker(T("Use Deferred Rendering (G-Buffer) for advanced effects. Experimental."));
+		if (gbuffer)
+		{
+			ImGui::Indent();
+			OptionCheckbox(T("SSAO"), config::EnableSSAO, T("Enable Screen Space Ambient Occlusion (Experimental)"));
+			ImGui::Unindent();
+		}
 	}
 	ImGui::Spacing();
 

@@ -112,6 +112,8 @@ Option<bool> DupeFrames("rend.DupeFrames", false);
 Option<bool> ShowDepth("rend.ShowDepth", false);
 Option<bool> ShowDepthOpaqueOnly("rend.ShowDepthOpaqueOnly", true);
 Option<bool> ShowNormals("rend.ShowNormals", false);
+Option<bool, false> EnableSSAO("rend.EnableSSAO", false);
+Option<bool> ShowSSAO("rend.ShowSSAO", false);
 Option<int> PerPixelLayers("rend.PerPixelLayers", 32);
 #ifdef TARGET_UWP
 Option<bool> NativeDepthInterpolation("rend.NativeDepthInterpolation", true);

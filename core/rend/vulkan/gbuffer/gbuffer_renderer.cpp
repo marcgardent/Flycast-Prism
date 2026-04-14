@@ -52,11 +52,8 @@ public:
 	bool Present() override
 	{
 		int attachmentIndex = 0;
-		if (config::ShowNormals)
+		if (config::ShowNormals || config::ShowSSAO)
 			attachmentIndex = 1;
-		// config::ShowDepth n'est pas géré ici car il utilise gl_FragDepth
-		// et est rendu dans l'albedo (attachment 0) via le shader standard (hors mode gbuffer)
-		// mais en mode gbuffer, on pourrait vouloir l'afficher aussi.
 		
 		return screenDrawer.PresentFrame(attachmentIndex);
 	}
