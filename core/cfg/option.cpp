@@ -109,11 +109,11 @@ Option<int> AnisotropicFiltering("rend.AnisotropicFiltering", 1);
 Option<int> TextureFiltering("rend.TextureFiltering", 0); // Default
 Option<bool> ThreadedRendering("rend.ThreadedRendering", true);
 Option<bool> DupeFrames("rend.DupeFrames", false);
-Option<bool, false> ShowDepth("rend.ShowDepth", false);
+Option<bool> ShowDepth("rend.ShowDepth", false);
 Option<bool> ShowDepthOpaqueOnly("rend.ShowDepthOpaqueOnly", true);
-Option<bool, false> ShowNormals("rend.ShowNormals", false);
+Option<bool> ShowNormals("rend.ShowNormals", false);
 Option<bool> EnableSSAO("rend.EnableSSAO", false);
-Option<bool, false> ShowSSAO("rend.ShowSSAO", false);
+Option<bool> ShowSSAO("rend.ShowSSAO", false);
 Option<float> SSAORadius("rend.SSAORadius", 0.05f);
 Option<float> SSAOBias("rend.SSAOBias", 0.001f);
 Option<bool> EnableDoF("rend.EnableDoF", false);

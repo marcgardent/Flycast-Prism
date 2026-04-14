@@ -470,11 +470,11 @@ extern Option<int> AnisotropicFiltering;
 extern Option<int> TextureFiltering; // 0: default, 1: force nearest, 2: force linear
 extern Option<bool> ThreadedRendering;
 extern Option<bool> DupeFrames;
-extern Option<bool, false> ShowDepth;
+extern Option<bool> ShowDepth;
 extern Option<bool> ShowDepthOpaqueOnly;
-extern Option<bool, false> ShowNormals;
+extern Option<bool> ShowNormals;
 extern Option<bool> EnableSSAO;
-extern Option<bool, false> ShowSSAO;
+extern Option<bool> ShowSSAO;
 extern Option<float> SSAORadius;
 extern Option<float> SSAOBias;
 extern Option<bool> EnableDoF;

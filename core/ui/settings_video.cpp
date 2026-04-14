@@ -213,7 +213,6 @@ void gui_settings_video()
 					OptionSliderFloat(T("SSAO Radius"), config::SSAORadius, 0.01f, 0.5f);
 				}
 				ImGui::Unindent();
-
 				OptionCheckbox(T("Enable Depth of Field"), config::EnableDoF);
 				ImGui::Indent();
 				{
