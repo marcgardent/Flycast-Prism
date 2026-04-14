@@ -63,3 +63,20 @@ La branche `gbuffer` est désormais stable pour le rendu différé avec AO inté
 - **Externalisation** : Le code GLSL a été déplacé dans `core/rend/vulkan/shaders/` pour améliorer la lisibilité et faciliter l'édition avec coloration syntaxique.
 - **Inclusion** : Utilisation des littéraux de chaîne brute C++ (`R"(...)"`) dans les fichiers `.vert`/`.frag`/`.glsl` pour permettre l'inclusion directe par le préprocesseur via `#include`.
 - **Réglages SSAO** : Les paramètres de l'algorithme SSAO (samples, radius, strength, etc.) sont désormais regroupés en début de fichier `vulkan_main.frag`.
+
+#### 8. Analyse des régressions (Post-Implémentation)
+
+L'introduction du G-Buffer a initialement causé quelques régressions visuelles majeures dues à une simplification excessive du fragment shader Vulkan par rapport aux autres moteurs de rendu (GLES/GL4) :
+
+- **Rendu de l'Albedo (Voiture Blanche/Chrome)** : 
+    - *Problème* : Les voitures chromées ou avec des effets de réflexion apparaissaient noires ou trop sombres.
+    - *Cause* : L'instruction `pp_ShadInstr == 2` (Mix Albedo/Texture) et la gestion de `pp_IgnoreTexA` n'étaient pas implémentées, empêchant le mélange correct entre la couleur de base (réflexion) et la texture.
+    - *Correction* : Restauration de la logique complète de mélange des couleurs et prise en compte de `pp_UseAlpha` et `pp_IgnoreTexA`.
+
+- **Z-Buffer et Découpe Alpha (Punch-Through/Translucide)** :
+    - *Problème* : Les objets utilisant des textures avec transparence (arbres, grillages) affichaient des carrés noirs ou bloquaient la profondeur de manière incorrecte.
+    - *Cause* : L'absence de l'instruction `discard` basée sur l'alpha test (`cp_AlphaTest`). Le tampon de profondeur était écrit pour chaque fragment, même ceux censés être transparents.
+    - *Correction* : Ré-implémentation de l'alpha test avec `discard` dans le shader principal. Cela permet au Z-Buffer de ne plus prendre en compte les parties transparentes des textures Punch-Through.
+
+- **Cohérence des Passes** :
+    - L'albedo final utilisé pour le SSAO est désormais identique au rendu standard, garantissant que les effets d'occlusion s'appliquent sur une image visuellement correcte.

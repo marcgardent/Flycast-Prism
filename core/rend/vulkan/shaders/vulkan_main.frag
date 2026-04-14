@@ -17,6 +17,10 @@ void main()
 		offset /= vtx_uv.z;
 	#endif
 
+	#if pp_UseAlpha == 0
+		color.a = 1.0;
+	#endif
+
 	#if pp_Texture == 1
 	{
 		#if pp_Palette == 0
@@ -33,6 +37,10 @@ void main()
 			#endif
 		#endif
 
+		#if pp_IgnoreTexA == 1
+			texcol.a = 1.0;
+		#endif
+
 		#if pp_ShadInstr == 0
 			color = texcol;
 		#elif pp_ShadInstr == 1
@@ -46,6 +54,12 @@ void main()
 	#endif
 
 	color = colorClamp(color);
+
+	#if cp_AlphaTest == 1
+		if (uniformBuffer.cp_AlphaTestValue > color.a)
+			discard;
+		color.a = 1.0;
+	#endif
 
 #if DIV_POS_Z == 1
 	highp float w = 100000.0 / vtx_uv.z;
