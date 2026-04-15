@@ -1,103 +1,123 @@
-# Architecture interne de Flycast : Données Matériau
+# Architecture interne de Flycast : Buffer Matériau G-Buffer
 
-## Les structures clés à connaître
-Dans le codebase, la donnée "matériau" native est portée par trois structs par polygone, définies dans `core/hw/pvr/ta_ctx.h` et `core/hw/pvr/pvr_mem.h` :
+## Implémentation réelle (Vulkan)
 
-* **TSP** — Texture/Shading Processor instruction word.
-* **TCW** — Texture Control Word.
-* **PCW** — Parameter Control Word (contient `list_type`).
-* **ISP** — Image Synthesis Processor instruction word.
+Le buffer Material est implémenté dans le renderer G-Buffer Vulkan (`core/rend/vulkan/gbuffer/gbuffer_renderer.cpp`).
+Il s'agit du **3ème color attachment** du G-Buffer, au format `eR8Uint` (1 octet par pixel).
 
-Le champ `PCW.list_type` (3 bits) définit la passe matériau native :
+### Attachments du G-Buffer
 
-```cpp
-enum ListType {
-    ListType_Opaque           = 0,  // Géométrie solide
-    ListType_Opaque_Modifier  = 1,  // Volumes shadow sur opaque
-    ListType_Translucent      = 2,  // Alpha blending
-    ListType_Translucent_Modifier = 3, // Volumes shadow sur translucide
-    ListType_Punch_Through    = 4,  // Alpha clip binaire (masque)
-};
-```
-
----
-
-## Où hooker dans le pipeline de rendu
-Le pipeline OpenGL de Flycast suit ce chemin dans `core/rend/gles/` :
-
-1. **ta_ctx** : Display lists côté CPU.
-2. **RenderFrame()** : Boucle principale de rendu.
-3. **DrawList(ListType)** : Itération sur les passes.
-   * `SetupMaterial(poly)` : Lecture des TSP/TCW.
-   * `glDraw*()` : Appel de dessin.
-
-Le fichier central est **`core/rend/gles/gles.cpp`**. C'est là que tu as accès simultanément à PCW, TSP, et TCW juste avant le draw call.
-
----
-
-## Stratégie d'implémentation du G-Buffer Material
-
-### Étape 1 — Encodage du Material ID (8 bits)
-Proposition d'encodage optimisé pour le post-process :
-
-| Bits | Description | Source |
+| Index | Format | Contenu |
 | :--- | :--- | :--- |
-| **7-5** | list_type (0-4) | PCW.list_type |
-| **4** | has_texture | TCW.TexEnable |
-| **3** | is_gouraud | TSP.ShadInstr |
-| **2** | has_bump | TCW.PixelFmt |
-| **1** | fog_enabled | TSP.FogControl |
-| **0** | palette | TCW.PixelFmt |
-
-### Étape 2 — Ajout du Render Target dans le G-Buffer
-Dans ta structure G-Buffer côté C++, on ajoute une texture `GL_R8UI` :
-
-```cpp
-// Initialisation du FBO G-Buffer
-glGenTextures(1, &materialTex);
-glBindTexture(GL_TEXTURE_2D, materialTex);
-glTexImage2D(GL_TEXTURE_2D, 0, GL_R8UI, width, height, 0, GL_RED_INTEGER, GL_UNSIGNED_BYTE, nullptr);
-
-// Attachement au FBO (Attachment 3 par exemple)
-glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, materialTex, 0);
-```
+| 0 | `eR8G8B8A8Unorm` | Albedo (couleur diffuse) |
+| 1 | `eR16G16B16A16Sfloat` | Normales (XYZ en half-float) |
+| 2 | `eR8Uint` | **Material ID** (8 bits encodés) |
+| depth | `eD32Sfloat` / `eD24UnormS8Uint` | Profondeur |
 
 ---
 
-## Étape 5 — Visualisation et Débogage (Mapping de couleur)
+## Encodage du Material ID (8 bits)
 
-Comme les IDs sont des entiers très petits, le buffer apparaîtra noir. Il faut créer une passe de visualisation qui transforme l'ID en couleur contrastée.
+Le Material ID est calculé dans `core/rend/vulkan/shaders/vulkan_main.frag` via des constantes de préprocesseur GLSL issues des données PVR natives.
 
-### Shader de Visualisation (Post-process)
-Ce shader utilise un hash pour générer une couleur unique à partir de l'ID stocké.
+| Bits | Description | Source GLSL |
+| :--- | :--- | :--- |
+| **7-5** | list_type (0-4) | `cp_AlphaTest`, `IS_TRANSLUCENT` |
+| **4** | has_texture | `pp_Texture` |
+| **3** | is_gouraud | `pp_Gouraud` |
+| **2** | has_bumpmap | `pp_BumpMap` |
+| **1-0** | fog_ctrl (0-3) | `pp_FogCtrl` |
+
+### Valeurs list_type (bits 7-5)
+
+| Valeur | list_type | Description |
+| :--- | :--- | :--- |
+| `0` (000) | `ListType_Opaque` | Géométrie solide |
+| `1` (001) | `ListType_Opaque_Modifier` | Volumes shadow sur opaque |
+| `2` (010) | `ListType_Translucent` | Alpha blending |
+| `3` (011) | `ListType_Translucent_Modifier` | Volumes shadow sur translucide |
+| `4` (100) | `ListType_Punch_Through` | Alpha clip binaire (masque) |
+
+---
+
+## Visualisation (ALT+5)
+
+La visualisation est activée via `config::ShowMaterial` (toggle `ALT+5`, reset `ALT+0`).
+
+La passe `MaterialPass` lit le buffer `eR8Uint` via un `usampler2D` et applique un **hash Knuth multiplicatif** pour générer une couleur RGB unique par ID :
 
 ```glsl
-// Fragment Shader de Debug
-uniform usampler2D u_MaterialBuffer;
-out vec4 fragColor;
-
 vec3 hashColor(uint id) {
-   // Fonction de hash simple pour transformer l'ID en couleur RGB
-   uint h = id * 2654435761u;
-   return vec3(float((h >> 16) & 255u) / 255.0,
-   float((h >> 8) & 255u) / 255.0,
-   float(h & 255u) / 255.0);
-}
-
-void main() {
-   uint matID = texture(u_MaterialBuffer, TexCoord).r;
-
-   if (matID == 0u) {
-      fragColor = vec4(0.1, 0.1, 0.1, 1.0); // Gris sombre pour le vide
-   } else {
-      fragColor = vec4(hashColor(matID), 1.0);
-   }
+    uint h = id * 2654435761u;
+    return vec3(float((h >> 16) & 255u) / 255.0,
+                float((h >> 8)  & 255u) / 255.0,
+                float( h        & 255u) / 255.0);
 }
 ```
+
+- **Pixel vide** (matID == 0) → gris sombre `(0.1, 0.1, 0.1)`
+- **Chaque combinaison de propriétés** → couleur unique et contrastée
+
+### Exemples de couleurs par type de surface
+
+| Material ID (hex) | list_type | texture | gouraud | bump | fog | Couleur hash |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `0x00` | — | — | — | — | — | Gris sombre (vide) |
+| `0x00` | Opaque | non | non | non | off | Hash(0x00) |
+| `0x10` | Opaque | oui | non | non | off | Hash(0x10) |
+| `0x18` | Opaque | oui | oui | non | off | Hash(0x18) |
+| `0x40` | Translucent | non | non | non | off | Hash(0x40) |
+| `0x50` | Translucent | oui | non | non | off | Hash(0x50) |
+| `0x80` | Punch-Through | non | non | non | off | Hash(0x80) |
+| `0x90` | Punch-Through | oui | non | non | off | Hash(0x90) |
+
+> **Note** : Les couleurs exactes dépendent du hash Knuth. Deux surfaces avec le même encodage auront toujours la même couleur, permettant une segmentation sémantique visuelle.
+
+---
+
+## Export EXR du G-Buffer
+
+L'export EXR (déclenché par `ALT+G`) inclut **9 canaux** :
+
+| Canal EXR | Source | Type |
+| :--- | :--- | :--- |
+| `Albedo.R/G/B` | Attachment 0 | float [0,1] |
+| `Normal.X/Y/Z` | Attachment 1 | float [-1,1] |
+| `Depth.Z` | Depth attachment | float [0,1] |
+| `Material.ID` | Attachment 2 (R8Uint → float) | float [0,1] = matID/255 |
+| `SSAO.AO` | SSAOPass buffer (R8Unorm) | float [0,1] |
+
+> Pour retrouver le Material ID entier depuis l'EXR : `matID = round(Material.ID * 255)`.
+
+---
+
+## Pipeline de rendu G-Buffer
+
+```
+TA_context (CPU)
+    └─► screenDrawer.Draw()          ← G-Buffer pass (Albedo + Normal + MaterialID)
+            └─► SSAOPass.Draw()      ← SSAO multiplicatif sur albedo + capture AO brut
+                    └─► DoFPass.Draw()    ← Depth of Field (optionnel)
+                            └─► MaterialPass.Draw()  ← Visualisation hash color (ALT+5)
+```
+
+### Fichiers clés
+
+| Fichier | Rôle |
+| :--- | :--- |
+| `gbuffer_renderer.cpp` | Orchestration des passes, ExportGBuffer (EXR 9 canaux) |
+| `shaders/vulkan_main.frag` | Encodage Material ID 8 bits |
+| `shaders/vulkan_top.frag` | Output `layout(location=2) out uint MaterialColor` |
+| `shaders/vulkan_ssao.frag` | Calcul AO + écriture `AoRaw` sur location=1 |
+| `shaders/vulkan_material.frag` | Hash color visualization |
+| `option.h/cpp` | `config::ShowMaterial` (persisté `rend.ShowMaterial`) |
+| `sdl.cpp` | `ALT+5` toggle ShowMaterial, `ALT+0` reset |
 
 ---
 
 ## Points d'attention
-* **Modifier Volumes** : Les ombres portées (`Modifier_Modifier`) ont leur propre path (`DrawModVols`). Il faut leur assigner un ID distinct (ex: `0xE0`).
-* **Render-to-Texture (RTT)** : Certaines passes de post-process internes au jeu ont leur propre FBO. Assure-toi que ton attachement Material est présent si tu veux capturer ces effets.
-* **Extraction EXR** : Lors de l'export final, le canal Material doit être inclus comme un canal entier ou float normalisé (`matID / 255.0`).
+
+* **Modifier Volumes** : Les volumes shadow ont leur propre path. Leur Material ID encode `list_type=1` ou `3`.
+* **SSAO buffer séparé** : Le SSAO écrit sur 2 attachments simultanément — l'albedo (blending multiplicatif) et un buffer `R8Unorm` dédié pour l'export EXR.
+* **Material ID = 0** : Correspond aux pixels non dessinés (background). À distinguer de `list_type=0` sans texture qui peut aussi produire `0x00`.
+* **Extraction EXR** : `Material.ID` est normalisé `matID/255.0`. Multiplier par 255 et arrondir pour retrouver l'ID entier.

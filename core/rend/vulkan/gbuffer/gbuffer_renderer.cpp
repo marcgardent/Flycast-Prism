@@ -120,16 +120,39 @@ public:
 		// Quad vertex buffer
 		quadBuffer = std::make_unique<QuadBuffer>();
 
-		// Renderpass SSAO : un seul color attachment (albedo) en mode Load
-		// Le SSAO ecrit l'AO en blending multiplicatif sur l'albedo
-		vk::AttachmentDescription albedoDesc(
-			vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
-			vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
-			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
-			vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-		vk::AttachmentReference albedoRef(0, vk::ImageLayout::eColorAttachmentOptimal);
+		// Buffers SSAO separés (R8Unorm) pour capturer la valeur AO brute avant blending
+		ssaoBuffers.clear();
+		ssaoImageViews.clear();
+		ssaoImages.clear();
+		for (size_t i = 0; i < albedoViews.size(); ++i)
+		{
+			auto buf = std::make_unique<FramebufferAttachment>(ctx->GetPhysicalDevice(), ctx->GetDevice());
+			buf->Init(viewport.width, viewport.height, vk::Format::eR8Unorm,
+				vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eSampled);
+			ssaoImageViews.push_back(buf->GetImageView());
+			ssaoImages.push_back(buf->GetImage());
+			ssaoBuffers.push_back(std::move(buf));
+		}
+
+		// Renderpass SSAO : attachment 0 = albedo (Load/Store), attachment 1 = ssao buffer (Clear/Store)
+		std::array<vk::AttachmentDescription, 2> attachDescs = {
+			vk::AttachmentDescription(
+				vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
+				vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+				vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+				vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal),
+			vk::AttachmentDescription(
+				vk::AttachmentDescriptionFlags(), vk::Format::eR8Unorm, vk::SampleCountFlagBits::e1,
+				vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
+				vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+				vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal),
+		};
+		std::array<vk::AttachmentReference, 2> colorRefs = {
+			vk::AttachmentReference(0, vk::ImageLayout::eColorAttachmentOptimal),
+			vk::AttachmentReference(1, vk::ImageLayout::eColorAttachmentOptimal),
+		};
 		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
-			nullptr, albedoRef, nullptr, nullptr);
+			nullptr, colorRefs, nullptr, nullptr);
 		vk::SubpassDependency dep1(VK_SUBPASS_EXTERNAL, 0,
 			vk::PipelineStageFlagBits::eFragmentShader,
 			vk::PipelineStageFlagBits::eColorAttachmentOutput,
@@ -144,15 +167,16 @@ public:
 			vk::DependencyFlagBits::eByRegion);
 		std::array<vk::SubpassDependency, 2> deps = { dep1, dep2 };
 		renderPass = ctx->GetDevice().createRenderPassUnique(
-			vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), albedoDesc, subpass, deps));
+			vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), attachDescs, subpass, deps));
 
-		// Framebuffers : un par image, pointant sur l'albedo attachment
+		// Framebuffers : un par image, avec albedo + ssao buffer
 		framebuffers.clear();
-		for (vk::ImageView albedoView : albedoViews)
+		for (size_t i = 0; i < albedoViews.size(); ++i)
 		{
+			std::array<vk::ImageView, 2> views = { albedoViews[i], ssaoImageViews[i] };
 			framebuffers.push_back(ctx->GetDevice().createFramebufferUnique(
 				vk::FramebufferCreateInfo(vk::FramebufferCreateFlags(), *renderPass,
-					albedoView, viewport.width, viewport.height, 1)));
+					views, viewport.width, viewport.height, 1)));
 		}
 
 		// Pipeline
@@ -174,10 +198,24 @@ public:
 		framebuffers.clear();
 		renderPass.reset();
 		descriptorSets.clear();
+		ssaoBuffers.clear();
+		ssaoImageViews.clear();
+		ssaoImages.clear();
 		DEBUG_LOG(RENDERER, "SSAOPass::Term end");
 	}
 
 	bool IsInitialized() const { return pipeline && debugPipeline && quadBuffer; }
+
+	vk::ImageView GetSSAOImageView(int index) const
+	{
+		if (index >= 0 && index < (int)ssaoImageViews.size()) return ssaoImageViews[index];
+		return {};
+	}
+	vk::Image GetSSAOImage(int index) const
+	{
+		if (index >= 0 && index < (int)ssaoImages.size()) return ssaoImages[index];
+		return {};
+	}
 
 	// Execute le pass SSAO sur l'image courante
 	void Draw(vk::CommandBuffer cmdBuffer, int imageIndex,
@@ -215,11 +253,14 @@ public:
 		};
 		ctx->GetDevice().updateDescriptorSets(writes, nullptr);
 
-		// Debut du renderpass SSAO
-		vk::ClearValue clearColor(vk::ClearColorValue(std::array<float,4>{0.f,0.f,0.f,1.f}));
+		// Debut du renderpass SSAO (2 clear values : albedo non cleared, ssao buffer cleared a 1.0)
+		std::array<vk::ClearValue, 2> clearValues = {
+			vk::ClearValue(vk::ClearColorValue(std::array<float,4>{0.f,0.f,0.f,1.f})),
+			vk::ClearValue(vk::ClearColorValue(std::array<float,4>{1.f,1.f,1.f,1.f})),
+		};
 		cmdBuffer.beginRenderPass(
 			vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex],
-				vk::Rect2D({0,0}, viewport), clearColor),
+				vk::Rect2D({0,0}, viewport), clearValues),
 			vk::SubpassContents::eInline);
 
 		cmdBuffer.setViewport(0, vk::Viewport(0.f, 0.f, (float)viewport.width, (float)viewport.height, 0.f, 1.f));
@@ -270,19 +311,26 @@ void CreatePipeline(bool debug)
 		vk::PipelineDepthStencilStateCreateInfo depthStencil;
 
 		// Blending multiplicatif : albedo *= ao
-vk::PipelineColorBlendAttachmentState blendAttachment;
-if (debug) {
-blendAttachment = vk::PipelineColorBlendAttachmentState(false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-} else {
-// Blending multiplicatif : albedo.rgb *= ao (ao est dans le canal alpha du fragment SSAO)
-// src = vec4(1,1,1,ao), dst = albedo
-// RGB_final = src.rgb * 0 + dst.rgb * src.a  => albedo.rgb * ao
-// A_final   = src.a   * 0 + dst.a   * 1      => albedo.a inchange
-blendAttachment = vk::PipelineColorBlendAttachmentState(true, vk::BlendFactor::eZero, vk::BlendFactor::eSrcAlpha, vk::BlendOp::eAdd, vk::BlendFactor::eZero, vk::BlendFactor::eOne, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-}
+		// Attachment 1 (AoRaw) : ecriture directe sans blending
+		vk::PipelineColorBlendAttachmentState aoRawAttachment(false,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::ColorComponentFlagBits::eR);
+
+		vk::PipelineColorBlendAttachmentState blendAttachment;
+		if (debug) {
+			blendAttachment = vk::PipelineColorBlendAttachmentState(false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+		} else {
+			// Blending multiplicatif : albedo.rgb *= ao (ao est dans le canal alpha du fragment SSAO)
+			// src = vec4(1,1,1,ao), dst = albedo
+			// RGB_final = src.rgb * 0 + dst.rgb * src.a  => albedo.rgb * ao
+			// A_final   = src.a   * 0 + dst.a   * 1      => albedo.a inchange
+			blendAttachment = vk::PipelineColorBlendAttachmentState(true, vk::BlendFactor::eZero, vk::BlendFactor::eSrcAlpha, vk::BlendOp::eAdd, vk::BlendFactor::eZero, vk::BlendFactor::eOne, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+		}
+		std::array<vk::PipelineColorBlendAttachmentState, 2> blendAttachments = { blendAttachment, aoRawAttachment };
 		vk::PipelineColorBlendStateCreateInfo colorBlend(
 			vk::PipelineColorBlendStateCreateFlags(), false, vk::LogicOp::eNoOp,
-			blendAttachment, { { 1.f, 1.f, 1.f, 1.f } });
+			blendAttachments, { { 1.f, 1.f, 1.f, 1.f } });
 
 		std::array<vk::DynamicState, 2> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 		vk::PipelineDynamicStateCreateInfo dynamicState(vk::PipelineDynamicStateCreateFlags(), dynamicStates);
@@ -320,6 +368,10 @@ pipeline = ctx->GetDevice().createGraphicsPipelineUnique(ctx->GetPipelineCache()
 	std::unique_ptr<BufferData> kernelBuffer;
 	std::unique_ptr<QuadBuffer> quadBuffer;
 	std::vector<vk::UniqueDescriptorSet> descriptorSets;
+	// Buffers SSAO separés pour capturer la valeur AO brute (R8Unorm)
+	std::vector<std::unique_ptr<FramebufferAttachment>> ssaoBuffers;
+	std::vector<vk::ImageView> ssaoImageViews;
+	std::vector<vk::Image> ssaoImages;
 };
 
 class DoFPass
@@ -1014,7 +1066,9 @@ void GBufferVulkanRenderer::ExportGBuffer()
 
 	auto albedoAtt = screenDrawer.GetColorAttachment(imgIdx, 0);
 	auto normalAtt = screenDrawer.GetColorAttachment(imgIdx, 1);
+	auto materialAtt = screenDrawer.GetColorAttachment(imgIdx, 2);
 	auto depthAtt = screenDrawer.GetDepthAttachment();
+	vk::Image ssaoImage = ssaoPass.IsInitialized() ? ssaoPass.GetSSAOImage(imgIdx) : vk::Image{};
 
 	if (!albedoAtt || !normalAtt || !depthAtt) {
 		ERROR_LOG(RENDERER, "ExportGBuffer: Missing attachments (A: %p, N: %p, D: %p)", albedoAtt, normalAtt, depthAtt);
@@ -1031,6 +1085,11 @@ void GBufferVulkanRenderer::ExportGBuffer()
 	BufferData stageN(width * height * 8, vk::BufferUsageFlagBits::eTransferDst);
 	// La depth D32 = 4 bytes/pixel, D24S8 = 4 bytes/pixel
 	BufferData stageD(width * height * 4, vk::BufferUsageFlagBits::eTransferDst);
+	// Material : R8Uint = 1 byte/pixel ; SSAO : R8Unorm = 1 byte/pixel
+	std::unique_ptr<BufferData> stageMat = materialAtt
+		? std::make_unique<BufferData>(width * height * 1, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
+	std::unique_ptr<BufferData> stageSSAO = ssaoImage
+		? std::make_unique<BufferData>(width * height * 1, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
 
 	try {
 		// Un seul BeginFrame + un seul command buffer pour toutes les opérations GPU
@@ -1044,33 +1103,45 @@ void GBufferVulkanRenderer::ExportGBuffer()
 		}
 		cmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-		// --- Transition vers TransferSrcOptimal ---
-		INFO_LOG(RENDERER, "ExportGBuffer: Transitioning to TransferSrc...");
-		{
-			std::vector<vk::ImageMemoryBarrier> barriers;
-			barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
-				vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				albedoAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-			barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
-				vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				normalAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-			barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eDepthStencilAttachmentRead, vk::AccessFlagBits::eTransferRead,
-				vk::ImageLayout::eDepthStencilReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				depthAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1)));
-			cmd.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eLateFragmentTests,
-				vk::PipelineStageFlagBits::eTransfer, {}, nullptr, nullptr, barriers);
-		}
+			// --- Transition vers TransferSrcOptimal ---
+			INFO_LOG(RENDERER, "ExportGBuffer: Transitioning to TransferSrc...");
+			{
+				std::vector<vk::ImageMemoryBarrier> barriers;
+				barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
+					vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+					albedoAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
+				barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
+					vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+					normalAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
+				barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eDepthStencilAttachmentRead, vk::AccessFlagBits::eTransferRead,
+					vk::ImageLayout::eDepthStencilReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+					depthAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1)));
+				if (materialAtt)
+					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
+						vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+						materialAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
+				if (ssaoImage)
+					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
+						vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+						ssaoImage, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
+				cmd.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eLateFragmentTests,
+					vk::PipelineStageFlagBits::eTransfer, {}, nullptr, nullptr, barriers);
+			}
 
-		// --- Copies image → staging buffers ---
-		INFO_LOG(RENDERER, "ExportGBuffer: Copying to staging buffers...");
-		{
-			vk::BufferImageCopy region(0, 0, 0, vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1), { 0, 0, 0 }, { width, height, 1 });
-			cmd.copyImageToBuffer(albedoAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageA.buffer.get(), region);
-			cmd.copyImageToBuffer(normalAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageN.buffer.get(), region);
+			// --- Copies image → staging buffers ---
+			INFO_LOG(RENDERER, "ExportGBuffer: Copying to staging buffers...");
+			{
+				vk::BufferImageCopy region(0, 0, 0, vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1), { 0, 0, 0 }, { width, height, 1 });
+				cmd.copyImageToBuffer(albedoAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageA.buffer.get(), region);
+				cmd.copyImageToBuffer(normalAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageN.buffer.get(), region);
+				if (materialAtt && stageMat)
+					cmd.copyImageToBuffer(materialAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageMat->buffer.get(), region);
+				if (ssaoImage && stageSSAO)
+					cmd.copyImageToBuffer(ssaoImage, vk::ImageLayout::eTransferSrcOptimal, stageSSAO->buffer.get(), region);
 
-			vk::BufferImageCopy dRegion(0, 0, 0, vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eDepth, 0, 0, 1), { 0, 0, 0 }, { width, height, 1 });
-			cmd.copyImageToBuffer(depthAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageD.buffer.get(), dRegion);
-		}
+				vk::BufferImageCopy dRegion(0, 0, 0, vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eDepth, 0, 0, 1), { 0, 0, 0 }, { width, height, 1 });
+				cmd.copyImageToBuffer(depthAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageD.buffer.get(), dRegion);
+			}
 
 		// --- Transition retour vers les layouts originaux ---
 		INFO_LOG(RENDERER, "ExportGBuffer: Transitioning back to original layouts...");
@@ -1082,12 +1153,20 @@ void GBufferVulkanRenderer::ExportGBuffer()
 			barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eShaderRead,
 				vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 				normalAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-			barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eDepthStencilAttachmentRead,
-				vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eDepthStencilReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				depthAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1)));
-			cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-				vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eLateFragmentTests, {}, nullptr, nullptr, barriers);
-		}
+				barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eDepthStencilAttachmentRead,
+					vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eDepthStencilReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+					depthAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1)));
+				if (materialAtt)
+					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eShaderRead,
+						vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+						materialAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
+				if (ssaoImage)
+					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eShaderRead,
+						vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+						ssaoImage, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
+				cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+					vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eLateFragmentTests, {}, nullptr, nullptr, barriers);
+			}
 
 		cmd.end();
 
@@ -1100,6 +1179,8 @@ void GBufferVulkanRenderer::ExportGBuffer()
 		std::vector<float> r(width * height), g(width * height), b(width * height);
 		std::vector<float> nx(width * height), ny(width * height), nz(width * height);
 		std::vector<float> depth(width * height);
+		std::vector<float> matF(width * height, 0.f);
+		std::vector<float> aoF(width * height, 1.f);
 
 		u8 *ptrA = (u8 *)stageA.MapMemory();
 		if (ptrA) {
@@ -1139,6 +1220,24 @@ void GBufferVulkanRenderer::ExportGBuffer()
 			stageD.UnmapMemory();
 		}
 
+		if (stageMat) {
+			u8 *ptrM = (u8 *)stageMat->MapMemory();
+			if (ptrM) {
+				for (u32 i = 0; i < width * height; ++i)
+					matF[i] = ptrM[i] / 255.0f;
+				stageMat->UnmapMemory();
+			}
+		}
+
+		if (stageSSAO) {
+			u8 *ptrS = (u8 *)stageSSAO->MapMemory();
+			if (ptrS) {
+				for (u32 i = 0; i < width * height; ++i)
+					aoF[i] = ptrS[i] / 255.0f;
+				stageSSAO->UnmapMemory();
+			}
+		}
+
 		INFO_LOG(RENDERER, "ExportGBuffer: Data conversion done. Initializing EXR...");
 
 		EXRHeader header;
@@ -1146,22 +1245,32 @@ void GBufferVulkanRenderer::ExportGBuffer()
 		EXRImage image;
 		InitEXRImage(&image);
 
-		image.num_channels = 7;
-		const char *channel_names[] = { "Albedo.B", "Albedo.G", "Albedo.R", "Normal.Z", "Normal.Y", "Normal.X", "Depth.Z" };
-		float* image_ptr[7];
+		// Canaux EXR : Albedo RGB, Normal XYZ, Depth, Material, SSAO
+		const int numChannels = 9;
+		const char *channel_names[] = {
+			"Albedo.B", "Albedo.G", "Albedo.R",
+			"Normal.Z", "Normal.Y", "Normal.X",
+			"Depth.Z",
+			"Material.ID",
+			"SSAO.AO"
+		};
+		float* image_ptr[numChannels];
 		image_ptr[0] = b.data(); image_ptr[1] = g.data(); image_ptr[2] = r.data();
 		image_ptr[3] = nz.data(); image_ptr[4] = ny.data(); image_ptr[5] = nx.data();
 		image_ptr[6] = depth.data();
+		image_ptr[7] = matF.data();
+		image_ptr[8] = aoF.data();
 
+		image.num_channels = numChannels;
 		image.images = (unsigned char **)image_ptr;
 		image.width = width;
 		image.height = height;
 
-		header.num_channels = 7;
-		header.channels = (EXRChannelInfo *)malloc(sizeof(EXRChannelInfo) * 7);
-		header.pixel_types = (int *)malloc(sizeof(int) * 7);
-		header.requested_pixel_types = (int *)malloc(sizeof(int) * 7);
-		for (int i = 0; i < 7; i++) {
+		header.num_channels = numChannels;
+		header.channels = (EXRChannelInfo *)malloc(sizeof(EXRChannelInfo) * numChannels);
+		header.pixel_types = (int *)malloc(sizeof(int) * numChannels);
+		header.requested_pixel_types = (int *)malloc(sizeof(int) * numChannels);
+		for (int i = 0; i < numChannels; i++) {
 			strncpy(header.channels[i].name, channel_names[i], 255);
 			header.channels[i].name[255] = '\0';
 			header.pixel_types[i] = TINYEXR_PIXELTYPE_FLOAT;

@@ -31,6 +31,7 @@ layout (push_constant) uniform pushBlock
 
 layout (location = 0) in vec2 inUV;
 layout (location = 0) out vec4 FragColor;
+layout (location = 1) out float AoRaw;
 
 void main()
 {
@@ -72,6 +73,8 @@ void main()
 
 	float ao = 1.0 - (occlusion / float(SSAO_SAMPLES));
 	ao = clamp(ao, 0.0, 1.0);
+
+	AoRaw = ao;
 
 	if (pc.showSSAO == 1) {
 		FragColor = vec4(vec3(ao), 1.0);
