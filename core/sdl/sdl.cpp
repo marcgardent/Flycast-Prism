@@ -396,13 +396,14 @@ void input_sdl_handle()
 										DEBUG_LOG(RENDERER, "SDL: renderer is null");
 									break;
 								}
-								if (event.key.keysym.sym == SDLK_0)
-								{
-									config::ShowDepth.set(false);
-									config::ShowNormals.set(false);
-									config::ShowSSAO.set(false);
-									break;
-								}
+ 							if (event.key.keysym.sym == SDLK_0)
+ 							{
+ 								config::ShowDepth.set(false);
+ 								config::ShowNormals.set(false);
+ 								config::ShowSSAO.set(false);
+ 								config::ShowMaterial.set(false);
+ 								break;
+ 							}
 								if (event.key.keysym.sym == SDLK_1)
 								{
 									config::ShowDepth.set(true);
@@ -424,11 +425,22 @@ void input_sdl_handle()
 									config::ShowSSAO.set(true);
 									break;
 								}
-								if (event.key.keysym.sym == SDLK_4)
-								{
-									config::EnableDoF.set(!config::EnableDoF);
-									break;
-								}
+ 							if (event.key.keysym.sym == SDLK_4)
+ 							{
+ 								config::EnableDoF.set(!config::EnableDoF);
+ 								break;
+ 							}
+ 							if (event.key.keysym.sym == SDLK_5)
+ 							{
+ 								config::ShowMaterial.set(!config::ShowMaterial);
+ 								if (config::ShowMaterial)
+ 								{
+ 									config::ShowDepth.set(false);
+ 									config::ShowNormals.set(false);
+ 									config::ShowSSAO.set(false);
+ 								}
+ 								break;
+ 							}
 							}
 						}
 					}

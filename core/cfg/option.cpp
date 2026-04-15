@@ -112,6 +112,7 @@ Option<bool> DupeFrames("rend.DupeFrames", false);
 Option<bool> ShowDepth("rend.ShowDepth", false);
 Option<bool> ShowDepthOpaqueOnly("rend.ShowDepthOpaqueOnly", true);
 Option<bool> ShowNormals("rend.ShowNormals", false);
+Option<bool> ShowMaterial("rend.ShowMaterial", false);
 Option<bool> EnableSSAO("rend.EnableSSAO", false);
 Option<bool> ShowSSAO("rend.ShowSSAO", false);
 Option<float> SSAORadius("rend.SSAORadius", 0.05f);

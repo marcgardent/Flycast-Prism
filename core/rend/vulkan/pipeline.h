@@ -279,6 +279,7 @@ private:
 		hash |= (u64)config::ShowNormals << 35;
 		hash |= (u64)config::ShowSSAO << 36;
 		hash |= (u64)config::EnableSSAO << 37;
+		hash |= (u64)config::ShowMaterial << 38;
 		return hash;
 	}
 	u32 hash(ModVolMode mode, int cullMode, bool naomi2) const

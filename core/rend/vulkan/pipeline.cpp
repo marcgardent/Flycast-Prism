@@ -398,6 +398,11 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			colorComponentFlags));
+		// Third attachment (Material ID) uses no blending, write R only
+		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
+			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::ColorComponentFlagBits::eR));
 	}
 	else
 	{
@@ -437,6 +442,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	params.showDepth = config::ShowDepth;
 	params.isTranslucent = listType == ListType_Translucent && (config::ShowDepthOpaqueOnly || config::ShowNormals || config::ShowSSAO);
 	params.showNormals = config::ShowNormals;
+	params.showMaterial = config::ShowMaterial;
 	params.gbuffer = config::RendererType == RenderType::Vulkan_GBuffer;
 	params.enableSSAO = config::EnableSSAO;
 	params.showSSAO = config::ShowSSAO;

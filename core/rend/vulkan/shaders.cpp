@@ -63,6 +63,10 @@ static const char DoFFragmentShaderSource[] =
 #include "shaders/vulkan_dof.frag"
 ;
 
+static const char MaterialFragmentShaderSource[] = 
+#include "shaders/vulkan_material.frag"
+;
+
 extern const char N2LightShaderSource[] = 
 #include "shaders/vulkan_n2_light.glsl"
 ;
@@ -117,6 +121,7 @@ vk::UniqueShaderModule ShaderManager::compileShader(const FragmentShaderParams& 
 		.addConstant("ShowDepth", (int)params.showDepth)
 		.addConstant("IS_TRANSLUCENT", (int)params.isTranslucent)
 		.addConstant("ShowNormals", (int)params.showNormals)
+		.addConstant("ShowMaterial", (int)params.showMaterial)
 		.addConstant("GBUFFER", (int)params.gbuffer)
 		.addConstant("EnableSSAO", (int)params.enableSSAO)
 		.addConstant("ShowSSAO", (int)params.showSSAO)
@@ -168,5 +173,12 @@ vk::UniqueShaderModule ShaderManager::compileDoFFragmentShader()
 {
 	VulkanSource src;
 	src.addSource(DoFFragmentShaderSource);
+	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+}
+
+vk::UniqueShaderModule ShaderManager::compileMaterialFragmentShader()
+{
+	VulkanSource src;
+	src.addSource(MaterialFragmentShaderSource);
 	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
 }

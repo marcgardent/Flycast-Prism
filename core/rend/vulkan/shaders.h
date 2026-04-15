@@ -55,6 +55,7 @@ struct FragmentShaderParams
 	bool showDepth;
 	bool isTranslucent;
 	bool showNormals;
+	bool showMaterial;
 	bool gbuffer;
 	bool enableSSAO;
 	bool showSSAO;
@@ -66,8 +67,9 @@ struct FragmentShaderParams
 			| ((u32)offset << 7) | ((u32)fog << 8) | ((u32)gouraud << 10)
 			| ((u32)bumpmap << 11) | ((u32)clamping << 12) | ((u32)trilinear << 13)
 			| ((u32)palette << 14) | ((u32)divPosZ << 16) | ((u32)dithering << 17)
-			| ((u32)showDepth << 18) | ((u32)isTranslucent << 19) | ((u32)showNormals << 20)
-			| ((u32)gbuffer << 21) | ((u32)enableSSAO << 22) | ((u32)showSSAO << 23);
+ 		| ((u32)showDepth << 18) | ((u32)isTranslucent << 19) | ((u32)showNormals << 20)
+			| ((u32)gbuffer << 21) | ((u32)enableSSAO << 22) | ((u32)showSSAO << 23)
+			| ((u32)showMaterial << 24);
 	}
 };
 
@@ -167,6 +169,12 @@ public:
 			dofFragmentShader = compileDoFFragmentShader();
 		return *dofFragmentShader;
 	}
+	vk::ShaderModule GetMaterialFragmentShader()
+	{
+		if (!materialFragmentShader)
+			materialFragmentShader = compileMaterialFragmentShader();
+		return *materialFragmentShader;
+	}
 
 	void term()
 	{
@@ -181,6 +189,7 @@ public:
 		quadNoAlphaFragmentShader.reset();
 		ssaoFragmentShader.reset();
 		dofFragmentShader.reset();
+		materialFragmentShader.reset();
 	}
 
 private:
@@ -202,6 +211,7 @@ private:
 	vk::UniqueShaderModule compileQuadFragmentShader(bool ignoreTexAlpha);
 	vk::UniqueShaderModule compileSSAOFragmentShader();
 	vk::UniqueShaderModule compileDoFFragmentShader();
+	vk::UniqueShaderModule compileMaterialFragmentShader();
 
 	std::map<u32, vk::UniqueShaderModule> vertexShaders;
 	std::map<u32, vk::UniqueShaderModule> fragmentShaders;
@@ -213,4 +223,5 @@ private:
 	vk::UniqueShaderModule quadNoAlphaFragmentShader;
 	vk::UniqueShaderModule ssaoFragmentShader;
 	vk::UniqueShaderModule dofFragmentShader;
+	vk::UniqueShaderModule materialFragmentShader;
 };

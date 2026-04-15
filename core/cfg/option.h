@@ -473,6 +473,7 @@ extern Option<bool> DupeFrames;
 extern Option<bool> ShowDepth;
 extern Option<bool> ShowDepthOpaqueOnly;
 extern Option<bool> ShowNormals;
+extern Option<bool> ShowMaterial;
 extern Option<bool> EnableSSAO;
 extern Option<bool> ShowSSAO;
 extern Option<float> SSAORadius;

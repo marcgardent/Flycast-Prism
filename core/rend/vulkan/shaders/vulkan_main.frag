@@ -113,6 +113,30 @@ void main()
 		// Mode normal ou ShowNormals : normales dans NormalColor (attachment 1)
 		NormalColor = vec4(N * 0.5 + 0.5, 1.0);
 	}
+	// Material ID encode sur 8 bits (attachment 2)
+	// Bits 7-5 : list_type, Bit 4 : texture, Bit 3 : gouraud, Bit 2 : bumpmap, Bit 1 : fog, Bit 0 : palette
+	uint matID = 0u;
+	#if cp_AlphaTest == 1
+		matID |= (4u << 5);  // ListType_Punch_Through = 4
+	#elif IS_TRANSLUCENT == 1
+		matID |= (2u << 5);  // ListType_Translucent = 2
+	#endif
+	#if pp_Texture == 1
+		matID |= (1u << 4);
+	#endif
+	#if pp_Gouraud == 1
+		matID |= (1u << 3);
+	#endif
+	#if pp_BumpMap == 1
+		matID |= (1u << 2);
+	#endif
+	#if pp_FogCtrl == 0 || pp_FogCtrl == 1
+		matID |= (1u << 1);
+	#endif
+	#if pp_Palette != 0
+		matID |= 1u;
+	#endif
+	MaterialColor = matID;
 #else
 	#if DITHERING == 1
 	{
