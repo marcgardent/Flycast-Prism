@@ -138,8 +138,8 @@ void main()
 	#endif
 	MaterialColor = matID;
 
-	// Motion buffer (attachment 3) : velocite ecran, initialisee a zero (base)
-	MotionColor = vec2(0.0);
+	// Motion buffer (attachment 3) : velocite per-poly encodee [0,1] (gris=immobile)
+	MotionColor = pushConstants.velocity * 0.5 + 0.5;
 #else
 	#if DITHERING == 1
 	{

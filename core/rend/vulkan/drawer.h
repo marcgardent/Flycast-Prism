@@ -30,6 +30,7 @@
 
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include <glm/gtc/type_ptr.hpp>
 
 class BaseDrawer
@@ -287,6 +288,8 @@ private:
 	PipelineManager *pipelineManager = nullptr;
 	bool perStripSorting = false;
 	bool dithering = false;
+	std::unordered_map<uint32_t, glm::vec2> prevCentroids; // Motion buffer: TCW -> centroid XY (frame N-1)
+	std::unordered_map<uint32_t, glm::vec2> currCentroids; // Motion buffer: TCW -> centroid XY (frame N, during draw)
 };
 
 class ScreenDrawer : public Drawer

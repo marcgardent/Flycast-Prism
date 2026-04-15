@@ -25,6 +25,7 @@ layout (push_constant) uniform pushBlock
 	vec4 clipTest;
 	float trilinearAlpha;
 	float palette_index;
+	vec2 velocity;
 } pushConstants;
 
 #if pp_Texture == 1

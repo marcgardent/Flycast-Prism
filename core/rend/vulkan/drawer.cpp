@@ -198,15 +198,28 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 			palette_index = float((poly.tcw.PalSelect >> 4) << 8) / 1023.f;
 	}
 
-	if (tileClip == TileClipping::Inside || trilinearAlpha != 1.f || gpuPalette != 0)
+	// Velocity for motion buffer: delta centroid N-1 -> N (TCW hash lookup)
+	glm::vec2 velocity(0.f);
+	if (config::ShowMotion)
 	{
-		const std::array<float, 6> pushConstants = {
+		uint32_t key = poly.tcw.full;
+		auto itPrev = prevCentroids.find(key);
+		auto itCurr = currCentroids.find(key);
+		if (itPrev != prevCentroids.end() && itCurr != currCentroids.end())
+			velocity = itCurr->second - itPrev->second;
+	}
+
+	if (tileClip == TileClipping::Inside || trilinearAlpha != 1.f || gpuPalette != 0 || config::ShowMotion)
+	{
+		const std::array<float, 8> pushConstants = {
 				(float)scissorRect.offset.x,
 				(float)scissorRect.offset.y,
 				(float)scissorRect.offset.x + (float)scissorRect.extent.width,
 				(float)scissorRect.offset.y + (float)scissorRect.extent.height,
 				trilinearAlpha,
-				palette_index
+				palette_index,
+				velocity.x,
+				velocity.y
 		};
 		cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
 	}
@@ -417,6 +430,35 @@ bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 
 	UploadMainBuffer(vtxUniforms, fragUniforms);
 
+	// Motion Buffer Phase 2 : calcul des centroïdes par TCW (texture hash)
+	currCentroids.clear();
+	if (config::ShowMotion)
+	{
+		const glm::mat4& ndcMat = matrices.GetNormalMatrix();
+		for (const PolyParam& pp : rendContext->global_param_op)
+		{
+			if (pp.count < 3) continue;
+			uint32_t key = pp.tcw.full;
+			glm::vec2 sum(0.f);
+			for (u32 i = pp.first; i < pp.first + pp.count; i++)
+			{
+				if (i >= rendContext->idx.size()) break;
+				u32 vi = rendContext->idx[i];
+				if (vi >= rendContext->verts.size()) continue;
+				const Vertex& v = rendContext->verts[vi];
+				glm::vec4 p = ndcMat * glm::vec4(v.x, v.y, v.z, 1.f);
+				if (std::abs(p.w) > 1e-6f)
+					sum += glm::vec2(p.x / p.w, p.y / p.w);
+			}
+			sum /= (float)pp.count;
+			auto it = currCentroids.find(key);
+			if (it == currCentroids.end())
+				currCentroids[key] = sum;
+			else
+				it->second = (it->second + sum) * 0.5f;
+		}
+	}
+
 	// Update per-frame descriptor set and bind it
 	descriptorSets.updateUniforms(curMainBuffer, (u32)offsets.vertexUniformOffset, (u32)offsets.fragmentUniformOffset,
 			fogTexture->GetImageView(), paletteTexture->GetImageView());
@@ -426,8 +468,8 @@ bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 	cmdBuffer.bindVertexBuffers(0, curMainBuffer, {0});
 	cmdBuffer.bindIndexBuffer(curMainBuffer, offsets.indexOffset, vk::IndexType::eUint32);
 
-	// Make sure to push constants even if not used
-	const std::array<float, 6> pushConstants = { 0, 0, 0, 0, 0, 0 };
+	// Make sure to push constants even if not used (8 floats: clipTest, trilinear, palette, velocity)
+	const std::array<float, 8> pushConstants = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
 
 	RenderPass previous_pass{};
@@ -457,6 +499,9 @@ bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 		previous_pass = current_pass;
     }
     curMainBuffer = nullptr;
+
+	// Motion Buffer: save current centroids as previous for next frame
+	prevCentroids = currCentroids;
 
 	return !rendContext->isRTT;
 }

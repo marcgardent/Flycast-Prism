@@ -1,7 +1,7 @@
 R"(
 layout (std140, set = 0, binding = 0) uniform VertexShaderUniforms
 {
-	mat4 ndcMat;
+        mat4 ndcMat;
 } uniformBuffer;
 
 layout (location = 0) in vec4         in_pos;
@@ -23,11 +23,11 @@ void main()
 	vpos /= vpos.z;
 	vpos.z = vpos.w;
 #endif
-	vtx_base = in_base;
-	vtx_offs = in_offs;
-	vtx_uv = vec3(in_uv, vpos.z);
-	vtx_pos = vpos.xyz;
-	vtx_normal = in_normal;
+        vtx_base = in_base;
+        vtx_offs = in_offs;
+        vtx_uv = vec3(in_uv, vpos.z);
+        vtx_pos = vpos.xyz;
+        vtx_normal = in_normal;
 
 #if pp_Gouraud == 1 && DIV_POS_Z != 1
 	vtx_base *= vpos.z;
