@@ -115,12 +115,23 @@ void PipelineManager::CreateModVolPipeline(ModVolMode mode, int cullMode, bool n
 		colorComponentFlags                 // colorWriteMask
 	);
 
+	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+	if (config::RendererType == RenderType::Vulkan_GBuffer)
+	{
+		for (int i = 0; i < 5; ++i)
+			colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
+	}
+	else
+	{
+		colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
+	}
+
 	vk::PipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo
 	(
 		vk::PipelineColorBlendStateCreateFlags(),   // flags
 		false,                                      // logicOpEnable
 		vk::LogicOp::eNoOp,                         // logicOp
-		pipelineColorBlendAttachmentState,         // attachments
+		colorBlendAttachments,                      // attachments
 		{ { 1.0f, 1.0f, 1.0f, 1.0f } }              // blendConstants
 	);
 
@@ -229,8 +240,8 @@ void PipelineManager::CreateDepthPassPipeline(int cullMode, bool naomi2)
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
 	if (config::RendererType == RenderType::Vulkan_GBuffer)
 	{
-		colorBlendAttachments.push_back(modVolColorBlendAttachmentState);
-		colorBlendAttachments.push_back(modVolColorBlendAttachmentState);
+		for (int i = 0; i < 5; ++i)
+			colorBlendAttachments.push_back(modVolColorBlendAttachmentState);
 	}
 	else
 	{
@@ -391,23 +402,30 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
 	if (config::RendererType == RenderType::Vulkan_GBuffer)
 	{
+		bool isHUD = (pp.isp.DepthMode >= 6);
 		// First attachment (Albedo) uses standard blending
+		pipelineColorBlendAttachmentState.colorWriteMask = isHUD ? (vk::ColorComponentFlags)0 : colorComponentFlags;
 		colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
 		// Second attachment (Normals) uses no blending, just write
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
 			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-			colorComponentFlags));
+			isHUD ? (vk::ColorComponentFlags)0 : colorComponentFlags));
 		// Third attachment (Material ID) uses no blending, write R only
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
 			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-			vk::ColorComponentFlagBits::eR));
+			isHUD ? (vk::ColorComponentFlags)0 : vk::ColorComponentFlagBits::eR));
 		// Fourth attachment (Motion/Velocity) RG only, no blending
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
 			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-			vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG));
+			isHUD ? (vk::ColorComponentFlags)0 : (vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG)));
+		// Fifth attachment (HUD Color) RGBA, no blending
+		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
+			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			colorComponentFlags));
 	}
 	else
 	{

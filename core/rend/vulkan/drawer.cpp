@@ -209,9 +209,16 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 			velocity = itCurr->second - itPrev->second;
 	}
 
-	if (tileClip == TileClipping::Inside || trilinearAlpha != 1.f || gpuPalette != 0 || config::ShowMotion)
+	// Critere HUD : DepthMode Always(7) ou GreaterOrEqual(6) = polygones rendus par-dessus tout
+	// ZWriteDis peut etre 0 ou 1 (le HUD peut ecrire dans le Z-buffer)
+	bool isHUDPoly = (poly.isp.DepthMode >= 6);
+	float isHUD = isHUDPoly ? 1.0f : 0.0f;
+	DEBUG_LOG(RENDERER, "DrawPoly: listType=%u DepthMode=%u ZWriteDis=%u isHUDPoly=%d",
+		listType, poly.isp.DepthMode, poly.isp.ZWriteDis, (int)isHUDPoly);
+	if (tileClip == TileClipping::Inside || trilinearAlpha != 1.f || gpuPalette != 0 || config::ShowMotion || isHUD != currentIsHUD)
 	{
-		const std::array<float, 8> pushConstants = {
+		currentIsHUD = isHUD;
+		const std::array<float, 9> pushConstants = {
 				(float)scissorRect.offset.x,
 				(float)scissorRect.offset.y,
 				(float)scissorRect.offset.x + (float)scissorRect.extent.width,
@@ -219,7 +226,8 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 				trilinearAlpha,
 				palette_index,
 				velocity.x,
-				velocity.y
+				velocity.y,
+ 		isHUD
 		};
 		cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
 	}
@@ -468,9 +476,10 @@ bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 	cmdBuffer.bindVertexBuffers(0, curMainBuffer, {0});
 	cmdBuffer.bindIndexBuffer(curMainBuffer, offsets.indexOffset, vk::IndexType::eUint32);
 
-	// Make sure to push constants even if not used (8 floats: clipTest, trilinear, palette, velocity)
-	const std::array<float, 8> pushConstants = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	// Make sure to push constants even if not used (9 floats: clipTest, trilinear, palette, velocity, isHUD)
+	const std::array<float, 9> pushConstants = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
+	currentIsHUD = 0.0f;
 
 	RenderPass previous_pass{};
     for (int render_pass = 0; render_pass < (int)rendContext->render_passes.size(); render_pass++)
@@ -863,7 +872,13 @@ vk::CommandBuffer ScreenDrawer::BeginRenderPass()
 		else
 		{
 			for (size_t i = 0; i < colorFormats.size(); i++)
-				clear_colors.push_back(vk::ClearColorValue(std::array<float, 4> { 0.f, 0.f, 0.f, 1.f }));
+			{
+				// L'attachment HUD (index 4) doit etre transparent (alpha=0) pour que le blend composite
+				// ne couvre pas l'albedo sur les pixels sans HUD
+				bool isHUDAttachment = (i == 4);
+				float alpha = isHUDAttachment ? 0.f : 1.f;
+				clear_colors.push_back(vk::ClearColorValue(std::array<float, 4> { 0.f, 0.f, 0.f, alpha }));
+			}
 		}
 		clear_colors.push_back(vk::ClearDepthStencilValue { 0.f, 0 });
 

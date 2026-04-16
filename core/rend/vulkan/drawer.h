@@ -290,6 +290,7 @@ private:
 	bool dithering = false;
 	std::unordered_map<uint32_t, glm::vec2> prevCentroids; // Motion buffer: TCW -> centroid XY (frame N-1)
 	std::unordered_map<uint32_t, glm::vec2> currCentroids; // Motion buffer: TCW -> centroid XY (frame N, during draw)
+	float currentIsHUD = 0.0f;
 };
 
 class ScreenDrawer : public Drawer
@@ -324,6 +325,7 @@ public:
 		frameRendered = true;
 		return currentCommandBuffer;
 	}
+	vk::CommandBuffer GetCurrentCommandBuffer() const { return currentCommandBuffer; }
 	int GetCurrentImageIndex() const { return GetCurrentImage(); }
 	u32 GetSwapChainCount() const { return 2; }
 	FramebufferAttachment *GetDepthAttachment() const { return depthAttachment.get(); }

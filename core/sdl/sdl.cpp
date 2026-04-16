@@ -396,13 +396,14 @@ void input_sdl_handle()
 										DEBUG_LOG(RENDERER, "SDL: renderer is null");
 									break;
 								}
-								if (event.key.keysym.sym == SDLK_0)
+							if (event.key.keysym.sym == SDLK_0)
 								{
 									config::ShowDepth.set(false);
 									config::ShowNormals.set(false);
 									config::ShowSSAO.set(false);
 									config::ShowMaterial.set(false);
 									config::ShowMotion.set(false);
+									config::ShowHUD.set(true);
 									break;
 								}
 								if (event.key.keysym.sym == SDLK_1)
@@ -411,6 +412,7 @@ void input_sdl_handle()
 									config::ShowNormals.set(false);
 									config::ShowSSAO.set(false);
 									config::ShowMotion.set(false);
+									config::ShowHUD.set(false);
 									break;
 								}
 								if (event.key.keysym.sym == SDLK_2)
@@ -419,45 +421,57 @@ void input_sdl_handle()
 									config::ShowNormals.set(true);
 									config::ShowSSAO.set(false);
 									config::ShowMotion.set(false);
+									config::ShowHUD.set(false);
 									break;
 								}
- 							if (event.key.keysym.sym == SDLK_3)
+								if (event.key.keysym.sym == SDLK_3)
 								{
 									config::ShowDepth.set(false);
 									config::ShowNormals.set(false);
 									config::ShowSSAO.set(true);
 									config::ShowMotion.set(false);
+									config::ShowHUD.set(false);
 									break;
 								}
-							if (event.key.keysym.sym == SDLK_4)
-							{
-								config::ShowMotion.set(!config::ShowMotion);
-								if (config::ShowMotion)
+								if (event.key.keysym.sym == SDLK_4)
 								{
-									config::ShowDepth.set(false);
-									config::ShowNormals.set(false);
-									config::ShowSSAO.set(false);
-									config::ShowMaterial.set(false);
+									config::ShowMotion.set(!config::ShowMotion);
+									if (config::ShowMotion)
+									{
+										config::ShowDepth.set(false);
+										config::ShowNormals.set(false);
+										config::ShowSSAO.set(false);
+										config::ShowMaterial.set(false);
+										config::ShowHUD.set(false);
+									}
+									break;
 								}
-								break;
-							}
-							if (event.key.keysym.sym == SDLK_5)
-							{
-								config::ShowMaterial.set(!config::ShowMaterial);
-								if (config::ShowMaterial)
+								if (event.key.keysym.sym == SDLK_5)
 								{
-									config::ShowDepth.set(false);
-									config::ShowNormals.set(false);
-									config::ShowSSAO.set(false);
-									config::ShowMotion.set(false);
+									config::ShowMaterial.set(!config::ShowMaterial);
+									if (config::ShowMaterial)
+									{
+										config::ShowDepth.set(false);
+										config::ShowNormals.set(false);
+										config::ShowSSAO.set(false);
+										config::ShowMotion.set(false);
+										config::ShowHUD.set(false);
+									}
+									break;
 								}
-								break;
-							}
-							if (event.key.keysym.sym == SDLK_6)
-							{
-								config::EnableDoF.set(!config::EnableDoF);
-								break;
-							}
+								if (event.key.keysym.sym == SDLK_7)
+								{
+									config::ShowHUD.set(!config::ShowHUD);
+									if (config::ShowHUD)
+									{
+										config::ShowDepth.set(false);
+										config::ShowNormals.set(false);
+										config::ShowSSAO.set(false);
+										config::ShowMaterial.set(false);
+										config::ShowMotion.set(false);
+									}
+									break;
+								}
 							}
 						}
 					}

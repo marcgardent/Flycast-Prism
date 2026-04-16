@@ -67,6 +67,10 @@ static const char MaterialFragmentShaderSource[] =
 #include "shaders/vulkan_material.frag"
 ;
 
+static const char HUDCompositeFragmentShaderSource[] = 
+#include "shaders/vulkan_hud_composite.frag"
+;
+
 extern const char N2LightShaderSource[] = 
 #include "shaders/vulkan_n2_light.glsl"
 ;
@@ -180,5 +184,12 @@ vk::UniqueShaderModule ShaderManager::compileMaterialFragmentShader()
 {
 	VulkanSource src;
 	src.addSource(MaterialFragmentShaderSource);
+	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+}
+
+vk::UniqueShaderModule ShaderManager::compileHUDFragmentShader()
+{
+	VulkanSource src;
+	src.addSource(HUDCompositeFragmentShaderSource);
 	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
 }
