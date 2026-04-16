@@ -104,12 +104,10 @@ void main()
 	vec3 geoNormal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
 	vec3 N = (length(vtx_normal) > 0.001) ? normalize(vtx_normal) : geoNormal;
 
-	// Toujours écrire l'albedo dans FragColor (attachment 0) pour que le SSAO fonctionne correctement
 	FragColor = color;
-	// Mode normal ou ShowNormals : normales dans NormalColor (attachment 1)
 	NormalColor = vec4(N * 0.5 + 0.5, 1.0);
 
-	// Material ID encode sur 8 bits (attachment 2)
+	// Material ID encode sur 8 bits
 	// Bits 7-5 : list_type, Bit 4 : texture, Bit 3 : gouraud, Bit 2 : bumpmap, Bit 1 : fog, Bit 0 : palette
 	uint matID = 0u;
 	#if cp_AlphaTest == 1
@@ -134,12 +132,10 @@ void main()
 	#endif
 	MaterialColor = matID;
 
-	// Motion buffer (attachment 3) : velocite per-poly encodee [0,1] (gris=immobile)
+	// Motion buffer : velocite per-poly encodee [0,1]
 	MotionColor = pushConstants.velocity * 0.5 + 0.5;
 
-	// HUD Separation (attachment 4)
-	// isHUD > 0.5 : polygone HUD detecte, isole dans HUDColor, transparent dans albedo
-	// La passe HUDCompositePass recomposite HUDColor sur albedo si ShowHUD=true
+	// HUD Separation
 	if (pushConstants.isHUD > 0.5) {
 		HUDColor = color;
 		FragColor = vec4(0.0, 0.0, 0.0, 0.0);

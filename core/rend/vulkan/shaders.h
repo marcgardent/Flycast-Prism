@@ -181,6 +181,12 @@ public:
 			hudFragmentShader = compileHUDFragmentShader();
 		return *hudFragmentShader;
 	}
+	vk::ShaderModule GetGBufferCompositeFragmentShader()
+	{
+		if (!gbufferCompositeFragmentShader)
+			gbufferCompositeFragmentShader = compileGBufferCompositeFragmentShader();
+		return *gbufferCompositeFragmentShader;
+	}
 	void term()
 	{
 		vertexShaders.clear();
@@ -196,6 +202,7 @@ public:
 		dofFragmentShader.reset();
 		materialFragmentShader.reset();
 		hudFragmentShader.reset();
+		gbufferCompositeFragmentShader.reset();
 	}
 
 private:
@@ -219,6 +226,7 @@ private:
 	vk::UniqueShaderModule compileDoFFragmentShader();
 	vk::UniqueShaderModule compileMaterialFragmentShader();
 	vk::UniqueShaderModule compileHUDFragmentShader();
+	vk::UniqueShaderModule compileGBufferCompositeFragmentShader();
 
 	std::map<u32, vk::UniqueShaderModule> vertexShaders;
 	std::map<u32, vk::UniqueShaderModule> fragmentShaders;
@@ -232,4 +240,5 @@ private:
 	vk::UniqueShaderModule dofFragmentShader;
 	vk::UniqueShaderModule materialFragmentShader;
 	vk::UniqueShaderModule hudFragmentShader;
+	vk::UniqueShaderModule gbufferCompositeFragmentShader;
 };

@@ -43,7 +43,7 @@ The exported `.exr` file is a multi-channel image containing 9 channels. All cha
 *   **Content**: The depth value from the depth buffer.
 *   **Normalization**: For `D24S8`, the 24-bit value is normalized by `16777215.0`.
 
-### 4. Material ID (`Material.ID`)
+### 4. Material ID (`Material.ID`)EXR
 *   **Format**: Originally `eR8Uint`.
 *   **Normalization**: Stored as `matID / 255.0` in the EXR.
 *   **Reconstruction**: To get the original 8-bit ID, use: `uint8_t id = round(Material.ID * 255.0)`.

@@ -2,6 +2,7 @@
 #include "../drawer.h"
 #include "../quad.h"
 #include "../texture.h"
+#include "gbuffer_constants.h"
 
 #define TINYEXR_IMPLEMENTATION
 #define TINYEXR_USE_MINIZ 0
@@ -985,6 +986,176 @@ private:
 	std::vector<vk::ImageView> hudViews;
 };
 
+class GBufferCompositePass
+{
+public:
+	void Init(ShaderManager *shaderManager, vk::Extent2D viewport,
+		const std::vector<vk::ImageView> &albedoViews,
+		const std::vector<vk::ImageView> &normalViews,
+		const std::vector<vk::ImageView> &depthViews,
+		const std::vector<vk::ImageView> &materialViews,
+		const std::vector<vk::ImageView> &motionViews,
+		const std::vector<vk::ImageView> &ssaoViews,
+		const std::vector<vk::ImageView> &hudViews)
+	{
+		this->shaderManager = shaderManager;
+		this->viewport = viewport;
+		this->albedoViews = albedoViews;
+		this->normalViews = normalViews;
+		this->depthViews = depthViews;
+		this->materialViews = materialViews;
+		this->motionViews = motionViews;
+		this->ssaoViews = ssaoViews;
+		this->hudViews = hudViews;
+
+		VulkanContext *ctx = VulkanContext::Instance();
+
+		std::array<vk::DescriptorSetLayoutBinding, 7> bindings = {
+			vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(4, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(5, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(6, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+		};
+		descSetLayout = ctx->GetDevice().createDescriptorSetLayoutUnique(
+			vk::DescriptorSetLayoutCreateInfo(vk::DescriptorSetLayoutCreateFlags(), bindings));
+
+		vk::PushConstantRange pushConstant(vk::ShaderStageFlagBits::eFragment, 0, sizeof(int));
+		pipelineLayout = ctx->GetDevice().createPipelineLayoutUnique(
+			vk::PipelineLayoutCreateInfo(vk::PipelineLayoutCreateFlags(), *descSetLayout, pushConstant));
+
+		sampler = ctx->GetDevice().createSamplerUnique(
+			vk::SamplerCreateInfo(vk::SamplerCreateFlags(),
+				vk::Filter::eNearest, vk::Filter::eNearest,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				0.0f, false, 1.0f, false, vk::CompareOp::eNever,
+				0.0f, vk::LodClampNone, vk::BorderColor::eFloatOpaqueBlack));
+
+		quadBuffer = std::make_unique<QuadBuffer>();
+
+		vk::AttachmentDescription colorAttachment(vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
+			vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+			vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::AttachmentReference colorReference(0, vk::ImageLayout::eColorAttachmentOptimal);
+
+		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
+			nullptr, colorReference, nullptr, nullptr);
+
+		vk::SubpassDependency dependency(VK_SUBPASS_EXTERNAL, 0,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::AccessFlagBits::eColorAttachmentWrite, vk::AccessFlagBits::eColorAttachmentWrite);
+
+		renderPass = ctx->GetDevice().createRenderPassUnique(vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(),
+			colorAttachment, subpass, dependency));
+
+		framebuffers.clear();
+		for (auto &view : albedoViews) {
+			framebuffers.push_back(ctx->GetDevice().createFramebufferUnique(
+				vk::FramebufferCreateInfo(vk::FramebufferCreateFlags(), *renderPass, view, viewport.width, viewport.height, 1)));
+		}
+
+		CreatePipeline();
+	}
+
+	void Term()
+	{
+		pipeline.reset();
+		pipelineLayout.reset();
+		descSetLayout.reset();
+		sampler.reset();
+		quadBuffer.reset();
+		framebuffers.clear();
+		renderPass.reset();
+		descriptorSets.clear();
+	}
+
+	bool IsInitialized() const { return (bool)pipeline; }
+
+	void Draw(vk::CommandBuffer cmdBuffer, int imageIndex, int viewMode)
+	{
+		if (imageIndex < 0 || imageIndex >= (int)framebuffers.size()) return;
+
+		VulkanContext *ctx = VulkanContext::Instance();
+		if ((int)descriptorSets.size() <= imageIndex) descriptorSets.resize(imageIndex + 1);
+
+		auto &descSet = descriptorSets[imageIndex];
+		if (!descSet) {
+			descSet = std::move(ctx->GetDevice().allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(ctx->GetDescriptorPool(), *descSetLayout)).front());
+		}
+
+		vk::DescriptorImageInfo albedoInfo(*sampler, albedoViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::DescriptorImageInfo normalInfo(*sampler, normalViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::DescriptorImageInfo depthInfo(*sampler, depthViews[imageIndex], vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+		vk::DescriptorImageInfo materialInfo(*sampler, materialViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::DescriptorImageInfo motionInfo(*sampler, motionViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::DescriptorImageInfo ssaoInfo(*sampler, ssaoViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::DescriptorImageInfo hudInfo(*sampler, hudViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		std::array<vk::WriteDescriptorSet, 7> writes = {
+			vk::WriteDescriptorSet(*descSet, 0, 0, vk::DescriptorType::eCombinedImageSampler, albedoInfo),
+			vk::WriteDescriptorSet(*descSet, 1, 0, vk::DescriptorType::eCombinedImageSampler, normalInfo),
+			vk::WriteDescriptorSet(*descSet, 2, 0, vk::DescriptorType::eCombinedImageSampler, depthInfo),
+			vk::WriteDescriptorSet(*descSet, 3, 0, vk::DescriptorType::eCombinedImageSampler, materialInfo),
+			vk::WriteDescriptorSet(*descSet, 4, 0, vk::DescriptorType::eCombinedImageSampler, motionInfo),
+			vk::WriteDescriptorSet(*descSet, 5, 0, vk::DescriptorType::eCombinedImageSampler, ssaoInfo),
+			vk::WriteDescriptorSet(*descSet, 6, 0, vk::DescriptorType::eCombinedImageSampler, hudInfo),
+		};
+		ctx->GetDevice().updateDescriptorSets(writes, nullptr);
+
+		cmdBuffer.beginRenderPass(vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex], vk::Rect2D({0,0}, viewport)), vk::SubpassContents::eInline);
+		cmdBuffer.setViewport(0, vk::Viewport(0.f, 0.f, (float)viewport.width, (float)viewport.height, 0.f, 1.f));
+		cmdBuffer.setScissor(0, vk::Rect2D({0,0}, viewport));
+		cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
+		cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descSet, nullptr);
+		cmdBuffer.pushConstants(*pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(int), &viewMode);
+		quadBuffer->Update(nullptr);
+		quadBuffer->Bind(cmdBuffer);
+		quadBuffer->Draw(cmdBuffer);
+		cmdBuffer.endRenderPass();
+	}
+
+private:
+	void CreatePipeline()
+	{
+		VulkanContext *ctx = VulkanContext::Instance();
+		vk::PipelineVertexInputStateCreateInfo vertexInput = GetQuadInputStateCreateInfo(true);
+		vk::PipelineInputAssemblyStateCreateInfo inputAssembly(vk::PipelineInputAssemblyStateCreateFlags(), vk::PrimitiveTopology::eTriangleStrip);
+		vk::PipelineViewportStateCreateInfo viewportState(vk::PipelineViewportStateCreateFlags(), 1, nullptr, 1, nullptr);
+		vk::PipelineRasterizationStateCreateInfo rasterization;
+		rasterization.lineWidth = 1.0f;
+		vk::PipelineMultisampleStateCreateInfo multisample;
+		vk::PipelineDepthStencilStateCreateInfo depthStencil;
+		vk::PipelineColorBlendAttachmentState blendAttachment(false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+		vk::PipelineColorBlendStateCreateInfo colorBlend(vk::PipelineColorBlendStateCreateFlags(), false, vk::LogicOp::eNoOp, blendAttachment, { { 1.f, 1.f, 1.f, 1.f } });
+		std::array<vk::DynamicState, 2> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+		vk::PipelineDynamicStateCreateInfo dynamicState(vk::PipelineDynamicStateCreateFlags(), dynamicStates);
+		std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {
+			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex, shaderManager->GetQuadVertexShader(false), "main"),
+			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eFragment, shaderManager->GetGBufferCompositeFragmentShader(), "main"),
+		};
+		pipeline = ctx->GetDevice().createGraphicsPipelineUnique(ctx->GetPipelineCache(), vk::GraphicsPipelineCreateInfo(vk::PipelineCreateFlags(), stages, &vertexInput, &inputAssembly, nullptr, &viewportState, &rasterization, &multisample, &depthStencil, &colorBlend, &dynamicState, *pipelineLayout, *renderPass, 0)).value;
+	}
+
+	ShaderManager *shaderManager = nullptr;
+	vk::Extent2D viewport;
+	vk::UniqueRenderPass renderPass;
+	std::vector<vk::UniqueFramebuffer> framebuffers;
+	vk::UniquePipeline pipeline;
+	vk::UniquePipelineLayout pipelineLayout;
+	vk::UniqueDescriptorSetLayout descSetLayout;
+	vk::UniqueSampler sampler;
+	std::unique_ptr<QuadBuffer> quadBuffer;
+	std::vector<vk::UniqueDescriptorSet> descriptorSets;
+	std::vector<vk::ImageView> albedoViews, normalViews, depthViews, materialViews, motionViews, ssaoViews, hudViews;
+};
+
 class GBufferVulkanRenderer final : public BaseVulkanRenderer
 {
 public:
@@ -994,13 +1165,13 @@ public:
 	{
 		NOTICE_LOG(RENDERER, "GBufferVulkanRenderer::Init");
 		try {
-			std::vector<vk::Format> formats = {
-				vk::Format::eR8G8B8A8Unorm,         // Albedo (0)
-				vk::Format::eR16G16B16A16Sfloat,    // Normals (1)
-				vk::Format::eR8Uint,                // Material ID (2)
-				vk::Format::eR16G16Sfloat,          // Motion (velocity) (3)
-				vk::Format::eR8G8B8A8Unorm          // HUD (4)
-			};
+			std::vector<vk::Format> formats;
+			formats.resize(5);
+			formats[GBUFFER_ALBEDO_INDEX]   = vk::Format::eR8G8B8A8Unorm;
+			formats[GBUFFER_NORMAL_INDEX]   = vk::Format::eR16G16B16A16Sfloat;
+			formats[GBUFFER_MATERIAL_INDEX] = vk::Format::eR8Uint;
+			formats[GBUFFER_MOTION_INDEX]   = vk::Format::eR16G16Sfloat;
+			formats[GBUFFER_HUD_INDEX]      = vk::Format::eR8G8B8A8Unorm;
 			screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
 			screenDrawer.SetCommandPool(&texCommandPool);
 			BaseInit(screenDrawer.GetRenderPass());
@@ -1009,6 +1180,7 @@ public:
  		initDoF();
  		initMaterial();
  		initHUDComposite();
+ 		initComposite();
  		hudBlitPipeline.Init(&shaderManager, screenDrawer.GetRenderPass(), 0);
  		hudBlitDrawer.Init(&hudBlitPipeline);
 
@@ -1027,6 +1199,7 @@ public:
 		dofPass.Term();
 		materialPass.Term();
 		hudCompositePass.Term();
+		compositePass.Term();
 		hudBlitPipeline.Term();
 		texCommandPool.Term();
 		screenDrawer.Term();
@@ -1059,75 +1232,43 @@ public:
 
 		int imgIdx = screenDrawer.GetCurrentImageIndex();
 		FramebufferAttachment *depthAtt = screenDrawer.GetDepthAttachment();
-		FramebufferAttachment *normalAtt = screenDrawer.GetColorAttachment(imgIdx, 1);
-		FramebufferAttachment *albedoAtt = screenDrawer.GetColorAttachment(imgIdx, 0);
+		FramebufferAttachment *normalAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_NORMAL_INDEX);
+		FramebufferAttachment *albedoAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_ALBEDO_INDEX);
+		FramebufferAttachment *materialAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_MATERIAL_INDEX);
 
-		// Initialisation lazy du SSAO si necessaire
-		if ((config::EnableSSAO || config::ShowSSAO) && !ssaoPass.IsInitialized())
-			initSSAO();
-
-		// Initialisation lazy du DoF si necessaire
-		if (config::EnableDoF && !dofPass.IsInitialized())
-			initDoF();
-		else if (!config::EnableDoF && dofPass.IsInitialized())
-			dofPass.Term();
-
-		// Initialisation lazy du Material si necessaire
-		if (config::ShowMaterial && !materialPass.IsInitialized())
-			initMaterial();
+		// Initialisation lazy
+		if ((config::EnableSSAO || config::ShowSSAO) && !ssaoPass.IsInitialized()) initSSAO();
+		if (config::EnableDoF && !dofPass.IsInitialized()) initDoF();
+		else if (!config::EnableDoF && dofPass.IsInitialized()) dofPass.Term();
+		if (config::ShowMaterial && !materialPass.IsInitialized()) initMaterial();
+		if (!compositePass.IsInitialized()) initComposite();
 
 		bool doSSAO = (config::EnableSSAO || config::ShowSSAO) && ssaoPass.IsInitialized() && depthAtt && normalAtt;
 		bool doDoF  = config::EnableDoF && dofPass.IsInitialized() && depthAtt && albedoAtt;
-		FramebufferAttachment *materialAtt = screenDrawer.GetColorAttachment(imgIdx, 2);
 		bool doMaterial = config::ShowMaterial && materialPass.IsInitialized() && materialAtt;
 		bool doHUD = hudCompositePass.IsInitialized();
-		if (doSSAO || doDoF || doMaterial || doHUD)
-		{
-			// Fermer le render pass G-Buffer sans soumettre le command buffer
-			// Les attachments passent en ShaderReadOnlyOptimal via la transition implicite du render pass
-			vk::CommandBuffer cmdBuf = screenDrawer.EndRenderPassOnly();
-			if (cmdBuf)
-			{
-				// SSAO : enregistre dans le meme command buffer, apres le render pass G-Buffer
-				if (doSSAO)
-				{
-					DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present ssaoPass.Draw(imgIdx=%d)", imgIdx);
-					ssaoPass.Draw(cmdBuf, imgIdx,
-						depthAtt->GetImageView(),
-						normalAtt->GetImageView(),
-						config::ShowSSAO);
-				}
 
-				// DoF : enregistre dans le meme command buffer, apres le SSAO
-				if (doDoF)
-				{
-					DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present dofPass.Draw(imgIdx=%d)", imgIdx);
-					dofPass.Draw(cmdBuf, imgIdx,
-						albedoAtt->GetImageView(),
-						depthAtt->GetImageView());
-				}
-				// Material : enregistre dans le meme command buffer, apres le render pass G-Buffer
-				if (doMaterial)
-				{
-					DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present materialPass.Draw(imgIdx=%d)", imgIdx);
-					materialPass.Draw(cmdBuf, imgIdx);
-				}
- 			if (doHUD)
-				{
-					DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present hudCompositePass.Draw(imgIdx=%d)", imgIdx);
- 				hudCompositePass.Draw(cmdBuf, imgIdx);
-				}
-				// Le command buffer sera soumis par PresentFrame() -> EndRenderPass()
-			}
+		vk::CommandBuffer cmdBuf = screenDrawer.EndRenderPassOnly();
+		if (cmdBuf)
+		{
+			if (doSSAO) ssaoPass.Draw(cmdBuf, imgIdx, depthAtt->GetImageView(), normalAtt->GetImageView(), config::ShowSSAO);
+			if (doDoF) dofPass.Draw(cmdBuf, imgIdx, albedoAtt->GetImageView(), depthAtt->GetImageView());
+			if (doMaterial) materialPass.Draw(cmdBuf, imgIdx);
+			if (doHUD) hudCompositePass.Draw(cmdBuf, imgIdx);
+
+			// Passe finale de composition et de sélection de vue debug
+			int viewMode = 0; // Final
+			if (config::ShowNormals) viewMode = 2;
+			else if (config::ShowDepth) viewMode = 3;
+			else if (config::ShowMaterial) viewMode = 4;
+			else if (config::ShowMotion) viewMode = 5;
+			else if (config::ShowSSAO) viewMode = 6;
+			else if (config::ShowHUD) viewMode = 7;
+
+			compositePass.Draw(cmdBuf, imgIdx, viewMode);
 		}
 
-		// ALT+1 (Depth) et ALT+2 (Normals) : attachment 1
-		// ALT+0 (Normal) et ALT+3 (SSAO) et ALT+5 (Material) : attachment 0 (Albedo)
-		// ALT+4 (Motion) : attachment 3
-		int attachmentIndex = config::ShowMotion ? 3
-			: (config::ShowNormals || config::ShowDepth) ? 1 : 0;
-
-		bool ret = screenDrawer.PresentFrame(attachmentIndex);
+		bool ret = screenDrawer.PresentFrame(0); // Toujours attachment 0 (Albedo) qui a reçu la composition
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present end (%s)", ret ? "success" : "skipped");
 		return ret;
 	}
@@ -1154,6 +1295,7 @@ protected:
 		initDoF();
 		initMaterial();
 		initHUDComposite();
+		initComposite();
 	}
 
 private:
@@ -1173,7 +1315,7 @@ private:
 		albedoViews.reserve(swapSize);
 		for (int i = 0; i < swapSize; ++i)
 		{
-			FramebufferAttachment *att = screenDrawer.GetColorAttachment(i, 0);
+			FramebufferAttachment *att = screenDrawer.GetColorAttachment(i, GBUFFER_ALBEDO_INDEX);
 			if (att)
 				albedoViews.push_back(att->GetImageView());
 			else
@@ -1207,7 +1349,7 @@ private:
 		albedoImages.reserve(swapSize);
 		for (int i = 0; i < swapSize; ++i)
 		{
-			FramebufferAttachment *att = screenDrawer.GetColorAttachment(i, 0);
+			FramebufferAttachment *att = screenDrawer.GetColorAttachment(i, GBUFFER_ALBEDO_INDEX);
 			if (att)
 			{
 				albedoViews.push_back(att->GetImageView());
@@ -1232,8 +1374,8 @@ private:
 		materialViews.reserve(swapSize);
 		for (int i = 0; i < swapSize; ++i)
 		{
-			FramebufferAttachment *albedo = screenDrawer.GetColorAttachment(i, 0);
-			FramebufferAttachment *mat    = screenDrawer.GetColorAttachment(i, 2);
+			FramebufferAttachment *albedo = screenDrawer.GetColorAttachment(i, GBUFFER_ALBEDO_INDEX);
+			FramebufferAttachment *mat    = screenDrawer.GetColorAttachment(i, GBUFFER_MATERIAL_INDEX);
 			if (albedo && mat)
 			{
 				albedoViews.push_back(albedo->GetImageView());
@@ -1257,8 +1399,8 @@ private:
 		hudViews.reserve(swapSize);
 		for (int i = 0; i < swapSize; ++i)
 		{
-			FramebufferAttachment *albedo = screenDrawer.GetColorAttachment(i, 0);
-			FramebufferAttachment *hud    = screenDrawer.GetColorAttachment(i, 4);
+			FramebufferAttachment *albedo = screenDrawer.GetColorAttachment(i, GBUFFER_ALBEDO_INDEX);
+			FramebufferAttachment *hud    = screenDrawer.GetColorAttachment(i, GBUFFER_HUD_INDEX);
 			if (albedo && hud)
 			{
 				albedoViews.push_back(albedo->GetImageView());
@@ -1272,12 +1414,31 @@ private:
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initHUDComposite end");
 	}
 
+	void initComposite()
+	{
+		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initComposite start");
+		int swapSize = (int)screenDrawer.GetSwapChainCount();
+		std::vector<vk::ImageView> albedoViews, normalViews, depthViews, materialViews, motionViews, ssaoViews, hudViews;
+		for (int i = 0; i < swapSize; i++) {
+			albedoViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_ALBEDO_INDEX)->GetImageView());
+			normalViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_NORMAL_INDEX)->GetImageView());
+			depthViews.push_back(screenDrawer.GetDepthAttachment()->GetImageView());
+			materialViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_MATERIAL_INDEX)->GetImageView());
+			motionViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_MOTION_INDEX)->GetImageView());
+			ssaoViews.push_back(ssaoPass.IsInitialized() ? ssaoPass.GetSSAOImageView(i) : vk::ImageView{});
+			hudViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_HUD_INDEX)->GetImageView());
+		}
+		compositePass.Init(&shaderManager, viewport, albedoViews, normalViews, depthViews, materialViews, motionViews, ssaoViews, hudViews);
+		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initComposite end");
+	}
+
 	SamplerManager samplerManager;
 	ScreenDrawer screenDrawer;
 	SSAOPass ssaoPass;
 	DoFPass dofPass;
 	MaterialPass materialPass;
 	HUDCompositePass hudCompositePass;
+	GBufferCompositePass compositePass;
 	QuadDrawer hudBlitDrawer;
 	QuadPipeline hudBlitPipeline;
 };
@@ -1302,9 +1463,9 @@ void GBufferVulkanRenderer::ExportGBuffer()
 	int imgIdx = screenDrawer.GetCurrentImageIndex();
 	INFO_LOG(RENDERER, "ExportGBuffer: Viewport %ux%u, image index %d", width, height, imgIdx);
 
-	auto albedoAtt = screenDrawer.GetColorAttachment(imgIdx, 0);
-	auto normalAtt = screenDrawer.GetColorAttachment(imgIdx, 1);
-	auto materialAtt = screenDrawer.GetColorAttachment(imgIdx, 2);
+	auto albedoAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_ALBEDO_INDEX);
+	auto normalAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_NORMAL_INDEX);
+	auto materialAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_MATERIAL_INDEX);
 	auto depthAtt = screenDrawer.GetDepthAttachment();
 	vk::Image ssaoImage = ssaoPass.IsInitialized() ? ssaoPass.GetSSAOImage(imgIdx) : vk::Image{};
 
@@ -1486,9 +1647,9 @@ void GBufferVulkanRenderer::ExportGBuffer()
 		// Canaux EXR : Albedo RGB, Normal XYZ, Depth, Material, SSAO
 		const int numChannels = 9;
 		const char *channel_names[] = {
-			"R", "G", "B",
+			"Albedo.R", "Albedo.G", "Albedo.B",
 			"Normal.X", "Normal.Y", "Normal.Z",
-			"Depth",
+			"Depth.Z",
 			"Material.ID",
 			"SSAO.AO"
 		};

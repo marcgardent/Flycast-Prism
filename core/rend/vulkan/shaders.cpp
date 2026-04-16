@@ -22,6 +22,7 @@
 #include "shaders.h"
 #include "compiler.h"
 #include "utils.h"
+#include "gbuffer/gbuffer_constants.h"
 
 static const char VertexShaderSource[] = 
 #include "shaders/vulkan_main.vert"
@@ -69,6 +70,10 @@ static const char MaterialFragmentShaderSource[] =
 
 static const char HUDCompositeFragmentShaderSource[] = 
 #include "shaders/vulkan_hud_composite.frag"
+;
+
+static const char GBufferCompositeFragmentShaderSource[] = 
+#include "shaders/vulkan_gbuffer_composite.frag"
 ;
 
 extern const char N2LightShaderSource[] = 
@@ -127,6 +132,11 @@ vk::UniqueShaderModule ShaderManager::compileShader(const FragmentShaderParams& 
 		.addConstant("ShowNormals", (int)params.showNormals)
 		.addConstant("ShowMaterial", (int)params.showMaterial)
 		.addConstant("GBUFFER", (int)params.gbuffer)
+		.addConstant("GBUFFER_ALBEDO_INDEX", (int)GBUFFER_ALBEDO_INDEX)
+		.addConstant("GBUFFER_NORMAL_INDEX", (int)GBUFFER_NORMAL_INDEX)
+		.addConstant("GBUFFER_MATERIAL_INDEX", (int)GBUFFER_MATERIAL_INDEX)
+		.addConstant("GBUFFER_MOTION_INDEX", (int)GBUFFER_MOTION_INDEX)
+		.addConstant("GBUFFER_HUD_INDEX", (int)GBUFFER_HUD_INDEX)
 		.addConstant("EnableSSAO", (int)params.enableSSAO)
 		.addConstant("ShowSSAO", (int)params.showSSAO)
 		.addSource(GouraudSource)
@@ -191,5 +201,12 @@ vk::UniqueShaderModule ShaderManager::compileHUDFragmentShader()
 {
 	VulkanSource src;
 	src.addSource(HUDCompositeFragmentShaderSource);
+	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+}
+
+vk::UniqueShaderModule ShaderManager::compileGBufferCompositeFragmentShader()
+{
+	VulkanSource src;
+	src.addSource(GBufferCompositeFragmentShaderSource);
 	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
 }

@@ -1,10 +1,10 @@
 R"(
 #if GBUFFER == 1
-layout (location = 0) out vec4 FragColor;
-layout (location = 1) out vec4 NormalColor;
-layout (location = 2) out uint MaterialColor;
-layout (location = 3) out vec2 MotionColor;
-layout (location = 4) out vec4 HUDColor;
+layout (location = GBUFFER_ALBEDO_INDEX) out vec4 FragColor;
+layout (location = GBUFFER_NORMAL_INDEX) out vec4 NormalColor;
+layout (location = GBUFFER_MATERIAL_INDEX) out uint MaterialColor;
+layout (location = GBUFFER_MOTION_INDEX) out vec2 MotionColor;
+layout (location = GBUFFER_HUD_INDEX) out vec4 HUDColor;
 #else
 layout (location = 0) out vec4 FragColor;
 #define gl_FragColor FragColor
