@@ -72,7 +72,7 @@ static const char HUDCompositeFragmentShaderSource[] =
 #include "shaders/vulkan_hud_composite.frag"
 ;
 
-static const char GBufferCompositeFragmentShaderSource[] = 
+static const char GBufferCompositeFragmentShaderSource[] =
 #include "shaders/vulkan_gbuffer_composite.frag"
 ;
 

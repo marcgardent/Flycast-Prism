@@ -308,6 +308,67 @@ void resetShowMode() {
   config::ShowHUD.set(false);
 }
 
+
+bool handleGraphicsDebugShortcuts(SDL_Event event) {
+  // Graphics debug shortcuts: Alt+0, Alt+1, Alt+2, Alt+3, Alt+9
+  bool alt_pressed = (event.key.keysym.mod & KMOD_ALT) != 0;
+  if (config::RendererType == RenderType::Vulkan_GBuffer) {
+    if (alt_pressed) {
+      DEBUG_LOG(RENDERER, "SDL: Alt pressed, symbol: %d, mod: 0x%X",
+                event.key.keysym.sym, event.key.keysym.mod);
+      if (event.key.keysym.sym == SDLK_9) {
+        DEBUG_LOG(RENDERER, "SDL: ALT+9 detected (ExportGBuffer)");
+        if (renderer != nullptr)
+          renderer->ExportGBuffer();
+        else
+          DEBUG_LOG(RENDERER, "SDL: renderer is null");
+        return true;
+      }
+      if (event.key.keysym.sym == SDLK_0) {
+        resetShowMode();
+        return true;
+      }
+      if (event.key.keysym.sym == SDLK_1) {
+        resetShowMode();
+        config::ShowDepth.set(true);
+        return true;
+      }
+      if (event.key.keysym.sym == SDLK_2) {
+        resetShowMode();
+        config::ShowNormals.set(true);
+        return true;
+      }
+      if (event.key.keysym.sym == SDLK_3) {
+        resetShowMode();
+        config::ShowSSAO.set(true);
+        return true;
+      }
+      if (event.key.keysym.sym == SDLK_4) {
+        resetShowMode();
+        config::ShowMotion.set(true);
+        return true;
+      }
+      if (event.key.keysym.sym == SDLK_5) {
+        resetShowMode();
+        config::ShowMaterial.set(true);
+        return true;
+      }
+      if (event.key.keysym.sym == SDLK_7) {
+        resetShowMode();
+        config::ShowAlbedo.set(true);
+        return true;
+      }
+      if (event.key.keysym.sym == SDLK_8) {
+        resetShowMode();
+        config::ShowHUD.set(true);
+        return true;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
 void input_sdl_handle() {
   SDLGamepad::UpdateRumble();
 
@@ -376,62 +437,8 @@ void input_sdl_handle() {
           if (card_reader::barcodeAvailable() && handleBarcodeScanner(event))
             break;
 
-          // Graphics debug shortcuts: Alt+0, Alt+1, Alt+2, Alt+3, Alt+9
-          bool alt_pressed = (event.key.keysym.mod & KMOD_ALT) != 0;
-          if (config::RendererType == RenderType::Vulkan_GBuffer) {
-            if (alt_pressed) {
-              DEBUG_LOG(RENDERER, "SDL: Alt pressed, symbol: %d, mod: 0x%X",
-                        event.key.keysym.sym, event.key.keysym.mod);
-              if (event.key.keysym.sym == SDLK_9) {
-                DEBUG_LOG(RENDERER, "SDL: ALT+9 detected (ExportGBuffer)");
-                if (renderer != nullptr)
-                  renderer->ExportGBuffer();
-                else
-                  DEBUG_LOG(RENDERER, "SDL: renderer is null");
-                break;
-              }
-              if (event.key.keysym.sym == SDLK_0) {
-                resetShowMode();
-                break;
-              }
-              if (event.key.keysym.sym == SDLK_1) {
-                resetShowMode();
-                config::ShowDepth.set(true);
-                break;
-              }
-              if (event.key.keysym.sym == SDLK_2) {
-                resetShowMode();
-                config::ShowNormals.set(true);
-                break;
-              }
-              if (event.key.keysym.sym == SDLK_3) {
-                resetShowMode();
-                config::ShowSSAO.set(true);
-                break;
-              }
-              if (event.key.keysym.sym == SDLK_4) {
-                resetShowMode();
-                config::ShowMotion.set(true);
-                break;
-              }
-              if (event.key.keysym.sym == SDLK_5) {
-                  resetShowMode();
-                  config::ShowMaterial.set(true);
-                  break;
-              }
-              if (event.key.keysym.sym == SDLK_7) {
-                resetShowMode();
-                config::ShowAlbedo.set(true);
-                break;
-              }
-              if (event.key.keysym.sym == SDLK_8) {
-                resetShowMode();
-                config::ShowHUD.set(true);
-                break;
-              }
-                break;
-              }
-            }
+
+          if (handleGraphicsDebugShortcuts(event)) break;
 
         }
         if (!config::UseRawInput)
