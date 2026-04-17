@@ -1258,7 +1258,8 @@ public:
 
 			// Passe finale de composition et de sélection de vue debug
 			int viewMode = 0; // Final
-			if (config::ShowNormals) viewMode = 2;
+			if (config::ShowAlbedo) viewMode = 1;
+			else if (config::ShowNormals) viewMode = 2;
 			else if (config::ShowDepth) viewMode = 3;
 			else if (config::ShowMaterial) viewMode = 4;
 			else if (config::ShowMotion) viewMode = 5;

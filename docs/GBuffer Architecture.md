@@ -71,7 +71,9 @@ The exported `.exr` file is a multi-channel image containing **15 channels**. Al
 
 *   **File Naming**: `gbuffer_YYYYMMDD_HHMMSS.exr` in the screenshots directory.
 *   **Hotkeys**:
-    *   **ALT+1/2/3/4/5/7**: Toggle various debug views (Depth, Normals, SSAO, Motion, Material, HUD).
+    *   **ALT+1/2/3/4/5/7/8**: Toggle various debug views (Depth, Normals, SSAO, Motion, Material, Albedo, HUD).
+    *   **ALT+7**: Show pure Albedo buffer (No HUD, No post-effects).
+    *   **ALT+8**: Show HUD attachment alone.
     *   **ALT+0**: Return to final composite view.
     *   **ALT+9**: Export current G-Buffer to EXR.
 *   **Integration**: The G-Buffer layout is defined in `core/rend/vulkan/gbuffer/gbuffer_constants.h`.
