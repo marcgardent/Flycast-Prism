@@ -1,0 +1,75 @@
+name: Flycast-Mono-Model
+version: 1.0.0
+schema: v1
+
+# Configuration du modèle unique pour préserver la VRAM de la 5070
+models:
+  - name: Qwen 3.6
+    provider: ollama
+    model: qwen3.6:latest
+    roles:
+      - chat
+      - edit
+      - apply
+      - rerank
+    capabilities:
+      - tool_use
+    requestOptions:
+      num_ctx: 16384 # Contexte large pour les fichiers Vulkan complexes
+      temperature: 0.1
+      timeout: 600000
+
+# Modèle d'embedding local requis pour le RAG
+embedder:
+  provider: ollama
+  model: nomic-embed-text:latest
+
+mcpServers:
+  # =========================================================================
+  # [INSTALLATION] clion-native
+  # =========================================================================
+  - name: clion-native
+    command: /home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/jbr/bin/java
+    args:
+      - "-classpath"
+      - "/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/plugins/mcpserver/lib/mcpserver-frontend.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/util-8.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/intellij.libraries.kotlinx.coroutines.core.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/intellij.libraries.ktor.client.cio.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/intellij.libraries.ktor.client.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/intellij.libraries.ktor.network.tls.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/intellij.libraries.ktor.io.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/intellij.libraries.ktor.utils.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/intellij.libraries.kotlinx.io.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/intellij.libraries.kotlinx.serialization.core.jar:/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/lib/intellij.libraries.kotlinx.serialization.json.jar"
+      - "com.intellij.mcpserver.stdio.McpStdioRunnerKt"
+    env:
+      IJ_MCP_SERVER_PORT: "64342"
+
+  # =========================================================================
+  # [INSTALLATION] vulkan-docs-local (Cerveau RAG)
+  # =========================================================================
+  # Ce serveur gère maintenant toute la mémoire sémantique du projet.
+  # START_WEB_UI est à false pour éviter la corruption du flux JSON-RPC.
+  # =========================================================================
+  - name: vulkan-docs-local
+    command: npx
+    args:
+      - "-y"
+      - "@andrea9293/mcp-documentation-server"
+      - "--docs-path"
+      - "/mnt/data/docs/Vulkan-Docs-1.3.261"
+    connectionTimeout: 60000
+    env:
+      START_WEB_UI: "false"
+      MCP_BASE_DIR: "/mnt/data/projects/.agents/mcp-database"
+
+  # =========================================================================
+  # [INSTALLATION] sequential-thinking
+  # =========================================================================
+  - name: sequential-thinking
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-sequential-thinking"
+    connectionTimeout: 30000
+
+rules:
+  - "Utilise systématiquement clion-native pour naviguer dans le code source de Flycast, rechercher des définitions ou analyser la structure C++ avant de générer une réponse."
+  - "Face à un bug, un crash ou un problème d'architecture complexe, déclenche toujours sequential-thinking en premier pour décomposer ta réflexion étape par étape."
+  - "Avant de proposer des modifications sur le moteur de rendu, interroge vulkan-docs-local pour garantir la stricte compatibilité avec l'API Vulkan 1.3.261."
+  - "LE RÉFLEXE RAG : Avant de proposer une modification majeure, utilise TOUJOURS `search_all_documents` pour vérifier si nous avons déjà pris une décision ou rencontré un bug similaire dans le passé."
+  - "ÉCRITURE STRUCTURÉE : Quand tu dois retenir une information importante (architecture, bug résolu), utilise `add_document`. Donne-lui un titre explicite (ex: '[Architecture] Gestion GBuffer') et inclus le contexte technique détaillé."
+  - "ATTENTION AUX LIMITES : Si tu utilises `get_document`, `search_documents` ou `get_context_window` et que tu reçois le message 'Tool response was too long and was truncated', tu DOIS impérativement en informer l'utilisateur."
+  - "INGESTION : Si l'utilisateur signale l'ajout de nouveaux fichiers de notes, utilise `get_uploads_path` puis `process_uploads` pour vectoriser ces connaissances."
