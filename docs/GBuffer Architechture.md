@@ -1,4 +1,4 @@
-# G-Buffer Technical Specification
+# G-Buffer Architechure
 
 This document provides a technical specification for the G-Buffer implementation in Flycast, specifically focusing on the structure and encoding of the exported OpenEXR files.
 
