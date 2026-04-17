@@ -1,4 +1,3 @@
-R"(
 #define PI 3.1415926
 
 #if pp_FogCtrl != 2 || pp_TwoVolumes == 1
@@ -77,4 +76,4 @@ vec4 palettePixelBilinear(sampler2D tex, vec3 coords)
 }
 
 #endif
-)"
+

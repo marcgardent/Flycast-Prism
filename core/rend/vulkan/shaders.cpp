@@ -1,9 +1,9 @@
 /*
  *  Created on: Oct 3, 2019
 
-	Copyright 2019 flyinghead
+        Copyright 2019 flyinghead
 
-	This file is part of Flycast.
+        This file is part of Flycast.
 
     Flycast is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -18,195 +18,149 @@
     You should have received a copy of the GNU General Public License
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
 */
-#include "vulkan.h"
 #include "shaders.h"
 #include "compiler.h"
-#include "utils.h"
 #include "gbuffer/gbuffer_constants.h"
+#include "utils.h"
+#include "vulkan.h"
 
-static const char VertexShaderSource[] = 
-#include "shaders/vulkan_main.vert"
-;
+#include <cmrc/cmrc.hpp>
 
-static const char FragmentShaderTop[] = 
-#include "shaders/vulkan_top.frag"
-;
+CMRC_DECLARE(flycast);
 
-const char *FragmentShaderCommon = 
-#include "shaders/vulkan_common.frag"
-;
-
-static const char FragmentShaderMain[] = 
-#include "shaders/vulkan_main.frag"
-;
-
-extern const char ModVolVertexShaderSource[] = 
-#include "shaders/vulkan_modvol.vert"
-;
-
-static const char ModVolFragmentShaderSource[] = 
-#include "shaders/vulkan_modvol.frag"
-;
-
-static const char QuadVertexShaderSource[] = 
-#include "shaders/vulkan_quad.vert"
-;
-
-static const char QuadFragmentShaderSource[] = 
-#include "shaders/vulkan_quad.frag"
-;
-
-static const char SSAOFragmentShaderSource[] = 
-#include "shaders/vulkan_ssao.frag"
-;
-
-static const char DoFFragmentShaderSource[] = 
-#include "shaders/vulkan_dof.frag"
-;
-
-static const char MaterialFragmentShaderSource[] = 
-#include "shaders/vulkan_material.frag"
-;
-
-static const char HUDCompositeFragmentShaderSource[] = 
-#include "shaders/vulkan_hud_composite.frag"
-;
-
-static const char GBufferCompositeFragmentShaderSource[] =
-#include "shaders/vulkan_gbuffer_composite.frag"
-;
-
-extern const char N2LightShaderSource[] = 
-#include "shaders/vulkan_n2_light.glsl"
-;
-
-static const char N2VertexShaderSource[] = 
-#include "shaders/vulkan_n2.vert"
-;
-
-extern const char N2ModVolVertexShaderSource[] = 
-#include "shaders/vulkan_n2_modvol.vert"
-;
-
-vk::UniqueShaderModule ShaderManager::compileShader(const VertexShaderParams& params)
-{
-	VulkanSource src;
-	if (!params.naomi2)
-	{
-		src.addConstant("pp_Gouraud", (int)params.gouraud)
-				.addConstant("DIV_POS_Z", (int)params.divPosZ)
-				.addSource(GouraudSource)
-				.addSource(VertexShaderSource);
-	}
-	else
-	{
-		src.addConstant("pp_Gouraud", (int)params.gouraud)
-				.addConstant("pp_Texture", (int)params.texture)
-				.addSource(GouraudSource)
-				.addSource(N2LightShaderSource)
-				.addSource(N2VertexShaderSource);
-	}
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eVertex, src.generate());
+static std::string loadShaderSource(const std::string &path) {
+  auto fs = cmrc::flycast::get_filesystem();
+  auto file = fs.open(path);
+  return std::string(file.begin(), file.end());
 }
 
-vk::UniqueShaderModule ShaderManager::compileShader(const FragmentShaderParams& params)
-{
-	VulkanSource src;
-	src.addConstant("cp_AlphaTest", (int)params.alphaTest)
-		.addConstant("pp_ClipInside", (int)params.insideClipTest)
-		.addConstant("pp_UseAlpha", (int)params.useAlpha)
-		.addConstant("pp_Texture", (int)params.texture)
-		.addConstant("pp_IgnoreTexA", (int)params.ignoreTexAlpha)
-		.addConstant("pp_ShadInstr", params.shaderInstr)
-		.addConstant("pp_Offset", (int)params.offset)
-		.addConstant("pp_FogCtrl", params.fog)
-		.addConstant("pp_Gouraud", (int)params.gouraud)
-		.addConstant("pp_BumpMap", (int)params.bumpmap)
-		.addConstant("ColorClamping", (int)params.clamping)
-		.addConstant("pp_TriLinear", (int)params.trilinear)
-		.addConstant("pp_Palette", params.palette)
-		.addConstant("DIV_POS_Z", (int)params.divPosZ)
-		.addConstant("DITHERING", (int)params.dithering)
-		.addConstant("ShowDepth", (int)params.showDepth)
-		.addConstant("IS_TRANSLUCENT", (int)params.isTranslucent)
-		.addConstant("ShowNormals", (int)params.showNormals)
-		.addConstant("ShowMaterial", (int)params.showMaterial)
-		.addConstant("GBUFFER", (int)params.gbuffer)
-		.addConstant("GBUFFER_ALBEDO_INDEX", (int)GBUFFER_ALBEDO_INDEX)
-		.addConstant("GBUFFER_NORMAL_INDEX", (int)GBUFFER_NORMAL_INDEX)
-		.addConstant("GBUFFER_MATERIAL_INDEX", (int)GBUFFER_MATERIAL_INDEX)
-		.addConstant("GBUFFER_MOTION_INDEX", (int)GBUFFER_MOTION_INDEX)
-		.addConstant("GBUFFER_HUD_INDEX", (int)GBUFFER_HUD_INDEX)
-		.addConstant("EnableSSAO", (int)params.enableSSAO)
-		.addConstant("ShowSSAO", (int)params.showSSAO)
-		.addSource(GouraudSource)
-		.addSource(FragmentShaderTop)
-		.addSource(FragmentShaderCommon)
-		.addSource(FragmentShaderMain);
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+vk::UniqueShaderModule
+ShaderManager::compileShader(const VertexShaderParams &params) {
+  VulkanSource src;
+  if (!params.naomi2) {
+    src.addConstant("pp_Gouraud", (int)params.gouraud)
+        .addConstant("DIV_POS_Z", (int)params.divPosZ)
+        .addSource(GouraudSource)
+        .addSource(loadShaderSource("shaders/vulkan_main.vert"));
+  } else {
+    src.addConstant("pp_Gouraud", (int)params.gouraud)
+        .addConstant("pp_Texture", (int)params.texture)
+        .addSource(GouraudSource)
+        .addSource(loadShaderSource("shaders/vulkan_n2_light.glsl"))
+        .addSource(loadShaderSource("shaders/vulkan_n2.vert"));
+  }
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eVertex,
+                                 src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileShader(const ModVolShaderParams& params)
-{
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eVertex,
-			VulkanSource().addConstant("DIV_POS_Z", (int)params.divPosZ)
-				.addSource(params.naomi2 ? N2ModVolVertexShaderSource : ModVolVertexShaderSource).generate());
+vk::UniqueShaderModule
+ShaderManager::compileShader(const FragmentShaderParams &params) {
+  VulkanSource src;
+  src.addConstant("cp_AlphaTest", (int)params.alphaTest)
+      .addConstant("pp_ClipInside", (int)params.insideClipTest)
+      .addConstant("pp_UseAlpha", (int)params.useAlpha)
+      .addConstant("pp_Texture", (int)params.texture)
+      .addConstant("pp_IgnoreTexA", (int)params.ignoreTexAlpha)
+      .addConstant("pp_ShadInstr", params.shaderInstr)
+      .addConstant("pp_Offset", (int)params.offset)
+      .addConstant("pp_FogCtrl", params.fog)
+      .addConstant("pp_Gouraud", (int)params.gouraud)
+      .addConstant("pp_BumpMap", (int)params.bumpmap)
+      .addConstant("ColorClamping", (int)params.clamping)
+      .addConstant("pp_TriLinear", (int)params.trilinear)
+      .addConstant("pp_Palette", params.palette)
+      .addConstant("DIV_POS_Z", (int)params.divPosZ)
+      .addConstant("DITHERING", (int)params.dithering)
+      .addConstant("ShowDepth", (int)params.showDepth)
+      .addConstant("IS_TRANSLUCENT", (int)params.isTranslucent)
+      .addConstant("ShowNormals", (int)params.showNormals)
+      .addConstant("ShowMaterial", (int)params.showMaterial)
+      .addConstant("GBUFFER", (int)params.gbuffer)
+      .addConstant("GBUFFER_ALBEDO_INDEX", (int)GBUFFER_ALBEDO_INDEX)
+      .addConstant("GBUFFER_NORMAL_INDEX", (int)GBUFFER_NORMAL_INDEX)
+      .addConstant("GBUFFER_MATERIAL_INDEX", (int)GBUFFER_MATERIAL_INDEX)
+      .addConstant("GBUFFER_MOTION_INDEX", (int)GBUFFER_MOTION_INDEX)
+      .addConstant("GBUFFER_HUD_INDEX", (int)GBUFFER_HUD_INDEX)
+      .addConstant("EnableSSAO", (int)params.enableSSAO)
+      .addConstant("ShowSSAO", (int)params.showSSAO)
+      .addSource(GouraudSource)
+      .addSource(loadShaderSource("shaders/vulkan_top.frag"))
+      .addSource(loadShaderSource("shaders/vulkan_common.frag"))
+      .addSource(loadShaderSource("shaders/vulkan_main.frag"));
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
+                                 src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileModVolFragmentShader(bool divPosZ)
-{
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
-			VulkanSource().addConstant("DIV_POS_Z", (int)divPosZ)
-				.addSource(ModVolFragmentShaderSource).generate());
+vk::UniqueShaderModule
+ShaderManager::compileShader(const ModVolShaderParams &params) {
+  return ShaderCompiler::Compile(
+      vk::ShaderStageFlagBits::eVertex,
+      VulkanSource()
+          .addConstant("DIV_POS_Z", (int)params.divPosZ)
+          .addSource(loadShaderSource(params.naomi2
+                                          ? "shaders/vulkan_n2_modvol.vert"
+                                          : "shaders/vulkan_modvol.vert"))
+          .generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileQuadVertexShader(bool rotate)
-{
-	VulkanSource src;
-	src.addConstant("ROTATE", (int)rotate)
-			.addSource(QuadVertexShaderSource);
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eVertex, src.generate());
+vk::UniqueShaderModule
+ShaderManager::compileModVolFragmentShader(bool divPosZ) {
+  return ShaderCompiler::Compile(
+      vk::ShaderStageFlagBits::eFragment,
+      VulkanSource()
+          .addConstant("DIV_POS_Z", (int)divPosZ)
+          .addSource(loadShaderSource("shaders/vulkan_modvol.frag"))
+          .generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileQuadFragmentShader(bool ignoreTexAlpha)
-{
-	VulkanSource src;
-	src.addConstant("IGNORE_TEX_ALPHA", (int)ignoreTexAlpha)
-			.addSource(QuadFragmentShaderSource);
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,src.generate());
+vk::UniqueShaderModule ShaderManager::compileQuadVertexShader(bool rotate) {
+  VulkanSource src;
+  src.addConstant("ROTATE", (int)rotate)
+      .addSource(loadShaderSource("shaders/vulkan_quad.vert"));
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eVertex,
+                                 src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileSSAOFragmentShader()
-{
-	VulkanSource src;
-	src.addSource(SSAOFragmentShaderSource);
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+vk::UniqueShaderModule
+ShaderManager::compileQuadFragmentShader(bool ignoreTexAlpha) {
+  VulkanSource src;
+  src.addConstant("IGNORE_TEX_ALPHA", (int)ignoreTexAlpha)
+      .addSource(loadShaderSource("shaders/vulkan_quad.frag"));
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
+                                 src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileDoFFragmentShader()
-{
-	VulkanSource src;
-	src.addSource(DoFFragmentShaderSource);
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+vk::UniqueShaderModule ShaderManager::compileSSAOFragmentShader() {
+  VulkanSource src;
+  src.addSource(loadShaderSource("shaders/vulkan_ssao.frag"));
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
+                                 src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileMaterialFragmentShader()
-{
-	VulkanSource src;
-	src.addSource(MaterialFragmentShaderSource);
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+vk::UniqueShaderModule ShaderManager::compileDoFFragmentShader() {
+  VulkanSource src;
+  src.addSource(loadShaderSource("shaders/vulkan_dof.frag"));
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
+                                 src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileHUDFragmentShader()
-{
-	VulkanSource src;
-	src.addSource(HUDCompositeFragmentShaderSource);
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+vk::UniqueShaderModule ShaderManager::compileMaterialFragmentShader() {
+  VulkanSource src;
+  src.addSource(loadShaderSource("shaders/vulkan_material.frag"));
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
+                                 src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileGBufferCompositeFragmentShader()
-{
-	VulkanSource src;
-	src.addSource(GBufferCompositeFragmentShaderSource);
-	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
+vk::UniqueShaderModule ShaderManager::compileHUDFragmentShader() {
+  VulkanSource src;
+  src.addSource(loadShaderSource("shaders/vulkan_hud_composite.frag"));
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
+                                 src.generate());
+}
+
+vk::UniqueShaderModule ShaderManager::compileGBufferCompositeFragmentShader() {
+  VulkanSource src;
+  src.addSource(loadShaderSource("shaders/vulkan_gbuffer_composite.frag"));
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
+                                 src.generate());
 }

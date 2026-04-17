@@ -1,4 +1,3 @@
-R"(
 layout (std140, set = 1, binding = 2) uniform N2VertexShaderUniforms
 {
 	mat4 mvMat;
@@ -226,4 +225,4 @@ void computeBumpMap(inout vec4 color0, in vec4 color1, in vec3 position, in vec3
 	color0.a = k1;
 	color0 = clamp(color0, 0.0, 1.0);
 }
-)"
+

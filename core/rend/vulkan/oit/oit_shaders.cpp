@@ -23,7 +23,15 @@
 #include "rend/gl4/glsl.h"
 #include "cfg/option.h"
 
-extern const char *FragmentShaderCommon;
+#include <cmrc/cmrc.hpp>
+
+CMRC_DECLARE(flycast);
+
+static std::string loadShaderSource(const std::string &path) {
+  auto fs = cmrc::flycast::get_filesystem();
+  auto file = fs.open(path);
+  return std::string(file.begin(), file.end());
+}
 
 static const char OITVertexShaderSource[] = R"(
 layout (std140, set = 0, binding = 0) uniform VertexShaderUniforms
@@ -719,9 +727,6 @@ void main()
 }
 )";
 
-extern const char ModVolVertexShaderSource[];
-extern const char N2ModVolVertexShaderSource[];
-extern const char N2LightShaderSource[];
 
 vk::UniqueShaderModule OITShaderManager::compileShader(const VertexShaderParams& params)
 {
@@ -733,7 +738,7 @@ vk::UniqueShaderModule OITShaderManager::compileShader(const VertexShaderParams&
 		src.addConstant("pp_TwoVolumes", (int)params.twoVolume)
 			.addConstant("LIGHT_ON", (int)params.lightOn)
 			.addConstant("pp_Texture", (int)params.texture)
-			.addSource(N2LightShaderSource)
+			.addSource(loadShaderSource("shaders/vulkan_n2_light.glsl"))
 			.addSource(OITN2VertexShaderSource);
 	else
 		src.addSource(OITVertexShaderSource);
@@ -761,7 +766,7 @@ vk::UniqueShaderModule OITShaderManager::compileShader(const FragmentShaderParam
 		.addSource(GouraudSource)
 		.addSource(OITShaderHeader)
 		.addSource(OITFragmentShaderTop)
-		.addSource(FragmentShaderCommon)
+		.addSource(loadShaderSource("shaders/vulkan_common.frag"))
 		.addSource(OITFragmentShaderMain);
 	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment, src.generate());
 }
@@ -793,10 +798,10 @@ vk::UniqueShaderModule OITShaderManager::compileShader(const ModVolShaderParams&
 {
 	VulkanSource src;
 	if (params.naomi2)
-		src.addSource(N2ModVolVertexShaderSource);
+		src.addSource(loadShaderSource("shaders/vulkan_n2_modvol.vert"));
 	else
 		src.addConstant("DIV_POS_Z", (int)params.divPosZ)
-			.addSource(ModVolVertexShaderSource);
+			.addSource(loadShaderSource("shaders/vulkan_modvol.vert"));
 	return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eVertex, src.generate());
 }
 vk::UniqueShaderModule OITShaderManager::compileModVolFragmentShader(bool divPosZ)

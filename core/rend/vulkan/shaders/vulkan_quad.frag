@@ -1,4 +1,3 @@
-R"(
 layout (set = 0, binding = 0) uniform sampler2D tex;
 
 layout (push_constant) uniform pushBlock
@@ -18,4 +17,4 @@ void main()
 	FragColor = pushConstants.color * texture(tex, inUV);
 #endif
 }
-)"
+

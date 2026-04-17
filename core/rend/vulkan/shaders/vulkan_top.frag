@@ -1,4 +1,3 @@
-R"(
 #if GBUFFER == 1
 layout (location = GBUFFER_ALBEDO_INDEX) out vec4 FragColor;
 layout (location = GBUFFER_NORMAL_INDEX) out vec4 NormalColor;
@@ -46,4 +45,4 @@ layout (location = 1) INTERPOLATION in highp vec4 vtx_offs;
 layout (location = 2) in highp vec3 vtx_uv;
 layout (location = 3) in highp vec3 vtx_pos;
 layout (location = 4) in highp vec3 vtx_normal;
-)"
+

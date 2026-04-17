@@ -1,4 +1,3 @@
-R"(
 precision highp float;
 precision highp int;
 
@@ -57,4 +56,4 @@ void main() {
 		fragColor = vec4(color, 1.0);
 	}
 }
-)"
+

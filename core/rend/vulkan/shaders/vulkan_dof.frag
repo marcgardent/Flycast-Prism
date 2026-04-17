@@ -1,4 +1,3 @@
-R"(
 precision highp float;
 
 layout (set = 0, binding = 0) uniform sampler2D albedoTex;
@@ -55,4 +54,4 @@ void main()
 
     FragColor = vec4(blurColor / max(totalWeight, 0.0001), 1.0);
 }
-)"
+

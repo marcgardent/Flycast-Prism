@@ -1,4 +1,3 @@
-R"(
 precision highp float;
 precision highp int;
 
@@ -22,4 +21,4 @@ void main() {
 		fragColor = vec4(hashColor(matID), 1.0);
 	}
 }
-)"
+
