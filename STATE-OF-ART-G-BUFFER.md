@@ -46,11 +46,7 @@ Les shaders Vulkan dans `core/rend/vulkan/shaders.cpp` ont été profondément r
 Un algorithme de SSAO personnalisé a été implémenté directement dans le fragment shader du G-Buffer.
 - **Méthode** : Échantillonnage pseudo-aléatoire (8 samples) autour du fragment.
 - **Calcul** : Utilise les dérivées de position (`dFdx`, `dFdy`) pour simuler le plan tangent et estimer l'occlusion locale par la courbure géométrique.
-- **Visualisation** : 
-    - `Alt+1` : Depth Map (Z-Buffer).
-    - `Alt+2` : Normal Map.
-    - `Alt+3` : SSAO Pur (Noir & Blanc).
-    - `Alt+0` : Rendu final (Albedo * AO).
+
 
 #### 6. État d'Intégration et Stabilité
 La branche `gbuffer` est désormais stable pour le rendu différé avec AO intégrée.
