@@ -135,25 +135,16 @@ public:
 			ssaoBuffers.push_back(std::move(buf));
 		}
 
-		// Renderpass SSAO : attachment 0 = albedo (Load/Store), attachment 1 = ssao buffer (Clear/Store)
-		std::array<vk::AttachmentDescription, 2> attachDescs = {
-			vk::AttachmentDescription(
-				vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
-				vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
-				vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
-				vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal),
-			vk::AttachmentDescription(
-				vk::AttachmentDescriptionFlags(), vk::Format::eR8Unorm, vk::SampleCountFlagBits::e1,
-				vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
-				vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
-				vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal),
-		};
-		std::array<vk::AttachmentReference, 2> colorRefs = {
-			vk::AttachmentReference(0, vk::ImageLayout::eColorAttachmentOptimal),
-			vk::AttachmentReference(1, vk::ImageLayout::eColorAttachmentOptimal),
-		};
+		// Renderpass SSAO : attachment 0 = ssao buffer (Clear/Store)
+		vk::AttachmentDescription attachDesc(
+			vk::AttachmentDescriptionFlags(), vk::Format::eR8Unorm, vk::SampleCountFlagBits::e1,
+			vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
+			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		vk::AttachmentReference colorRef(0, vk::ImageLayout::eColorAttachmentOptimal);
 		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
-			nullptr, colorRefs, nullptr, nullptr);
+			nullptr, colorRef, nullptr, nullptr);
 		vk::SubpassDependency dep1(VK_SUBPASS_EXTERNAL, 0,
 			vk::PipelineStageFlagBits::eFragmentShader,
 			vk::PipelineStageFlagBits::eColorAttachmentOutput,
@@ -168,16 +159,15 @@ public:
 			vk::DependencyFlagBits::eByRegion);
 		std::array<vk::SubpassDependency, 2> deps = { dep1, dep2 };
 		renderPass = ctx->GetDevice().createRenderPassUnique(
-			vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), attachDescs, subpass, deps));
+			vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), attachDesc, subpass, deps));
 
-		// Framebuffers : un par image, avec albedo + ssao buffer
+		// Framebuffers : un par image, avec seulement le ssao buffer
 		framebuffers.clear();
-		for (size_t i = 0; i < albedoViews.size(); ++i)
+		for (size_t i = 0; i < ssaoImageViews.size(); ++i)
 		{
-			std::array<vk::ImageView, 2> views = { albedoViews[i], ssaoImageViews[i] };
 			framebuffers.push_back(ctx->GetDevice().createFramebufferUnique(
 				vk::FramebufferCreateInfo(vk::FramebufferCreateFlags(), *renderPass,
-					views, viewport.width, viewport.height, 1)));
+					ssaoImageViews[i], viewport.width, viewport.height, 1)));
 		}
 
 		// Pipeline
@@ -254,14 +244,11 @@ public:
 		};
 		ctx->GetDevice().updateDescriptorSets(writes, nullptr);
 
-		// Debut du renderpass SSAO (2 clear values : albedo non cleared, ssao buffer cleared a 1.0)
-		std::array<vk::ClearValue, 2> clearValues = {
-			vk::ClearValue(vk::ClearColorValue(std::array<float,4>{0.f,0.f,0.f,1.f})),
-			vk::ClearValue(vk::ClearColorValue(std::array<float,4>{1.f,1.f,1.f,1.f})),
-		};
+		// Debut du renderpass SSAO (1 clear value : ssao buffer cleared a 1.0)
+		vk::ClearValue clearValue(vk::ClearColorValue(std::array<float,4>{1.f,1.f,1.f,1.f}));
 		cmdBuffer.beginRenderPass(
 			vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex],
-				vk::Rect2D({0,0}, viewport), clearValues),
+				vk::Rect2D({0,0}, viewport), clearValue),
 			vk::SubpassContents::eInline);
 
 		cmdBuffer.setViewport(0, vk::Viewport(0.f, 0.f, (float)viewport.width, (float)viewport.height, 0.f, 1.f));
@@ -311,27 +298,15 @@ void CreatePipeline(bool debug)
 		vk::PipelineMultisampleStateCreateInfo multisample;
 		vk::PipelineDepthStencilStateCreateInfo depthStencil;
 
-		// Blending multiplicatif : albedo *= ao
-		// Attachment 1 (AoRaw) : ecriture directe sans blending
+		// Output uniquement sur le SSAO buffer (R8Unorm) : ecriture directe sans blending
 		vk::PipelineColorBlendAttachmentState aoRawAttachment(false,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::ColorComponentFlagBits::eR);
 
-		vk::PipelineColorBlendAttachmentState blendAttachment;
-		if (debug) {
-			blendAttachment = vk::PipelineColorBlendAttachmentState(false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-		} else {
-			// Blending multiplicatif : albedo.rgb *= ao (ao est dans le canal alpha du fragment SSAO)
-			// src = vec4(1,1,1,ao), dst = albedo
-			// RGB_final = src.rgb * 0 + dst.rgb * src.a  => albedo.rgb * ao
-			// A_final   = src.a   * 0 + dst.a   * 1      => albedo.a inchange
-			blendAttachment = vk::PipelineColorBlendAttachmentState(true, vk::BlendFactor::eZero, vk::BlendFactor::eSrcAlpha, vk::BlendOp::eAdd, vk::BlendFactor::eZero, vk::BlendFactor::eOne, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-		}
-		std::array<vk::PipelineColorBlendAttachmentState, 2> blendAttachments = { blendAttachment, aoRawAttachment };
 		vk::PipelineColorBlendStateCreateInfo colorBlend(
 			vk::PipelineColorBlendStateCreateFlags(), false, vk::LogicOp::eNoOp,
-			blendAttachments, { { 1.f, 1.f, 1.f, 1.f } });
+			aoRawAttachment, { { 1.f, 1.f, 1.f, 1.f } });
 
 		std::array<vk::DynamicState, 2> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 		vk::PipelineDynamicStateCreateInfo dynamicState(vk::PipelineDynamicStateCreateFlags(), dynamicStates);
@@ -422,14 +397,14 @@ public:
 		for (int i = 0; i < swapSize; ++i)
 		{
 			dofBuffers[i] = std::make_unique<FramebufferAttachment>(ctx->GetPhysicalDevice(), ctx->GetDevice());
-			dofBuffers[i]->Init(viewport.width, viewport.height, vk::Format::eR8G8B8A8Unorm,
+			dofBuffers[i]->Init(viewport.width, viewport.height, vk::Format::eR16G16B16A16Sfloat,
 				vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc);
 			dofImageViews.push_back(dofBuffers[i]->GetImageView());
 		}
 
 		// Renderpass : ecriture dans l'image intermediaire (Undefined -> ColorAttachmentOptimal -> TransferSrcOptimal)
 		vk::AttachmentDescription dofDesc(
-			vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
+			vk::AttachmentDescriptionFlags(), vk::Format::eR16G16B16A16Sfloat, vk::SampleCountFlagBits::e1,
 			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eStore,
 			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
 			vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
@@ -610,381 +585,7 @@ private:
 	std::vector<vk::Image> albedoImages;
 };
 
-class MaterialPass
-{
-public:
-	void Init(ShaderManager *shaderManager, vk::Extent2D viewport,
-		const std::vector<vk::ImageView> &albedoViews,
-		const std::vector<vk::ImageView> &materialViews)
-	{
-		NOTICE_LOG(RENDERER, "MaterialPass::Init start (%dx%d, %zu views)", viewport.width, viewport.height, albedoViews.size());
-		this->shaderManager = shaderManager;
-		this->viewport = viewport;
 
-		VulkanContext *ctx = VulkanContext::Instance();
-
-		// Descriptor set layout : binding 0 = material ID (usampler2D)
-		vk::DescriptorSetLayoutBinding binding(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment);
-		descSetLayout = ctx->GetDevice().createDescriptorSetLayoutUnique(
-			vk::DescriptorSetLayoutCreateInfo(vk::DescriptorSetLayoutCreateFlags(), binding));
-
-		pipelineLayout = ctx->GetDevice().createPipelineLayoutUnique(
-			vk::PipelineLayoutCreateInfo(vk::PipelineLayoutCreateFlags(), *descSetLayout));
-
-		sampler = ctx->GetDevice().createSamplerUnique(
-			vk::SamplerCreateInfo(vk::SamplerCreateFlags(),
-				vk::Filter::eNearest, vk::Filter::eNearest,
-				vk::SamplerMipmapMode::eNearest,
-				vk::SamplerAddressMode::eClampToEdge,
-				vk::SamplerAddressMode::eClampToEdge,
-				vk::SamplerAddressMode::eClampToEdge,
-				0.0f, false, 1.0f, false, vk::CompareOp::eNever,
-    0.0f, vk::LodClampNone, vk::BorderColor::eIntOpaqueBlack));
-
-		quadBuffer = std::make_unique<QuadBuffer>();
-
-		// Renderpass : ecrit sur l'albedo attachment (overwrite complet)
-		vk::AttachmentDescription albedoDesc(
-			vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
-			vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
-			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
-			vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-		vk::AttachmentReference albedoRef(0, vk::ImageLayout::eColorAttachmentOptimal);
-		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
-			nullptr, albedoRef, nullptr, nullptr);
-		vk::SubpassDependency dep1(VK_SUBPASS_EXTERNAL, 0,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::AccessFlagBits::eShaderRead,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::DependencyFlagBits::eByRegion);
-		vk::SubpassDependency dep2(0, VK_SUBPASS_EXTERNAL,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::AccessFlagBits::eShaderRead,
-			vk::DependencyFlagBits::eByRegion);
-		std::array<vk::SubpassDependency, 2> deps = { dep1, dep2 };
-		renderPass = ctx->GetDevice().createRenderPassUnique(
-			vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), albedoDesc, subpass, deps));
-
-		// Framebuffers : un par image, pointant sur l'albedo attachment
-		framebuffers.clear();
-		for (vk::ImageView albedoView : albedoViews)
-		{
-			framebuffers.push_back(ctx->GetDevice().createFramebufferUnique(
-				vk::FramebufferCreateInfo(vk::FramebufferCreateFlags(), *renderPass,
-					albedoView, viewport.width, viewport.height, 1)));
-		}
-
-		this->materialViews = materialViews;
-
-		CreatePipeline();
-		NOTICE_LOG(RENDERER, "MaterialPass::Init end");
-	}
-
-	void Term()
-	{
-		pipeline.reset();
-		pipelineLayout.reset();
-		descSetLayout.reset();
-		sampler.reset();
-		quadBuffer.reset();
-		framebuffers.clear();
-		renderPass.reset();
-		descriptorSets.clear();
-		materialViews.clear();
-	}
-
-	bool IsInitialized() const { return (bool)pipeline; }
-
-	void Draw(vk::CommandBuffer cmdBuffer, int imageIndex)
-	{
-		if (imageIndex < 0 || imageIndex >= (int)framebuffers.size())
-		{
-			ERROR_LOG(RENDERER, "MaterialPass::Draw: Invalid imageIndex %d. Skipping.", imageIndex);
-			return;
-		}
-		DEBUG_LOG(RENDERER, "MaterialPass::Draw(imageIndex=%d)", imageIndex);
-		VulkanContext *ctx = VulkanContext::Instance();
-
-		if ((int)descriptorSets.size() <= imageIndex)
-			descriptorSets.resize(imageIndex + 1);
-
-		auto &descSet = descriptorSets[imageIndex];
-		if (!descSet)
-		{
-			descSet = std::move(ctx->GetDevice().allocateDescriptorSetsUnique(
-				vk::DescriptorSetAllocateInfo(ctx->GetDescriptorPool(), *descSetLayout)).front());
-		}
-
-		vk::DescriptorImageInfo matInfo(*sampler, materialViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
-		vk::WriteDescriptorSet write(*descSet, 0, 0, vk::DescriptorType::eCombinedImageSampler, matInfo);
-		ctx->GetDevice().updateDescriptorSets(write, nullptr);
-
-		vk::ClearValue clearColor(vk::ClearColorValue(std::array<float,4>{0.f,0.f,0.f,1.f}));
-		cmdBuffer.beginRenderPass(
-			vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex],
-				vk::Rect2D({0,0}, viewport), clearColor),
-			vk::SubpassContents::eInline);
-
-		cmdBuffer.setViewport(0, vk::Viewport(0.f, 0.f, (float)viewport.width, (float)viewport.height, 0.f, 1.f));
-		cmdBuffer.setScissor(0, vk::Rect2D({0,0}, viewport));
-
-		cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
-		cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descSet, nullptr);
-
-		quadBuffer->Update(nullptr);
-		quadBuffer->Bind(cmdBuffer);
-		quadBuffer->Draw(cmdBuffer);
-
-		cmdBuffer.endRenderPass();
-	}
-
-private:
-	void CreatePipeline()
-	{
-		VulkanContext *ctx = VulkanContext::Instance();
-
-		vk::PipelineVertexInputStateCreateInfo vertexInput = GetQuadInputStateCreateInfo(true);
-		vk::PipelineInputAssemblyStateCreateInfo inputAssembly(vk::PipelineInputAssemblyStateCreateFlags(), vk::PrimitiveTopology::eTriangleStrip);
-		vk::PipelineViewportStateCreateInfo viewportState(vk::PipelineViewportStateCreateFlags(), 1, nullptr, 1, nullptr);
-		vk::PipelineRasterizationStateCreateInfo rasterization;
-		rasterization.lineWidth = 1.0f;
-		vk::PipelineMultisampleStateCreateInfo multisample;
-		vk::PipelineDepthStencilStateCreateInfo depthStencil;
-
-		vk::ColorComponentFlags colorFlags = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
-			| vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-		vk::PipelineColorBlendAttachmentState blendAttachment(false,
-			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-			colorFlags);
-		vk::PipelineColorBlendStateCreateInfo colorBlend(
-			vk::PipelineColorBlendStateCreateFlags(), false, vk::LogicOp::eNoOp,
-			blendAttachment, { { 1.f, 1.f, 1.f, 1.f } });
-
-		std::array<vk::DynamicState, 2> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-		vk::PipelineDynamicStateCreateInfo dynamicState(vk::PipelineDynamicStateCreateFlags(), dynamicStates);
-
-		std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {
-			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex,
-				shaderManager->GetQuadVertexShader(false), "main"),
-			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eFragment,
-				shaderManager->GetMaterialFragmentShader(), "main"),
-		};
-
-		pipeline = ctx->GetDevice().createGraphicsPipelineUnique(ctx->GetPipelineCache(),
-			vk::GraphicsPipelineCreateInfo(vk::PipelineCreateFlags(), stages,
-				&vertexInput, &inputAssembly, nullptr, &viewportState,
-				&rasterization, &multisample, &depthStencil, &colorBlend, &dynamicState,
-				*pipelineLayout, *renderPass, 0)).value;
-	}
-
-	ShaderManager *shaderManager = nullptr;
-	vk::Extent2D viewport;
-	vk::UniqueRenderPass renderPass;
-	std::vector<vk::UniqueFramebuffer> framebuffers;
-	vk::UniquePipeline pipeline;
-	vk::UniquePipelineLayout pipelineLayout;
-	vk::UniqueDescriptorSetLayout descSetLayout;
-	vk::UniqueSampler sampler;
-	std::unique_ptr<QuadBuffer> quadBuffer;
-	std::vector<vk::UniqueDescriptorSet> descriptorSets;
-	std::vector<vk::ImageView> materialViews;
-};
-
-class HUDCompositePass
-{
-public:
-	void Init(ShaderManager *shaderManager, vk::Extent2D viewport,
-		const std::vector<vk::ImageView> &albedoViews,
-		const std::vector<vk::ImageView> &hudViews)
-	{
-		NOTICE_LOG(RENDERER, "HUDCompositePass::Init start (%dx%d, %zu views)", viewport.width, viewport.height, albedoViews.size());
-		this->shaderManager = shaderManager;
-		this->viewport = viewport;
-		this->hudViews = hudViews;
-
-		VulkanContext *ctx = VulkanContext::Instance();
-
-		// Descriptor set layout : binding 0 = HUD buffer (sampler2D)
-		vk::DescriptorSetLayoutBinding binding(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment);
-		descSetLayout = ctx->GetDevice().createDescriptorSetLayoutUnique(
-			vk::DescriptorSetLayoutCreateInfo(vk::DescriptorSetLayoutCreateFlags(), binding));
-
-		vk::PushConstantRange pcRange(vk::ShaderStageFlagBits::eFragment, 0, sizeof(float));
-		pipelineLayout = ctx->GetDevice().createPipelineLayoutUnique(
-			vk::PipelineLayoutCreateInfo(vk::PipelineLayoutCreateFlags(), *descSetLayout, pcRange));
-
-		sampler = ctx->GetDevice().createSamplerUnique(
-			vk::SamplerCreateInfo(vk::SamplerCreateFlags(),
-				vk::Filter::eNearest, vk::Filter::eNearest,
-				vk::SamplerMipmapMode::eNearest,
-				vk::SamplerAddressMode::eClampToEdge,
-				vk::SamplerAddressMode::eClampToEdge,
-				vk::SamplerAddressMode::eClampToEdge,
-				0.0f, false, 1.0f, false, vk::CompareOp::eNever,
-				0.0f, vk::LodClampNone, vk::BorderColor::eFloatOpaqueBlack));
-
-		quadBuffer = std::make_unique<QuadBuffer>();
-
-		// Renderpass : Load/Store sur l'albedo (on composite par-dessus)
-		// Le G-Buffer renderpass laisse tous les attachments en eShaderReadOnlyOptimal (finalLayout ligne 744 drawer.cpp)
-		// initialLayout=eShaderReadOnlyOptimal, finalLayout=eShaderReadOnlyOptimal (PresentFrame le lit en shader)
-		vk::AttachmentDescription albedoDesc(
-			vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
-			vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
-			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
-			vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-		vk::AttachmentReference albedoRef(0, vk::ImageLayout::eColorAttachmentOptimal);
-		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
-			nullptr, albedoRef, nullptr, nullptr);
-		vk::SubpassDependency dep1(VK_SUBPASS_EXTERNAL, 0,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::AccessFlagBits::eShaderRead,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::DependencyFlagBits::eByRegion);
-		vk::SubpassDependency dep2(0, VK_SUBPASS_EXTERNAL,
-			vk::PipelineStageFlagBits::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits::eFragmentShader,
-			vk::AccessFlagBits::eColorAttachmentWrite,
-			vk::AccessFlagBits::eShaderRead,
-			vk::DependencyFlagBits::eByRegion);
-		std::array<vk::SubpassDependency, 2> deps = { dep1, dep2 };
-		renderPass = ctx->GetDevice().createRenderPassUnique(
-			vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), albedoDesc, subpass, deps));
-
-		// Framebuffers : un par image, pointant sur l'albedo attachment
-		framebuffers.clear();
-		for (vk::ImageView albedoView : albedoViews)
-		{
-			framebuffers.push_back(ctx->GetDevice().createFramebufferUnique(
-				vk::FramebufferCreateInfo(vk::FramebufferCreateFlags(), *renderPass,
-					albedoView, viewport.width, viewport.height, 1)));
-		}
-
-		CreatePipeline();
-		NOTICE_LOG(RENDERER, "HUDCompositePass::Init end");
-	}
-
-	void Term()
-	{
-		pipeline.reset();
-		pipelineLayout.reset();
-		descSetLayout.reset();
-		sampler.reset();
-		quadBuffer.reset();
-		framebuffers.clear();
-		renderPass.reset();
-		descriptorSets.clear();
-		hudViews.clear();
-	}
-
-	bool IsInitialized() const { return (bool)pipeline; }
-
-	void Draw(vk::CommandBuffer cmdBuffer, int imageIndex)
-	{
-		if (imageIndex < 0 || imageIndex >= (int)framebuffers.size())
-		{
-			ERROR_LOG(RENDERER, "HUDCompositePass::Draw: Invalid imageIndex %d. Skipping.", imageIndex);
-			return;
-		}
-		DEBUG_LOG(RENDERER, "HUDCompositePass::Draw(imageIndex=%d)", imageIndex);
-		VulkanContext *ctx = VulkanContext::Instance();
-
-		if ((int)descriptorSets.size() <= imageIndex)
-			descriptorSets.resize(imageIndex + 1);
-
-		auto &descSet = descriptorSets[imageIndex];
-		if (!descSet)
-		{
-			descSet = std::move(ctx->GetDevice().allocateDescriptorSetsUnique(
-				vk::DescriptorSetAllocateInfo(ctx->GetDescriptorPool(), *descSetLayout)).front());
-		}
-
-		vk::DescriptorImageInfo hudInfo(*sampler, hudViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
-		vk::WriteDescriptorSet write(*descSet, 0, 0, vk::DescriptorType::eCombinedImageSampler, hudInfo);
-		ctx->GetDevice().updateDescriptorSets(write, nullptr);
-
-		// Le G-Buffer renderpass laisse le HUD (attachment 4) en eShaderReadOnlyOptimal (finalLayout=eShaderReadOnlyOptimal)
-		// Pas de barrier explicite necessaire - le layout est deja correct pour le sampling
-
-		cmdBuffer.beginRenderPass(
-			vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex],
-				vk::Rect2D({0,0}, viewport)),
-			vk::SubpassContents::eInline);
-
-		cmdBuffer.setViewport(0, vk::Viewport(0.f, 0.f, (float)viewport.width, (float)viewport.height, 0.f, 1.f));
-		cmdBuffer.setScissor(0, vk::Rect2D({0,0}, viewport));
-
-		cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
-		cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descSet, nullptr);
-
-		float showHUD = config::ShowHUD ? 1.0f : 0.0f;
-		cmdBuffer.pushConstants(*pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(float), &showHUD);
-
-		quadBuffer->Update(nullptr);
-		quadBuffer->Bind(cmdBuffer);
-		quadBuffer->Draw(cmdBuffer);
-
-		cmdBuffer.endRenderPass();
-	}
-
-private:
-	void CreatePipeline()
-	{
-		VulkanContext *ctx = VulkanContext::Instance();
-
-		vk::PipelineVertexInputStateCreateInfo vertexInput = GetQuadInputStateCreateInfo(true);
-		vk::PipelineInputAssemblyStateCreateInfo inputAssembly(vk::PipelineInputAssemblyStateCreateFlags(), vk::PrimitiveTopology::eTriangleStrip);
-		vk::PipelineViewportStateCreateInfo viewportState(vk::PipelineViewportStateCreateFlags(), 1, nullptr, 1, nullptr);
-		vk::PipelineRasterizationStateCreateInfo rasterization;
-		rasterization.lineWidth = 1.0f;
-		vk::PipelineMultisampleStateCreateInfo multisample;
-		vk::PipelineDepthStencilStateCreateInfo depthStencil;
-
-		// Alpha-blending : src=SrcAlpha, dst=OneMinusSrcAlpha
-		vk::ColorComponentFlags colorFlags = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG
-			| vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-		vk::PipelineColorBlendAttachmentState blendAttachment(true,
-			vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
-			vk::BlendFactor::eOne, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
-			colorFlags);
-		vk::PipelineColorBlendStateCreateInfo colorBlend(
-			vk::PipelineColorBlendStateCreateFlags(), false, vk::LogicOp::eNoOp,
-			blendAttachment, { { 1.f, 1.f, 1.f, 1.f } });
-
-		std::array<vk::DynamicState, 2> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-		vk::PipelineDynamicStateCreateInfo dynamicState(vk::PipelineDynamicStateCreateFlags(), dynamicStates);
-
-		std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {
-			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex,
-				shaderManager->GetQuadVertexShader(false), "main"),
-			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eFragment,
-				shaderManager->GetHUDFragmentShader(), "main"),
-		};
-
-		pipeline = ctx->GetDevice().createGraphicsPipelineUnique(ctx->GetPipelineCache(),
-			vk::GraphicsPipelineCreateInfo(vk::PipelineCreateFlags(), stages,
-				&vertexInput, &inputAssembly, nullptr, &viewportState,
-				&rasterization, &multisample, &depthStencil, &colorBlend, &dynamicState,
-				*pipelineLayout, *renderPass, 0)).value;
-	}
-
-	ShaderManager *shaderManager = nullptr;
-	vk::Extent2D viewport;
-	vk::UniqueRenderPass renderPass;
-	std::vector<vk::UniqueFramebuffer> framebuffers;
-	vk::UniquePipeline pipeline;
-	vk::UniquePipelineLayout pipelineLayout;
-	vk::UniqueDescriptorSetLayout descSetLayout;
-	vk::UniqueSampler sampler;
-	std::unique_ptr<QuadBuffer> quadBuffer;
-	std::vector<vk::UniqueDescriptorSet> descriptorSets;
-	std::vector<vk::ImageView> hudViews;
-};
 
 class GBufferCompositePass
 {
@@ -1038,10 +639,21 @@ public:
 
 		quadBuffer = std::make_unique<QuadBuffer>();
 
-		vk::AttachmentDescription colorAttachment(vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
-			vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+		accumulationBuffers.clear();
+		accumulationViews.clear();
+		for (size_t i = 0; i < albedoViews.size(); ++i)
+		{
+			auto buf = std::make_unique<FramebufferAttachment>(ctx->GetPhysicalDevice(), ctx->GetDevice());
+			buf->Init(viewport.width, viewport.height, vk::Format::eR16G16B16A16Sfloat,
+				vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc);
+			accumulationViews.push_back(buf->GetImageView());
+			accumulationBuffers.push_back(std::move(buf));
+		}
+
+		vk::AttachmentDescription colorAttachment(vk::AttachmentDescriptionFlags(), vk::Format::eR16G16B16A16Sfloat, vk::SampleCountFlagBits::e1,
+			vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
 			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
-			vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
 		vk::AttachmentReference colorReference(0, vk::ImageLayout::eColorAttachmentOptimal);
 
 		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
@@ -1055,7 +667,7 @@ public:
 			colorAttachment, subpass, dependency));
 
 		framebuffers.clear();
-		for (auto &view : albedoViews) {
+		for (auto &view : accumulationViews) {
 			framebuffers.push_back(ctx->GetDevice().createFramebufferUnique(
 				vk::FramebufferCreateInfo(vk::FramebufferCreateFlags(), *renderPass, view, viewport.width, viewport.height, 1)));
 		}
@@ -1073,9 +685,23 @@ public:
 		framebuffers.clear();
 		renderPass.reset();
 		descriptorSets.clear();
+		accumulationViews.clear();
+		accumulationBuffers.clear();
 	}
 
 	bool IsInitialized() const { return (bool)pipeline; }
+
+	vk::ImageView GetAccumulationImageView(int index) const
+	{
+		if (index >= 0 && index < (int)accumulationViews.size()) return accumulationViews[index];
+		return {};
+	}
+	
+	FramebufferAttachment* GetAccumulationAttachment(int index) const
+	{
+		if (index >= 0 && index < (int)accumulationBuffers.size()) return accumulationBuffers[index].get();
+		return nullptr;
+	}
 
 	void Draw(vk::CommandBuffer cmdBuffer, int imageIndex, int viewMode)
 	{
@@ -1109,7 +735,8 @@ public:
 		};
 		ctx->GetDevice().updateDescriptorSets(writes, nullptr);
 
-		cmdBuffer.beginRenderPass(vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex], vk::Rect2D({0,0}, viewport)), vk::SubpassContents::eInline);
+		vk::ClearValue clearValue(vk::ClearColorValue(std::array<float,4>{0.f,0.f,0.f,1.f}));
+		cmdBuffer.beginRenderPass(vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex], vk::Rect2D({0,0}, viewport), clearValue), vk::SubpassContents::eInline);
 		cmdBuffer.setViewport(0, vk::Viewport(0.f, 0.f, (float)viewport.width, (float)viewport.height, 0.f, 1.f));
 		cmdBuffer.setScissor(0, vk::Rect2D({0,0}, viewport));
 		cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
@@ -1154,12 +781,185 @@ private:
 	std::unique_ptr<QuadBuffer> quadBuffer;
 	std::vector<vk::UniqueDescriptorSet> descriptorSets;
 	std::vector<vk::ImageView> albedoViews, normalViews, depthViews, materialViews, motionViews, ssaoViews, hudViews;
+	std::vector<vk::ImageView> accumulationViews;
+	std::vector<std::unique_ptr<FramebufferAttachment>> accumulationBuffers;
+};
+
+class FinalPass
+{
+public:
+	void Init(ShaderManager *shaderManager, vk::Extent2D viewport, const std::vector<vk::ImageView>& accumulationViews, const std::vector<vk::ImageView>& hudViews)
+	{
+		this->shaderManager = shaderManager;
+		this->viewport = viewport;
+		this->accumulationViews = accumulationViews;
+		this->hudViews = hudViews;
+
+		VulkanContext *ctx = VulkanContext::Instance();
+
+		std::vector<vk::DescriptorSetLayoutBinding> bindings = {
+			vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+			vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment),
+		};
+		descSetLayout = ctx->GetDevice().createDescriptorSetLayoutUnique(
+			vk::DescriptorSetLayoutCreateInfo(vk::DescriptorSetLayoutCreateFlags(), bindings));
+
+		vk::PushConstantRange pushConstant(vk::ShaderStageFlagBits::eFragment, 0, sizeof(int));
+		pipelineLayout = ctx->GetDevice().createPipelineLayoutUnique(
+			vk::PipelineLayoutCreateInfo(vk::PipelineLayoutCreateFlags(), *descSetLayout, pushConstant));
+
+		sampler = ctx->GetDevice().createSamplerUnique(
+			vk::SamplerCreateInfo(vk::SamplerCreateFlags(),
+				vk::Filter::eLinear, vk::Filter::eLinear,
+				vk::SamplerMipmapMode::eNearest,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				vk::SamplerAddressMode::eClampToEdge,
+				0.0f, false, 1.0f, false, vk::CompareOp::eNever,
+				0.0f, vk::LodClampNone, vk::BorderColor::eFloatOpaqueBlack));
+
+		quadBuffer = std::make_unique<QuadBuffer>();
+
+		finalBuffers.clear();
+		finalViews.clear();
+		for (size_t i = 0; i < accumulationViews.size(); ++i)
+		{
+			auto buf = std::make_unique<FramebufferAttachment>(ctx->GetPhysicalDevice(), ctx->GetDevice());
+			buf->Init(viewport.width, viewport.height, vk::Format::eR8G8B8A8Unorm,
+				vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc);
+			finalViews.push_back(buf->GetImageView());
+			finalBuffers.push_back(std::move(buf));
+		}
+
+		vk::AttachmentDescription colorAttachment(vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
+			vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
+			vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::AttachmentReference colorReference(0, vk::ImageLayout::eColorAttachmentOptimal);
+
+		vk::SubpassDescription subpass(vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
+			nullptr, colorReference, nullptr, nullptr);
+
+		vk::SubpassDependency dependency(VK_SUBPASS_EXTERNAL, 0,
+			vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eColorAttachmentOutput,
+			vk::AccessFlagBits::eColorAttachmentWrite, vk::AccessFlagBits::eColorAttachmentWrite);
+
+		renderPass = ctx->GetDevice().createRenderPassUnique(vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(),
+			colorAttachment, subpass, dependency));
+
+		framebuffers.clear();
+		for (auto &view : finalViews) {
+			framebuffers.push_back(ctx->GetDevice().createFramebufferUnique(
+				vk::FramebufferCreateInfo(vk::FramebufferCreateFlags(), *renderPass, view, viewport.width, viewport.height, 1)));
+		}
+
+		CreatePipeline();
+	}
+
+	void Term()
+	{
+		pipeline.reset();
+		pipelineLayout.reset();
+		descSetLayout.reset();
+		sampler.reset();
+		quadBuffer.reset();
+		framebuffers.clear();
+		renderPass.reset();
+		descriptorSets.clear();
+		finalViews.clear();
+		finalBuffers.clear();
+	}
+
+	bool IsInitialized() const { return (bool)pipeline; }
+
+	vk::ImageView GetFinalImageView(int index) const
+	{
+		if (index >= 0 && index < (int)finalViews.size()) return finalViews[index];
+		return {};
+	}
+	
+	FramebufferAttachment* GetFinalAttachment(int index) const
+	{
+		if (index >= 0 && index < (int)finalBuffers.size()) return finalBuffers[index].get();
+		return nullptr;
+	}
+
+	void Draw(vk::CommandBuffer cmdBuffer, int imageIndex, int viewMode)
+	{
+		if (imageIndex < 0 || imageIndex >= (int)framebuffers.size()) return;
+
+		VulkanContext *ctx = VulkanContext::Instance();
+		if ((int)descriptorSets.size() <= imageIndex) descriptorSets.resize(imageIndex + 1);
+
+		auto &descSet = descriptorSets[imageIndex];
+		if (!descSet) {
+			descSet = std::move(ctx->GetDevice().allocateDescriptorSetsUnique(
+				vk::DescriptorSetAllocateInfo(ctx->GetDescriptorPool(), *descSetLayout)).front());
+		}
+
+		vk::DescriptorImageInfo accInfo(*sampler, accumulationViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
+		vk::DescriptorImageInfo hudInfo(*sampler, hudViews[imageIndex], vk::ImageLayout::eShaderReadOnlyOptimal);
+
+		std::array<vk::WriteDescriptorSet, 2> writes = {
+			vk::WriteDescriptorSet(*descSet, 0, 0, vk::DescriptorType::eCombinedImageSampler, accInfo),
+			vk::WriteDescriptorSet(*descSet, 1, 0, vk::DescriptorType::eCombinedImageSampler, hudInfo),
+		};
+		ctx->GetDevice().updateDescriptorSets(writes, nullptr);
+
+		vk::ClearValue clearValue(vk::ClearColorValue(std::array<float,4>{0.f,0.f,0.f,1.f}));
+		cmdBuffer.beginRenderPass(vk::RenderPassBeginInfo(*renderPass, *framebuffers[imageIndex], vk::Rect2D({0,0}, viewport), clearValue), vk::SubpassContents::eInline);
+		cmdBuffer.setViewport(0, vk::Viewport(0.f, 0.f, (float)viewport.width, (float)viewport.height, 0.f, 1.f));
+		cmdBuffer.setScissor(0, vk::Rect2D({0,0}, viewport));
+		cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
+		cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descSet, nullptr);
+		cmdBuffer.pushConstants(*pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(int), &viewMode);
+		quadBuffer->Update(nullptr);
+		quadBuffer->Bind(cmdBuffer);
+		quadBuffer->Draw(cmdBuffer);
+		cmdBuffer.endRenderPass();
+	}
+
+private:
+	void CreatePipeline()
+	{
+		VulkanContext *ctx = VulkanContext::Instance();
+		vk::PipelineVertexInputStateCreateInfo vertexInput = GetQuadInputStateCreateInfo(true);
+		vk::PipelineInputAssemblyStateCreateInfo inputAssembly(vk::PipelineInputAssemblyStateCreateFlags(), vk::PrimitiveTopology::eTriangleStrip);
+		vk::PipelineViewportStateCreateInfo viewportState(vk::PipelineViewportStateCreateFlags(), 1, nullptr, 1, nullptr);
+		vk::PipelineRasterizationStateCreateInfo rasterization;
+		rasterization.lineWidth = 1.0f;
+		vk::PipelineMultisampleStateCreateInfo multisample;
+		vk::PipelineDepthStencilStateCreateInfo depthStencil;
+		vk::PipelineColorBlendAttachmentState blendAttachment(false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+		vk::PipelineColorBlendStateCreateInfo colorBlend(vk::PipelineColorBlendStateCreateFlags(), false, vk::LogicOp::eNoOp, blendAttachment, { { 1.f, 1.f, 1.f, 1.f } });
+		std::array<vk::DynamicState, 2> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+		vk::PipelineDynamicStateCreateInfo dynamicState(vk::PipelineDynamicStateCreateFlags(), dynamicStates);
+		std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {
+			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex, shaderManager->GetQuadVertexShader(false), "main"),
+			vk::PipelineShaderStageCreateInfo(vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eFragment, shaderManager->GetGBufferFinalFragmentShader(), "main"),
+		};
+		pipeline = ctx->GetDevice().createGraphicsPipelineUnique(ctx->GetPipelineCache(), vk::GraphicsPipelineCreateInfo(vk::PipelineCreateFlags(), stages, &vertexInput, &inputAssembly, nullptr, &viewportState, &rasterization, &multisample, &depthStencil, &colorBlend, &dynamicState, *pipelineLayout, *renderPass, 0)).value;
+	}
+
+	ShaderManager *shaderManager = nullptr;
+	vk::Extent2D viewport;
+	vk::UniqueRenderPass renderPass;
+	std::vector<vk::UniqueFramebuffer> framebuffers;
+	vk::UniquePipeline pipeline;
+	vk::UniquePipelineLayout pipelineLayout;
+	vk::UniqueDescriptorSetLayout descSetLayout;
+	vk::UniqueSampler sampler;
+	std::unique_ptr<QuadBuffer> quadBuffer;
+	std::vector<vk::UniqueDescriptorSet> descriptorSets;
+	std::vector<vk::ImageView> accumulationViews, hudViews;
+	std::vector<vk::ImageView> finalViews;
+	std::vector<std::unique_ptr<FramebufferAttachment>> finalBuffers;
 };
 
 class GBufferVulkanRenderer final : public BaseVulkanRenderer
 {
 public:
-	GBufferVulkanRenderer() : hudBlitPipeline(false) {}
+	GBufferVulkanRenderer() {}
 
 	bool Init() override
 	{
@@ -1177,12 +977,9 @@ public:
 			BaseInit(screenDrawer.GetRenderPass());
 
  		initSSAO();
- 		initDoF();
- 		initMaterial();
- 		initHUDComposite();
  		initComposite();
- 		hudBlitPipeline.Init(&shaderManager, screenDrawer.GetRenderPass(), 0);
- 		hudBlitDrawer.Init(&hudBlitPipeline);
+ 		initDoF();
+ 		initFinal();
 
 			return true;
 		} catch (const vk::SystemError& err) {
@@ -1196,11 +993,9 @@ public:
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Term");
 		GetContext()->WaitIdle();
 		ssaoPass.Term();
+		finalPass.Term();
 		dofPass.Term();
-		materialPass.Term();
-		hudCompositePass.Term();
 		compositePass.Term();
-		hudBlitPipeline.Term();
 		texCommandPool.Term();
 		screenDrawer.Term();
 		shaderManager.term();
@@ -1233,31 +1028,25 @@ public:
 		int imgIdx = screenDrawer.GetCurrentImageIndex();
 		FramebufferAttachment *depthAtt = screenDrawer.GetDepthAttachment();
 		FramebufferAttachment *normalAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_NORMAL_INDEX);
-		FramebufferAttachment *albedoAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_ALBEDO_INDEX);
-		FramebufferAttachment *materialAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_MATERIAL_INDEX);
 
 		// Initialisation lazy
 		if ((config::EnableSSAO || config::ShowSSAO) && !ssaoPass.IsInitialized()) initSSAO();
 		if (config::EnableDoF && !dofPass.IsInitialized()) initDoF();
 		else if (!config::EnableDoF && dofPass.IsInitialized()) dofPass.Term();
-		if (config::ShowMaterial && !materialPass.IsInitialized()) initMaterial();
 		if (!compositePass.IsInitialized()) initComposite();
+		if (!finalPass.IsInitialized()) initFinal();
 
 		bool doSSAO = (config::EnableSSAO || config::ShowSSAO) && ssaoPass.IsInitialized() && depthAtt && normalAtt;
-		bool doDoF  = config::EnableDoF && dofPass.IsInitialized() && depthAtt && albedoAtt;
-		bool doMaterial = config::ShowMaterial && materialPass.IsInitialized() && materialAtt;
-		bool doHUD = hudCompositePass.IsInitialized();
+		bool doDoF  = config::EnableDoF && dofPass.IsInitialized() && depthAtt && compositePass.GetAccumulationAttachment(imgIdx);
 
 		vk::CommandBuffer cmdBuf = screenDrawer.EndRenderPassOnly();
+		int viewMode = 0; // Final
 		if (cmdBuf)
 		{
-			if (doSSAO) ssaoPass.Draw(cmdBuf, imgIdx, depthAtt->GetImageView(), normalAtt->GetImageView(), config::ShowSSAO);
-			if (doDoF) dofPass.Draw(cmdBuf, imgIdx, albedoAtt->GetImageView(), depthAtt->GetImageView());
-			if (doMaterial) materialPass.Draw(cmdBuf, imgIdx);
-			if (doHUD) hudCompositePass.Draw(cmdBuf, imgIdx);
+			static const float scopeColor[4] = { 0.25f, 0.25f, 0.25f, 0.25f };
+			CommandBufferDebugScope _(cmdBuf, "GBuffer Render", scopeColor);
 
-			// Passe finale de composition et de sélection de vue debug
-			int viewMode = 0; // Final
+			// Sélection de la vue debug
 			if (config::ShowAlbedo) viewMode = 1;
 			else if (config::ShowNormals) viewMode = 2;
 			else if (config::ShowDepth) viewMode = 3;
@@ -1266,10 +1055,19 @@ public:
 			else if (config::ShowSSAO) viewMode = 6;
 			else if (config::ShowHUD) viewMode = 7;
 
+			if (doSSAO && (viewMode == 0 || viewMode == 6))
+				ssaoPass.Draw(cmdBuf, imgIdx, depthAtt->GetImageView(), normalAtt->GetImageView(), viewMode == 6);
+
 			compositePass.Draw(cmdBuf, imgIdx, viewMode);
+
+			if (doDoF && viewMode == 0)
+				dofPass.Draw(cmdBuf, imgIdx, compositePass.GetAccumulationImageView(imgIdx), depthAtt->GetImageView());
+
+			if (viewMode == 0 || viewMode == 7)
+				finalPass.Draw(cmdBuf, imgIdx, viewMode);
 		}
 
-		bool ret = screenDrawer.PresentFrame(0); // Toujours attachment 0 (Albedo) qui a reçu la composition
+		bool ret = screenDrawer.PresentFrame(viewMode == 0 || viewMode == 7 ? finalPass.GetFinalAttachment(imgIdx) : compositePass.GetAccumulationAttachment(imgIdx));
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present end (%s)", ret ? "success" : "skipped");
 		return ret;
 	}
@@ -1293,10 +1091,9 @@ protected:
 		};
 		screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
 		initSSAO();
-		initDoF();
-		initMaterial();
-		initHUDComposite();
 		initComposite();
+		initDoF();
+		initFinal();
 	}
 
 private:
@@ -1350,7 +1147,7 @@ private:
 		albedoImages.reserve(swapSize);
 		for (int i = 0; i < swapSize; ++i)
 		{
-			FramebufferAttachment *att = screenDrawer.GetColorAttachment(i, GBUFFER_ALBEDO_INDEX);
+			FramebufferAttachment *att = compositePass.GetAccumulationAttachment(i);
 			if (att)
 			{
 				albedoViews.push_back(att->GetImageView());
@@ -1365,55 +1162,7 @@ private:
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initDoF end");
 	}
 
-	void initMaterial()
-	{
-		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initMaterial start");
-		int swapSize = (int)screenDrawer.GetSwapChainCount();
-		std::vector<vk::ImageView> albedoViews;
-		std::vector<vk::ImageView> materialViews;
-		albedoViews.reserve(swapSize);
-		materialViews.reserve(swapSize);
-		for (int i = 0; i < swapSize; ++i)
-		{
-			FramebufferAttachment *albedo = screenDrawer.GetColorAttachment(i, GBUFFER_ALBEDO_INDEX);
-			FramebufferAttachment *mat    = screenDrawer.GetColorAttachment(i, GBUFFER_MATERIAL_INDEX);
-			if (albedo && mat)
-			{
-				albedoViews.push_back(albedo->GetImageView());
-				materialViews.push_back(mat->GetImageView());
-			}
-		}
-		if (!albedoViews.empty())
-			materialPass.Init(&shaderManager, viewport, albedoViews, materialViews);
-		else
-			ERROR_LOG(RENDERER, "GBufferVulkanRenderer::initMaterial: No views found!");
-		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initMaterial end");
-	}
 
-	void initHUDComposite()
-	{
-		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initHUDComposite start");
-		int swapSize = (int)screenDrawer.GetSwapChainCount();
-		std::vector<vk::ImageView> albedoViews;
-		std::vector<vk::ImageView> hudViews;
-		albedoViews.reserve(swapSize);
-		hudViews.reserve(swapSize);
-		for (int i = 0; i < swapSize; ++i)
-		{
-			FramebufferAttachment *albedo = screenDrawer.GetColorAttachment(i, GBUFFER_ALBEDO_INDEX);
-			FramebufferAttachment *hud    = screenDrawer.GetColorAttachment(i, GBUFFER_HUD_INDEX);
-			if (albedo && hud)
-			{
-				albedoViews.push_back(albedo->GetImageView());
-				hudViews.push_back(hud->GetImageView());
-			}
-		}
-		if (!albedoViews.empty())
-			hudCompositePass.Init(&shaderManager, viewport, albedoViews, hudViews);
-		else
-			ERROR_LOG(RENDERER, "GBufferVulkanRenderer::initHUDComposite: No views found!");
-		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initHUDComposite end");
-	}
 
 	void initComposite()
 	{
@@ -1433,15 +1182,29 @@ private:
 		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initComposite end");
 	}
 
+	void initFinal()
+	{
+		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initFinal start");
+		int swapSize = (int)screenDrawer.GetSwapChainCount();
+		std::vector<vk::ImageView> accumulationViews;
+		std::vector<vk::ImageView> hudViews;
+		accumulationViews.reserve(swapSize);
+		hudViews.reserve(swapSize);
+		for (int i = 0; i < swapSize; ++i)
+		{
+			accumulationViews.push_back(compositePass.GetAccumulationImageView(i));
+			hudViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_HUD_INDEX)->GetImageView());
+		}
+		finalPass.Init(&shaderManager, viewport, accumulationViews, hudViews);
+		DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initFinal end");
+	}
+
 	SamplerManager samplerManager;
 	ScreenDrawer screenDrawer;
 	SSAOPass ssaoPass;
 	DoFPass dofPass;
-	MaterialPass materialPass;
-	HUDCompositePass hudCompositePass;
 	GBufferCompositePass compositePass;
-	QuadDrawer hudBlitDrawer;
-	QuadPipeline hudBlitPipeline;
+	FinalPass finalPass;
 };
 
 void GBufferVulkanRenderer::ExportGBuffer()

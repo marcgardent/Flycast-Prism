@@ -1,14 +1,87 @@
 # G-Buffer Architecture
 
-This document provides a technical specification for the G-Buffer implementation in Flycast, specifically focusing on the structure and encoding of the exported OpenEXR files.
+This document provides a technical specification for the G-Buffer implementation in Flycast, specifically focusing on the deferred shading pipeline, post-processing chain, and the structure of the exported OpenEXR files.
 
 ## Overview
 
-The G-Buffer is part of the deferred rendering pipeline in the Vulkan renderer. It captures essential scene information in a single pass, which is then used for post-processing effects such as SSAO (Screen Space Ambient Occlusion), Depth of Field (DoF), and material visualization.
+The G-Buffer is part of a **modern Deferred Shading pipeline** in the Vulkan renderer. It captures essential scene information in a single geometry pass. All G-Buffer attachments are treated as **read-only** after the geometry pass; no post-process writes back into them (non-destructive principle).
 
 The G-Buffer can be exported to an OpenEXR file by pressing **ALT+9** during emulation.
 
-## OpenEXR File Structure
+## Rendering Pipeline
+
+The pipeline follows a strict 5-phase execution order within `GBufferVulkanRenderer::Present()`:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Phase A: Geometry Pass (G-Buffer Fill)                            │
+│  → Writes: Albedo, Normals, MaterialID, Motion, HUD, Depth        │
+│  → After this pass, ALL G-Buffer attachments become READ-ONLY      │
+└────────────────────────┬────────────────────────────────────────────┘
+                         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Phase B: SSAOPass (Screen-Space Ambient Occlusion)                │
+│  → Reads: Depth, Normals                                           │
+│  → Writes: ssaoTex (R8Unorm) — isolated, non-destructive           │
+└────────────────────────┬────────────────────────────────────────────┘
+                         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Phase C: CompositePass (Deferred Lighting)                        │
+│  → Reads: Albedo, Normals, Depth, MaterialID, Motion, ssaoTex, HUD│
+│  → Writes: Accumulation Buffer (R16G16B16A16Sfloat — HDR)          │
+│  → Formula: color = Albedo.rgb * SSAO                              │
+└────────────────────────┬────────────────────────────────────────────┘
+                         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Phase D: DoFPass (Depth of Field — Post-Processing)               │
+│  → Reads: Accumulation Buffer, Depth                               │
+│  → Writes: Accumulation Buffer (ping-pong via temp buffer)         │
+│  → Operates on the lit HDR image, not raw Albedo                   │
+└────────────────────────┬────────────────────────────────────────────┘
+                         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Phase E: FinalPass (Tonemapping + HUD Overlay)                    │
+│  → Reads: Accumulation Buffer (post-processed), HUD Buffer         │
+│  → Writes: Final output (R8G8B8A8Unorm → Swapchain)                │
+│  → HUD is composited here (unaffected by DoF)                      │
+│  → Tonemapping (Reinhard) can be enabled here                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Design Principles
+
+1. **G-Buffer Immutability**: Once the geometry pass completes, G-Buffer attachments (Albedo, Normals, Depth, etc.) are 100% read-only (`ShaderReadOnlyOptimal`). No post-process writes into them.
+2. **Dedicated Accumulation Buffer**: Lighting and global effects are computed and stored in a dedicated HDR buffer (`R16G16B16A16Sfloat`), separate from the raw G-Buffer data.
+3. **Strict Pass Separation**: Each pass has well-defined inputs and a single output. No implicit side effects.
+4. **Non-Destructive HUD**: The HUD is composited only in the final pass, ensuring it is never affected by DoF or other camera effects.
+
+## Passes Implementation
+
+### SSAOPass
+- **Shader**: `vulkan_ssao.frag`
+- **Input**: Depth attachment, Normal attachment
+- **Output**: `ssaoTex` (R8Unorm) — standalone AO factor
+- **Note**: Writes exclusively to its own buffer. The old destructive multiply-on-Albedo behavior has been removed.
+
+### CompositePass (Lighting Pass)
+- **Shader**: `vulkan_gbuffer_composite.frag`
+- **Input**: All G-Buffer attachments + ssaoTex
+- **Output**: Accumulation Buffer (`R16G16B16A16Sfloat`)
+- **Debug modes**: viewMode push constant selects between Final (0), Albedo (1), Normals (2), Depth (3), Material (4), Motion (5), SSAO (6), HUD (7)
+
+### DoFPass (Depth of Field)
+- **Shader**: `vulkan_dof.frag`
+- **Input**: Accumulation Buffer, Depth attachment
+- **Output**: Accumulation Buffer (via blit from temp buffer)
+- **Note**: Operates on the lit HDR image, not raw Albedo. Internal format is `R16G16B16A16Sfloat` to preserve HDR precision.
+
+### FinalPass (Tonemapping + HUD Overlay)
+- **Shader**: `vulkan_gbuffer_final.frag`
+- **Input**: Accumulation Buffer, HUD attachment
+- **Output**: Final image (`R8G8B8A8Unorm`) ready for swapchain presentation
+- **Note**: Only executed for `viewMode == 0` (Final) or `viewMode == 7` (HUD debug). Other debug views bypass this pass and present the Accumulation Buffer directly.
+
+## OpenEXR Export Structure
 
 The exported `.exr` file is a multi-channel image containing **15 channels**. All channels are stored as **16-bit half-precision floats** (FP16), even if their source data was integer or 32-bit float.
 
@@ -65,7 +138,11 @@ The exported `.exr` file is a multi-channel image containing **15 channels**. Al
 
 ### 7. HUD (`HUD.R/G/B/A`)
 *   **Format**: `eR8G8B8A8Unorm`.
-*   **Content**: Pixels identified as HUD (DepthMode >= 6). This attachment is composited over the final scene in the `HUDCompositePass`.
+*   **Content**: Pixels identified as HUD (DepthMode >= 6). This attachment is composited over the final scene in `FinalPass` (not in the G-Buffer pass).
+
+### 8. Accumulation Buffer (Internal)
+*   **Format**: `eR16G16B16A16Sfloat` (HDR).
+*   **Content**: Result of the Deferred Lighting pass. Contains lit scene color with SSAO applied. This buffer is NOT exported to EXR; it is an intermediate rendering target.
 
 ## Technical Notes
 
@@ -77,3 +154,24 @@ The exported `.exr` file is a multi-channel image containing **15 channels**. Al
     *   **ALT+0**: Return to final composite view.
     *   **ALT+9**: Export current G-Buffer to EXR.
 *   **Integration**: The G-Buffer layout is defined in `core/rend/vulkan/gbuffer/gbuffer_constants.h`.
+
+## Key Source Files
+
+| File | Role |
+| :--- | :--- |
+| `core/rend/vulkan/gbuffer/gbuffer_renderer.cpp` | Pipeline orchestration, all passes, `Present()` |
+| `core/rend/vulkan/gbuffer/gbuffer_constants.h` | G-Buffer attachment index constants |
+| `core/rend/vulkan/shaders/vulkan_gbuffer_composite.frag` | Deferred Lighting / Debug views shader |
+| `core/rend/vulkan/shaders/vulkan_gbuffer_final.frag` | Tonemapping + HUD overlay shader |
+| `core/rend/vulkan/shaders/vulkan_ssao.frag` | SSAO computation shader |
+| `core/rend/vulkan/shaders/vulkan_dof.frag` | Depth of Field shader |
+| `core/rend/vulkan/shaders/vulkan_main.frag` | Geometry pass (G-Buffer fill) |
+| `core/rend/vulkan/drawer.h` | `ScreenDrawer` class (G-Buffer framebuffer management) |
+| `core/rend/vulkan/shaders.h` / `shaders.cpp` | Shader compilation and management |
+| `resources/resources.cmake` | cmrc shader registration (required for embedding) |
+
+## Changelog
+
+- **2026-04-17**: Refonte complète vers un pipeline Deferred Shading non-destructif. Ajout de l'Accumulation Buffer HDR, de la FinalPass, isolation du SSAO, correction du DoF (opère sur l'image éclairée), séparation HUD en passe finale.
+- **2026-04-16**: Séparation du HUD dans un buffer G-Buffer dédié (Attachment 4).
+- **2026-04-17**: Ajout des buffers Motion (Attachment 3) et HUD (Attachment 4), export OpenEXR 15 canaux.

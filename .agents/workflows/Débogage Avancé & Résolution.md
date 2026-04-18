@@ -20,7 +20,7 @@ La phase de programmation active au sein de l'IDE.
 * Préparer des instructions de test claires pour la validation manuelle de l'utilisateur.
 
 **4. Tests et Débogage (Validation Manuelle)**
-* **Action IA :** Compiler le projet via la commande : `/home/marcgardent/.local/share/JetBrains/Toolbox/apps/clion/bin/cmake/linux/x64/bin/cmake --build /mnt/data/projects/cmake-build-debug --target flycast -j 6`
+* **Action IA :** Compiler le projet via clion
 * Demander à l'utilisateur de lancer le logiciel manuellement pour valider le comportement de la nouvelle feature.
 * **Action IA :** En cas de plantage ou de comportement inattendu, demander explicitement la stack trace ou les logs d'erreur, puis tracer la source de l'erreur via l'IDE.
 

@@ -897,7 +897,7 @@ vk::CommandBuffer ScreenDrawer::BeginRenderPass()
 	return currentCommandBuffer;
 }
 
-void ScreenDrawer::EndRenderPass()
+void ScreenDrawer::EndRenderPass(FramebufferAttachment* customPresentationTarget)
 {
 	// Cas 1 : render pass encore ouvert, on le ferme
 	if (renderPassStarted)
@@ -911,7 +911,8 @@ void ScreenDrawer::EndRenderPass()
 		return;
 	if (emulateFramebuffer)
 	{
-		scaleAndWriteFramebuffer(currentCommandBuffer, colorAttachments[GetCurrentImage()][0].get());
+		FramebufferAttachment* target = customPresentationTarget ? customPresentationTarget : colorAttachments[GetCurrentImage()][0].get();
+		scaleAndWriteFramebuffer(currentCommandBuffer, target);
 	}
 	else
 	{

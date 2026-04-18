@@ -164,3 +164,10 @@ vk::UniqueShaderModule ShaderManager::compileGBufferCompositeFragmentShader() {
   return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
                                  src.generate());
 }
+
+vk::UniqueShaderModule ShaderManager::compileGBufferFinalFragmentShader() {
+  VulkanSource src;
+  src.addSource(loadShaderSource("shaders/vulkan_gbuffer_final.frag"));
+  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
+                                 src.generate());
+}

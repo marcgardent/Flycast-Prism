@@ -1170,6 +1170,7 @@ void VulkanContext::term()
 	imageAcquiredSemaphores.clear();
 	renderCompleteSemaphores.clear();
 	drawFences.clear();
+	inFlightObjects.clear();
 	allocator.Term();
 #ifndef USE_SDL
 	surface.reset();

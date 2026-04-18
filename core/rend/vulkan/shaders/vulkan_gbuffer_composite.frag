@@ -49,9 +49,11 @@ void main() {
 		fragColor = hud;
 	} else { // Final Composite
 		vec3 color = albedo.rgb;
-		// SSAO est déjà multiplié dans l'albedo par SSAOPass si activé, 
-		// mais ici on a accès à ao brut si on veut refaire le calcul ou déboguer.
-		// Pour l'instant on affiche l'albedo qui contient déjà les effets de passes précédentes.
+		
+		// Apply SSAO directly here (non-destructive pipeline)
+		color *= ao;
+
+		// Combine HUD
 		color = mix(color, hud.rgb, hud.a);
 		fragColor = vec4(color, 1.0);
 	}

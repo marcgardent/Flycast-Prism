@@ -312,7 +312,7 @@ public:
 	}
 
 	vk::RenderPass GetRenderPass() const { return *renderPassClear; }
-	void EndRenderPass() override;
+	void EndRenderPass(FramebufferAttachment* customPresentationTarget = nullptr);
 	// Termine le render pass sans soumettre le command buffer.
 	// Retourne le command buffer pour y enregistrer des commandes supplementaires.
 	// Appeler EndRenderPass() ou PresentFrame() pour soumettre.
@@ -335,14 +335,14 @@ public:
 		if (attachmentIndex < 0 || attachmentIndex >= (int)colorAttachments[imageIndex].size()) return nullptr;
 		return colorAttachments[imageIndex][attachmentIndex].get();
 	}
-	bool PresentFrame(int attachmentIndex = 0)
+	bool PresentFrame(FramebufferAttachment* customPresentationTarget = nullptr)
 	{
-		EndRenderPass();
+		EndRenderPass(customPresentationTarget);
 		if (!frameRendered)
 			return false;
 		frameRendered = false;
-		GetContext()->PresentFrame(colorAttachments[GetCurrentImage()][attachmentIndex]->GetImage(),
-				colorAttachments[GetCurrentImage()][attachmentIndex]->GetImageView(), viewport, aspectRatio);
+		FramebufferAttachment* target = customPresentationTarget ? customPresentationTarget : colorAttachments[GetCurrentImage()][0].get();
+		GetContext()->PresentFrame(target->GetImage(), target->GetImageView(), viewport, aspectRatio);
 
 		return true;
 	}
