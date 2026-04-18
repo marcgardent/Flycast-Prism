@@ -14,37 +14,37 @@ The pipeline follows a strict 5-phase execution order within `GBufferVulkanRende
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Phase A: Geometry Pass (G-Buffer Fill)                            │
-│  → Writes: Albedo, Normals, MaterialID, Motion, HUD, Depth        │
-│  → After this pass, ALL G-Buffer attachments become READ-ONLY      │
+│  Phase A: Geometry Pass (G-Buffer Fill)                             │
+│  → Writes: Albedo, Normals, MaterialID, Motion, HUD, Depth          │
+│  → After this pass, ALL G-Buffer attachments become READ-ONLY       │
 └────────────────────────┬────────────────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Phase B: SSAOPass (Screen-Space Ambient Occlusion)                │
-│  → Reads: Depth, Normals                                           │
-│  → Writes: ssaoTex (R8Unorm) — isolated, non-destructive           │
+│  Phase B: SSAOPass (Screen-Space Ambient Occlusion)                 │
+│  → Reads: Depth, Normals                                            │
+│  → Writes: ssaoTex (R8Unorm) — isolated, non-destructive            │
 └────────────────────────┬────────────────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Phase C: CompositePass (Deferred Lighting)                        │
-│  → Reads: Albedo, Normals, Depth, MaterialID, Motion, ssaoTex, HUD│
-│  → Writes: Accumulation Buffer (R16G16B16A16Sfloat — HDR)          │
-│  → Formula: color = Albedo.rgb * SSAO                              │
+│  Phase C: CompositePass (Deferred Lighting)                         │
+│  → Reads: Albedo, Normals, Depth, MaterialID, Motion, ssaoTex, HUD  │
+│  → Writes: Accumulation Buffer (R16G16B16A16Sfloat — HDR)           │
+│  → Formula: color = Albedo.rgb * SSAO                               │
 └────────────────────────┬────────────────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Phase D: DoFPass (Depth of Field — Post-Processing)               │
-│  → Reads: Accumulation Buffer, Depth                               │
-│  → Writes: Accumulation Buffer (ping-pong via temp buffer)         │
-│  → Operates on the lit HDR image, not raw Albedo                   │
+│  Phase D: DoFPass (Depth of Field — Post-Processing)                │
+│  → Reads: Accumulation Buffer, Depth                                │
+│  → Writes: Accumulation Buffer (ping-pong via temp buffer)          │
+│  → Operates on the lit HDR image, not raw Albedo                    │
 └────────────────────────┬────────────────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Phase E: FinalPass (Tonemapping + HUD Overlay)                    │
-│  → Reads: Accumulation Buffer (post-processed), HUD Buffer         │
-│  → Writes: Final output (R8G8B8A8Unorm → Swapchain)                │
-│  → HUD is composited here (unaffected by DoF)                      │
-│  → Tonemapping (Reinhard) can be enabled here                      │
+│  Phase E: FinalPass (Tonemapping + HUD Overlay)                     │
+│  → Reads: Accumulation Buffer (post-processed), HUD Buffer          │
+│  → Writes: Final output (R8G8B8A8Unorm → Swapchain)                 │
+│  → HUD is composited here (unaffected by DoF)                       │
+│  → Tonemapping (Reinhard) can be enabled here                       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
