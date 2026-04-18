@@ -723,8 +723,7 @@ public:
             const std::vector<vk::ImageView> &depthViews,
             const std::vector<vk::ImageView> &materialViews,
             const std::vector<vk::ImageView> &motionViews,
-            const std::vector<vk::ImageView> &ssaoViews,
-            const std::vector<vk::ImageView> &hudViews) {
+            const std::vector<vk::ImageView> &ssaoViews) {
     this->shaderManager = shaderManager;
     this->viewport = viewport;
     this->albedoViews = albedoViews;
@@ -733,11 +732,10 @@ public:
     this->materialViews = materialViews;
     this->motionViews = motionViews;
     this->ssaoViews = ssaoViews;
-    this->hudViews = hudViews;
 
     VulkanContext *ctx = VulkanContext::Instance();
 
-    std::array<vk::DescriptorSetLayoutBinding, 7> bindings = {
+    std::array<vk::DescriptorSetLayoutBinding, 6> bindings = {
         vk::DescriptorSetLayoutBinding(
             0, vk::DescriptorType::eCombinedImageSampler, 1,
             vk::ShaderStageFlagBits::eFragment),
@@ -755,9 +753,6 @@ public:
             vk::ShaderStageFlagBits::eFragment),
         vk::DescriptorSetLayoutBinding(
             5, vk::DescriptorType::eCombinedImageSampler, 1,
-            vk::ShaderStageFlagBits::eFragment),
-        vk::DescriptorSetLayoutBinding(
-            6, vk::DescriptorType::eCombinedImageSampler, 1,
             vk::ShaderStageFlagBits::eFragment),
     };
     descSetLayout = ctx->GetDevice().createDescriptorSetLayoutUnique(
@@ -886,10 +881,8 @@ public:
                                        vk::ImageLayout::eShaderReadOnlyOptimal);
     vk::DescriptorImageInfo ssaoInfo(*sampler, ssaoViews[imageIndex],
                                      vk::ImageLayout::eShaderReadOnlyOptimal);
-    vk::DescriptorImageInfo hudInfo(*sampler, hudViews[imageIndex],
-                                    vk::ImageLayout::eShaderReadOnlyOptimal);
 
-    std::array<vk::WriteDescriptorSet, 7> writes = {
+    std::array<vk::WriteDescriptorSet, 6> writes = {
         vk::WriteDescriptorSet(*descSet, 0, 0,
                                vk::DescriptorType::eCombinedImageSampler,
                                albedoInfo),
@@ -908,8 +901,6 @@ public:
         vk::WriteDescriptorSet(*descSet, 5, 0,
                                vk::DescriptorType::eCombinedImageSampler,
                                ssaoInfo),
-        vk::WriteDescriptorSet(
-            *descSet, 6, 0, vk::DescriptorType::eCombinedImageSampler, hudInfo),
     };
     ctx->GetDevice().updateDescriptorSets(writes, nullptr);
 
@@ -992,7 +983,7 @@ private:
   std::unique_ptr<QuadBuffer> quadBuffer;
   std::vector<vk::UniqueDescriptorSet> descriptorSets;
   std::vector<vk::ImageView> albedoViews, normalViews, depthViews,
-      materialViews, motionViews, ssaoViews, hudViews;
+      materialViews, motionViews, ssaoViews;
   std::vector<vk::ImageView> accumulationViews;
   std::vector<std::unique_ptr<FramebufferAttachment>> accumulationBuffers;
 };
@@ -1445,7 +1436,7 @@ private:
     DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::init3DResolve start");
     int swapSize = (int)screenDrawer.GetSwapChainCount();
     std::vector<vk::ImageView> albedoViews, normalViews, depthViews,
-        materialViews, motionViews, ssaoViews, hudViews;
+        materialViews, motionViews, ssaoViews;
     for (int i = 0; i < swapSize; i++) {
       albedoViews.push_back(
           screenDrawer.GetColorAttachment(i, GBUFFER_ALBEDO_INDEX)
@@ -1463,12 +1454,9 @@ private:
       ssaoViews.push_back(ssaoPass.IsInitialized()
                               ? ssaoPass.GetSSAOImageView(i)
                               : vk::ImageView{});
-      hudViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_HUD_INDEX)
-                             ->GetImageView());
     }
     resolve3DPass.Init(&shaderManager, viewport, albedoViews, normalViews,
-                       depthViews, materialViews, motionViews, ssaoViews,
-                       hudViews);
+                       depthViews, materialViews, motionViews, ssaoViews);
     DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::init3DResolve end");
   }
 

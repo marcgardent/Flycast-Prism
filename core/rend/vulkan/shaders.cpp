@@ -151,12 +151,7 @@ vk::UniqueShaderModule ShaderManager::compileMaterialFragmentShader() {
                                  src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileHUDFragmentShader() {
-  VulkanSource src;
-  src.addSource(loadShaderSource("shaders/vulkan_hud_composite.frag"));
-  return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
-                                 src.generate());
-}
+
 
 vk::UniqueShaderModule ShaderManager::compileGBuffer3DResolveFragmentShader() {
   VulkanSource src;

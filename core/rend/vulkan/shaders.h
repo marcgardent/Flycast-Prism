@@ -175,12 +175,6 @@ public:
 			materialFragmentShader = compileMaterialFragmentShader();
 		return *materialFragmentShader;
 	}
-	vk::ShaderModule GetHUDFragmentShader()
-	{
-		if (!hudFragmentShader)
-			hudFragmentShader = compileHUDFragmentShader();
-		return *hudFragmentShader;
-	}
 	vk::ShaderModule GetGBuffer3DResolveFragmentShader()
 	{
 		if (!gbuffer3DResolveFragmentShader)
@@ -232,7 +226,6 @@ private:
 	vk::UniqueShaderModule compileSSAOFragmentShader();
 	vk::UniqueShaderModule compileDoFFragmentShader();
 	vk::UniqueShaderModule compileMaterialFragmentShader();
-	vk::UniqueShaderModule compileHUDFragmentShader();
 	vk::UniqueShaderModule compileGBuffer3DResolveFragmentShader();
 	vk::UniqueShaderModule compileGBufferHUDOverlayFragmentShader();
 

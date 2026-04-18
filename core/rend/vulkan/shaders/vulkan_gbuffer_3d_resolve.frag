@@ -10,7 +10,6 @@ layout (set = 0, binding = 2) uniform sampler2D depthTex;
 layout (set = 0, binding = 3) uniform usampler2D materialTex;
 layout (set = 0, binding = 4) uniform sampler2D motionTex;
 layout (set = 0, binding = 5) uniform sampler2D ssaoTex;
-layout (set = 0, binding = 6) uniform sampler2D hudTex;
 
 layout (push_constant) uniform PushConstants {
 	int viewMode; // 0: Final, 1: Albedo, 2: Normals, 3: Depth, 4: Material, 5: Motion, 6: SSAO, 7: HUD
@@ -31,7 +30,6 @@ void main() {
 	uint matID = texture(materialTex, inUV).r;
 	vec2 motion = texture(motionTex, inUV).xy;
 	float ao = texture(ssaoTex, inUV).r;
-	vec4 hud = texture(hudTex, inUV);
 
 	if (pc.viewMode == 1) { // Albedo
 		fragColor = vec4(albedo.rgb, 1.0);
@@ -45,16 +43,12 @@ void main() {
 		fragColor = vec4(motion, 0.5, 1.0);
 	} else if (pc.viewMode == 6) { // SSAO
 		fragColor = vec4(vec3(ao), 1.0);
-	} else if (pc.viewMode == 7) { // HUD
-		fragColor = hud;
 	} else { // 3D Resolve
 		vec3 color = albedo.rgb;
 		
 		// Apply SSAO directly here (non-destructive pipeline)
 		color *= ao;
 
-		// Combine HUD (note: might be better to move this entirely to HUD Overlay in the future, but preserving logic for now)
-		color = mix(color, hud.rgb, hud.a);
 		fragColor = vec4(color, 1.0);
 	}
 }

@@ -70,7 +70,6 @@ cmrc_add_resources(flycast-resources
 	core/rend/vulkan/shaders/vulkan_ssao.frag
 	core/rend/vulkan/shaders/vulkan_dof.frag
 	core/rend/vulkan/shaders/vulkan_material.frag
-	core/rend/vulkan/shaders/vulkan_hud_composite.frag
 	core/rend/vulkan/shaders/vulkan_gbuffer_3d_resolve.frag
 	core/rend/vulkan/shaders/vulkan_gbuffer_hud_overlay.frag
 	core/rend/vulkan/shaders/vulkan_n2_light.glsl
