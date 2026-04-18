@@ -43,6 +43,10 @@ extern "C" {
 #include <iomanip>
 #include <sstream>
 #include <random>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <cstring>
 
 class SSAOPass
 {
@@ -1227,6 +1231,7 @@ void GBufferVulkanRenderer::ExportGBuffer()
 	int imgIdx = screenDrawer.GetCurrentImageIndex();
 	INFO_LOG(RENDERER, "ExportGBuffer: Viewport %ux%u, image index %d", width, height, imgIdx);
 
+	// 1. Définition des sources de données
 	auto albedoAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_ALBEDO_INDEX);
 	auto normalAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_NORMAL_INDEX);
 	auto materialAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_MATERIAL_INDEX);
@@ -1236,302 +1241,225 @@ void GBufferVulkanRenderer::ExportGBuffer()
 	vk::Image ssaoImage = ssaoPass.IsInitialized() ? ssaoPass.GetSSAOImage(imgIdx) : vk::Image{};
 
 	if (!albedoAtt || !normalAtt || !depthAtt) {
-		ERROR_LOG(RENDERER, "ExportGBuffer: Missing attachments (A: %p, N: %p, D: %p)", albedoAtt, normalAtt, depthAtt);
+		ERROR_LOG(RENDERER, "ExportGBuffer: Missing critical attachments");
 		return;
 	}
 
-	// Les color attachments sont en eShaderReadOnlyOptimal et la depth en eDepthStencilReadOnlyOptimal
-	// après le render pass (défini dans drawer.cpp lignes 693 et 703).
 	vk::Format depthFmt = screenDrawer.GetDepthFormat();
-	INFO_LOG(RENDERER, "ExportGBuffer: Depth format: %s", vk::to_string(depthFmt).c_str());
 
-	// Allouer les staging buffers avant le command buffer
-	BufferData stageA(width * height * 4, vk::BufferUsageFlagBits::eTransferDst);
-	BufferData stageN(width * height * 8, vk::BufferUsageFlagBits::eTransferDst);
-	// La depth D32 = 4 bytes/pixel, D24S8 = 4 bytes/pixel
-	BufferData stageD(width * height * 4, vk::BufferUsageFlagBits::eTransferDst);
-	// Material : R8Uint = 1 byte/pixel ; SSAO : R8Unorm = 1 byte/pixel
-	std::unique_ptr<BufferData> stageMat = materialAtt
-		? std::make_unique<BufferData>(width * height * 1, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
-	std::unique_ptr<BufferData> stageSSAO = ssaoImage
-		? std::make_unique<BufferData>(width * height * 1, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
-	// Motion : R16G16F = 4 bytes/pixel
-	std::unique_ptr<BufferData> stageMotion = motionAtt
-		? std::make_unique<BufferData>(width * height * 4, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
-	// HUD : R8G8B8A8 = 4 bytes/pixel
-	std::unique_ptr<BufferData> stageHUD = hudAtt
-		? std::make_unique<BufferData>(width * height * 4, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
+	// 2. Allouer les staging buffers (Copie brute du GPU)
+	BufferData stageA(width * height * 4, vk::BufferUsageFlagBits::eTransferDst); // RGBA8
+	BufferData stageN(width * height * 8, vk::BufferUsageFlagBits::eTransferDst); // RGBA16F
+	BufferData stageD(width * height * 4, vk::BufferUsageFlagBits::eTransferDst); // D32F or D24S8
+	std::unique_ptr<BufferData> stageMat = materialAtt ? std::make_unique<BufferData>(width * height * 1, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
+	std::unique_ptr<BufferData> stageSSAO = ssaoImage ? std::make_unique<BufferData>(width * height * 1, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
+	std::unique_ptr<BufferData> stageMotion = motionAtt ? std::make_unique<BufferData>(width * height * 4, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
+	std::unique_ptr<BufferData> stageHUD = hudAtt ? std::make_unique<BufferData>(width * height * 4, vk::BufferUsageFlagBits::eTransferDst) : nullptr;
 
 	try {
-		// Un seul BeginFrame + un seul command buffer pour toutes les opérations GPU
 		texCommandPool.BeginFrame();
-
 		vk::CommandBuffer cmd = texCommandPool.Allocate(true);
-		if (!cmd) {
-			ERROR_LOG(RENDERER, "ExportGBuffer: Failed to allocate command buffer");
-			texCommandPool.EndFrame();
-			return;
-		}
 		cmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-			// --- Transition vers TransferSrcOptimal ---
-			INFO_LOG(RENDERER, "ExportGBuffer: Transitioning to TransferSrc...");
-			{
-				std::vector<vk::ImageMemoryBarrier> barriers;
-				barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
-					vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-					albedoAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
-					vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-					normalAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eDepthStencilAttachmentRead, vk::AccessFlagBits::eTransferRead,
-					vk::ImageLayout::eDepthStencilReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-					depthAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1)));
-				if (materialAtt)
-					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
-						vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						materialAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				if (ssaoImage)
-					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
-						vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						ssaoImage, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				if (motionAtt)
-					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
-						vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						motionAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				if (hudAtt)
-					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead, vk::AccessFlagBits::eTransferRead,
-						vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						hudAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				cmd.pipelineBarrier(vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eLateFragmentTests,
-					vk::PipelineStageFlagBits::eTransfer, {}, nullptr, nullptr, barriers);
-			}
+		// Transitions vers TransferSrc
+		std::vector<vk::ImageMemoryBarrier> barriers;
+		auto addBarrier = [&](vk::Image img, vk::ImageAspectFlags aspect, vk::ImageLayout oldLayout) {
+			if (img) barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eDepthStencilAttachmentRead, 
+				vk::AccessFlagBits::eTransferRead, oldLayout, vk::ImageLayout::eTransferSrcOptimal, 
+				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, img, vk::ImageSubresourceRange(aspect, 0, 1, 0, 1)));
+		};
 
-			// --- Copies image → staging buffers ---
-			INFO_LOG(RENDERER, "ExportGBuffer: Copying to staging buffers...");
-			{
-				vk::BufferImageCopy region(0, 0, 0, vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1), { 0, 0, 0 }, { width, height, 1 });
-				cmd.copyImageToBuffer(albedoAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageA.buffer.get(), region);
-				cmd.copyImageToBuffer(normalAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageN.buffer.get(), region);
-				if (materialAtt && stageMat)
-					cmd.copyImageToBuffer(materialAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageMat->buffer.get(), region);
-				if (ssaoImage && stageSSAO)
-					cmd.copyImageToBuffer(ssaoImage, vk::ImageLayout::eTransferSrcOptimal, stageSSAO->buffer.get(), region);
-				if (motionAtt && stageMotion)
-					cmd.copyImageToBuffer(motionAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageMotion->buffer.get(), region);
-				if (hudAtt && stageHUD)
-					cmd.copyImageToBuffer(hudAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageHUD->buffer.get(), region);
+		addBarrier(albedoAtt->GetImage(), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eShaderReadOnlyOptimal);
+		addBarrier(normalAtt->GetImage(), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eShaderReadOnlyOptimal);
+		addBarrier(depthAtt->GetImage(), vk::ImageAspectFlagBits::eDepth, vk::ImageLayout::eDepthStencilReadOnlyOptimal);
+		if (materialAtt) addBarrier(materialAtt->GetImage(), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eShaderReadOnlyOptimal);
+		if (ssaoImage) addBarrier(ssaoImage, vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eShaderReadOnlyOptimal);
+		if (motionAtt) addBarrier(motionAtt->GetImage(), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eShaderReadOnlyOptimal);
+		if (hudAtt) addBarrier(hudAtt->GetImage(), vk::ImageAspectFlagBits::eColor, vk::ImageLayout::eShaderReadOnlyOptimal);
 
-				vk::BufferImageCopy dRegion(0, 0, 0, vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eDepth, 0, 0, 1), { 0, 0, 0 }, { width, height, 1 });
-				cmd.copyImageToBuffer(depthAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageD.buffer.get(), dRegion);
-			}
+		cmd.pipelineBarrier(vk::PipelineStageFlagBits::eAllGraphics, vk::PipelineStageFlagBits::eTransfer, {}, nullptr, nullptr, barriers);
 
-		// --- Transition retour vers les layouts originaux ---
-		INFO_LOG(RENDERER, "ExportGBuffer: Transitioning back to original layouts...");
-		{
-			std::vector<vk::ImageMemoryBarrier> barriers;
-			barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eShaderRead,
-				vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				albedoAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-			barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eShaderRead,
-				vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				normalAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eDepthStencilAttachmentRead,
-					vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eDepthStencilReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-					depthAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1)));
-				if (materialAtt)
-					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eShaderRead,
-						vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						materialAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				if (ssaoImage)
-					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eShaderRead,
-						vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						ssaoImage, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				if (motionAtt)
-					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eShaderRead,
-						vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						motionAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				if (hudAtt)
-					barriers.push_back(vk::ImageMemoryBarrier(vk::AccessFlagBits::eTransferRead, vk::AccessFlagBits::eShaderRead,
-						vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						hudAtt->GetImage(), vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1)));
-				cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-					vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eLateFragmentTests, {}, nullptr, nullptr, barriers);
-			}
+		// Copies Image -> Buffer
+		vk::BufferImageCopy region(0, 0, 0, vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1), { 0, 0, 0 }, { width, height, 1 });
+		cmd.copyImageToBuffer(albedoAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageA.buffer.get(), region);
+		cmd.copyImageToBuffer(normalAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageN.buffer.get(), region);
+		if (stageMat) cmd.copyImageToBuffer(materialAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageMat->buffer.get(), region);
+		if (stageSSAO) cmd.copyImageToBuffer(ssaoImage, vk::ImageLayout::eTransferSrcOptimal, stageSSAO->buffer.get(), region);
+		if (stageMotion) cmd.copyImageToBuffer(motionAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageMotion->buffer.get(), region);
+		if (stageHUD) cmd.copyImageToBuffer(hudAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageHUD->buffer.get(), region);
+
+		vk::BufferImageCopy dRegion(0, 0, 0, vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eDepth, 0, 0, 1), { 0, 0, 0 }, { width, height, 1 });
+		cmd.copyImageToBuffer(depthAtt->GetImage(), vk::ImageLayout::eTransferSrcOptimal, stageD.buffer.get(), dRegion);
+
+		// Transition retour
+		for (auto &b : barriers) { std::swap(b.oldLayout, b.newLayout); std::swap(b.srcAccessMask, b.dstAccessMask); }
+		cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eAllGraphics, {}, nullptr, nullptr, barriers);
 
 		cmd.end();
-
-		// Soumettre et attendre la fin de l'exécution GPU avant de lire les staging buffers
 		texCommandPool.EndFrameAndWait();
-		INFO_LOG(RENDERER, "ExportGBuffer: GPU work done.");
 
-		INFO_LOG(RENDERER, "ExportGBuffer: Processing data on CPU...");
+		// 3. Préparation des canaux EXR (Mapping & Tri)
+		struct ChannelData {
+			std::string name;
+			std::vector<float> dataFloat;
+			std::vector<u32> dataUint;
+			std::vector<u16> dataHalf;
+			int pixelType; // TINYEXR_PIXELTYPE_*
+		};
+		std::vector<ChannelData> channels;
 
-		std::vector<float> r(width * height), g(width * height), b(width * height);
-		std::vector<float> nx(width * height), ny(width * height), nz(width * height);
-		std::vector<float> depth(width * height);
-		std::vector<float> matF(width * height, 0.f);
-		std::vector<float> aoF(width * height, 1.f);
-		std::vector<float> motX(width * height, 0.5f), motY(width * height, 0.5f);
-		std::vector<float> hr(width * height, 0.f), hg(width * height, 0.f), hb(width * height, 0.f), ha(width * height, 0.f);
-
+		// --- Extraction Albedo (R, G, B, A) ---
 		u8 *ptrA = (u8 *)stageA.MapMemory();
 		if (ptrA) {
+			channels.push_back({"R", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
+			channels.push_back({"G", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
+			channels.push_back({"B", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
+			channels.push_back({"A", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
 			for (u32 i = 0; i < width * height; ++i) {
-				r[i] = ptrA[i * 4 + 0] / 255.0f;
-				g[i] = ptrA[i * 4 + 1] / 255.0f;
-				b[i] = ptrA[i * 4 + 2] / 255.0f;
+				channels[channels.size()-4].dataFloat[i] = ptrA[i*4+0]/255.f;
+				channels[channels.size()-3].dataFloat[i] = ptrA[i*4+1]/255.f;
+				channels[channels.size()-2].dataFloat[i] = ptrA[i*4+2]/255.f;
+				channels[channels.size()-1].dataFloat[i] = ptrA[i*4+3]/255.f;
 			}
 			stageA.UnmapMemory();
 		}
 
+		// --- Extraction Normales (Pass-through Half) ---
 		u16 *ptrN = (u16 *)stageN.MapMemory();
 		if (ptrN) {
-			auto h2f = [](u16 h) {
-				u32 sign = (h >> 15) & 1; u32 exp = (h >> 10) & 0x1f; u32 mant = h & 0x3ff;
-				if (exp == 0) return (sign ? -1.0f : 1.0f) * std::pow(2.0f, -14.0f) * (mant / 1024.0f);
-				if (exp == 31) return 0.0f;
-				return (sign ? -1.0f : 1.0f) * std::pow(2.0f, (float)exp - 15.0f) * (1.0f + mant / 1024.0f);
-			};
+			channels.push_back({"Normal.X", {}, {}, std::vector<u16>(width * height), TINYEXR_PIXELTYPE_HALF});
+			channels.push_back({"Normal.Y", {}, {}, std::vector<u16>(width * height), TINYEXR_PIXELTYPE_HALF});
+			channels.push_back({"Normal.Z", {}, {}, std::vector<u16>(width * height), TINYEXR_PIXELTYPE_HALF});
 			for (u32 i = 0; i < width * height; ++i) {
-				nx[i] = h2f(ptrN[i * 4 + 0]);
-				ny[i] = h2f(ptrN[i * 4 + 1]);
-				nz[i] = h2f(ptrN[i * 4 + 2]);
+				channels[channels.size()-3].dataHalf[i] = ptrN[i*4+0];
+				channels[channels.size()-2].dataHalf[i] = ptrN[i*4+1];
+				channels[channels.size()-1].dataHalf[i] = ptrN[i*4+2];
 			}
 			stageN.UnmapMemory();
 		}
 
+		// --- Extraction Depth (Pass-through if D32F) ---
 		void *ptrD = stageD.MapMemory();
 		if (ptrD) {
-			if (depthFmt == vk::Format::eD24UnormS8Uint) {
-				u32 *src = (u32 *)ptrD;
-				for (u32 i = 0; i < width * height; ++i) depth[i] = (src[i] & 0xFFFFFF) / 16777215.0f;
+			channels.push_back({"Depth.Z", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
+			// On accepte D32F et D32F_S8 (Vulkan compacte l'aspect depth en 32-bit float lors de la copie)
+			if (depthFmt == vk::Format::eD32Sfloat || depthFmt == vk::Format::eD32SfloatS8Uint) {
+				memcpy(channels.back().dataFloat.data(), ptrD, width * height * 4);
 			} else {
-				float *src = (float *)ptrD;
-				for (u32 i = 0; i < width * height; ++i) depth[i] = src[i];
+				// Cas D24_S8 ou autre format entier
+				u32 *src = (u32 *)ptrD;
+				for (u32 i = 0; i < width * height; ++i) channels.back().dataFloat[i] = (src[i] & 0xFFFFFF) / 16777215.0f;
 			}
 			stageD.UnmapMemory();
 		}
 
+		// --- Extraction Material ID (UINT) ---
 		if (stageMat) {
 			u8 *ptrM = (u8 *)stageMat->MapMemory();
 			if (ptrM) {
-				for (u32 i = 0; i < width * height; ++i)
-					matF[i] = ptrM[i] / 255.0f;
+				channels.push_back({"Material.ID", {}, std::vector<u32>(width * height), {}, TINYEXR_PIXELTYPE_UINT});
+				for (u32 i = 0; i < width * height; ++i) channels.back().dataUint[i] = (u32)ptrM[i];
 				stageMat->UnmapMemory();
 			}
 		}
 
+		// --- Extraction SSAO ---
 		if (stageSSAO) {
 			u8 *ptrS = (u8 *)stageSSAO->MapMemory();
 			if (ptrS) {
-				for (u32 i = 0; i < width * height; ++i)
-					aoF[i] = ptrS[i] / 255.0f;
+				channels.push_back({"SSAO.AO", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
+				for (u32 i = 0; i < width * height; ++i) channels.back().dataFloat[i] = ptrS[i]/255.f;
 				stageSSAO->UnmapMemory();
 			}
 		}
 
+		// --- Extraction Motion (Pass-through Half) ---
 		if (stageMotion) {
-			u16 *ptrM = (u16 *)stageMotion->MapMemory();
-			if (ptrM) {
-				auto h2f = [](u16 h) {
-					u32 sign = (h >> 15) & 1; u32 exp = (h >> 10) & 0x1f; u32 mant = h & 0x3ff;
-					if (exp == 0) return (sign ? -1.0f : 1.0f) * std::pow(2.0f, -14.0f) * (mant / 1024.0f);
-					if (exp == 31) return 0.0f;
-					return (sign ? -1.0f : 1.0f) * std::pow(2.0f, (float)exp - 15.0f) * (1.0f + mant / 1024.0f);
-				};
+			u16 *ptrMo = (u16 *)stageMotion->MapMemory();
+			if (ptrMo) {
+				channels.push_back({"Motion.X", {}, {}, std::vector<u16>(width * height), TINYEXR_PIXELTYPE_HALF});
+				channels.push_back({"Motion.Y", {}, {}, std::vector<u16>(width * height), TINYEXR_PIXELTYPE_HALF});
 				for (u32 i = 0; i < width * height; ++i) {
-					motX[i] = h2f(ptrM[i * 2 + 0]);
-					motY[i] = h2f(ptrM[i * 2 + 1]);
+					channels[channels.size()-2].dataHalf[i] = ptrMo[i*2+0];
+					channels[channels.size()-1].dataHalf[i] = ptrMo[i*2+1];
 				}
 				stageMotion->UnmapMemory();
 			}
 		}
 
+		// --- Extraction HUD ---
 		if (stageHUD) {
 			u8 *ptrH = (u8 *)stageHUD->MapMemory();
 			if (ptrH) {
+				channels.push_back({"HUD.R", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
+				channels.push_back({"HUD.G", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
+				channels.push_back({"HUD.B", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
+				channels.push_back({"HUD.A", std::vector<float>(width * height), {}, {}, TINYEXR_PIXELTYPE_FLOAT});
 				for (u32 i = 0; i < width * height; ++i) {
-					hr[i] = ptrH[i * 4 + 0] / 255.0f;
-					hg[i] = ptrH[i * 4 + 1] / 255.0f;
-					hb[i] = ptrH[i * 4 + 2] / 255.0f;
-					ha[i] = ptrH[i * 4 + 3] / 255.0f;
+					channels[channels.size()-4].dataFloat[i] = ptrH[i*4+0]/255.f;
+					channels[channels.size()-3].dataFloat[i] = ptrH[i*4+1]/255.f;
+					channels[channels.size()-2].dataFloat[i] = ptrH[i*4+2]/255.f;
+					channels[channels.size()-1].dataFloat[i] = ptrH[i*4+3]/255.f;
 				}
 				stageHUD->UnmapMemory();
 			}
 		}
 
-		INFO_LOG(RENDERER, "ExportGBuffer: Data conversion done. Initializing EXR...");
+		// 4. TRI ALPHABÉTIQUE (Crucial pour TinyEXR)
+		std::sort(channels.begin(), channels.end(), [](const ChannelData& a, const ChannelData& b) {
+			return a.name < b.name;
+		});
 
+		// 5. Configuration finale TinyEXR
 		EXRHeader header;
 		InitEXRHeader(&header);
 		EXRImage image;
 		InitEXRImage(&image);
 
-		// Canaux EXR : Albedo RGB, Normal XYZ, Depth, Material, SSAO, Motion XY, HUD RGBA
-		const int numChannels = 15;
-		const char *channel_names[] = {
-			"Albedo.R", "Albedo.G", "Albedo.B",
-			"Normal.X", "Normal.Y", "Normal.Z",
-			"Depth.Z",
-			"Material.ID",
-			"SSAO.AO",
-			"Motion.X", "Motion.Y",
-			"HUD.R", "HUD.G", "HUD.B", "HUD.A"
-		};
-		float* image_ptr[numChannels];
-		image_ptr[0] = r.data(); image_ptr[1] = g.data(); image_ptr[2] = b.data();
-		image_ptr[3] = nx.data(); image_ptr[4] = ny.data(); image_ptr[5] = nz.data();
-		image_ptr[6] = depth.data();
-		image_ptr[7] = matF.data();
-		image_ptr[8] = aoF.data();
-		image_ptr[9] = motX.data(); image_ptr[10] = motY.data();
-		image_ptr[11] = hr.data(); image_ptr[12] = hg.data(); image_ptr[13] = hb.data(); image_ptr[14] = ha.data();
+		header.num_channels = (int)channels.size();
+		header.channels = (EXRChannelInfo *)malloc(sizeof(EXRChannelInfo) * header.num_channels);
+		header.pixel_types = (int *)malloc(sizeof(int) * header.num_channels);
+		header.requested_pixel_types = (int *)malloc(sizeof(int) * header.num_channels);
 
-		image.num_channels = numChannels;
-		image.images = (unsigned char **)image_ptr;
+		unsigned char* image_ptr[64]; // Max 64 channels
+		for (int i = 0; i < header.num_channels; i++) {
+			strncpy(header.channels[i].name, channels[i].name.c_str(), 255);
+			header.channels[i].name[255] = '\0';
+			header.pixel_types[i] = channels[i].pixelType;
+			// On préserve le type original (FLOAT 32 ou HALF 16) pour éviter les pertes de précision en Deep Learning
+			header.requested_pixel_types[i] = channels[i].pixelType;
+			
+			if (channels[i].pixelType == TINYEXR_PIXELTYPE_FLOAT) image_ptr[i] = (unsigned char*)channels[i].dataFloat.data();
+			else if (channels[i].pixelType == TINYEXR_PIXELTYPE_UINT) image_ptr[i] = (unsigned char*)channels[i].dataUint.data();
+			else image_ptr[i] = (unsigned char*)channels[i].dataHalf.data();
+		}
+
+		image.num_channels = header.num_channels;
+		image.images = image_ptr;
 		image.width = width;
 		image.height = height;
 
-		header.num_channels = numChannels;
-		header.channels = (EXRChannelInfo *)malloc(sizeof(EXRChannelInfo) * numChannels);
-		header.pixel_types = (int *)malloc(sizeof(int) * numChannels);
-		header.requested_pixel_types = (int *)malloc(sizeof(int) * numChannels);
-		for (int i = 0; i < numChannels; i++) {
-			strncpy(header.channels[i].name, channel_names[i], 255);
-			header.channels[i].name[255] = '\0';
-			header.pixel_types[i] = TINYEXR_PIXELTYPE_FLOAT;
-			header.requested_pixel_types[i] = TINYEXR_PIXELTYPE_HALF;
-			INFO_LOG(RENDERER, "ExportGBuffer: Channel %d: %s", i, channel_names[i]);
-		}
-
+		// Sauvegarde
 		auto t = std::time(nullptr);
 		auto tm = *std::localtime(&t);
 		std::ostringstream oss;
 		oss << "gbuffer_" << std::put_time(&tm, "%Y%m%d_%H%M%S") << ".exr";
-		std::string filename = oss.str();
-		std::string fullPath = hostfs::getScreenshotsPath() + "/" + filename;
-
-		INFO_LOG(RENDERER, "ExportGBuffer: Saving EXR to %s", fullPath.c_str());
+		std::string fullPath = hostfs::getScreenshotsPath() + "/" + oss.str();
 
 		const char *err = nullptr;
-		int ret = SaveEXRImageToFile(&image, &header, fullPath.c_str(), &err);
-		if (ret != TINYEXR_SUCCESS) {
+		if (SaveEXRImageToFile(&image, &header, fullPath.c_str(), &err) != TINYEXR_SUCCESS) {
 			ERROR_LOG(RENDERER, "SaveEXR failed: %s", err);
 			if (err) FreeEXRErrorMessage(err);
 		} else {
-			NOTICE_LOG(RENDERER, "G-Buffer exported to %s", fullPath.c_str());
+			NOTICE_LOG(RENDERER, "G-Buffer exported to %s (%d channels)", fullPath.c_str(), header.num_channels);
 		}
+
 		free(header.channels);
 		free(header.pixel_types);
 		free(header.requested_pixel_types);
 	} catch (const std::exception& e) {
-		ERROR_LOG(RENDERER, "ExportGBuffer: Exception caught: %s", e.what());
-	} catch (...) {
-		ERROR_LOG(RENDERER, "ExportGBuffer: Unknown exception caught");
+		ERROR_LOG(RENDERER, "ExportGBuffer exception: %s", e.what());
 	}
-
-	INFO_LOG(RENDERER, "ExportGBuffer finished");
 }
 
 Renderer* rend_GBufferVulkan()
