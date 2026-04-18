@@ -1,9 +1,6 @@
 precision highp float;
 precision highp int;
 
-// Les déclarations "out" (FragColor, NormalColor, MaterialColor, MotionColor, HUDColor)
-// sont injectées automatiquement par le moteur. Ne pas les redéclarer ici.
-
 void main()
 {
 	#if pp_ClipInside == 1
@@ -102,53 +99,49 @@ discard;
 
 	#if GBUFFER == 1
 	gl_FragDepth = log_z;
-
-	// Initialisation par défaut pour éviter des restes de mémoire vidéo
-	FragColor = vec4(0.0);
-	NormalColor = vec4(0.5, 0.5, 0.5, 1.0);
-	MaterialColor = 0u;
-	MotionColor = vec2(0.5, 0.5);
-	HUDColor = vec4(0.0);
-
-	// Calcul de la normale
+	// Normale geometrique + interpolee si disponible
 	vec3 geoNormal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
 	vec3 N = (length(vtx_normal) > 0.001) ? normalize(vtx_normal) : geoNormal;
 
-	// Séparation selon le flag isHUD
+	FragColor = color;
+	NormalColor = vec4(N * 0.5 + 0.5, 1.0);
+
+	// Material ID encode sur 8 bits
+	// Bit 7 : Presence (Toujours 1 pour la geometrie), Bits 6-4 : list_type, Bit 3 : texture, Bit 2 : gouraud, Bit 1 : bumpmap, Bit 0 : fog/palette
+	uint matID = 0u;
+	matID |= (1u << 7); // Bit de presence obligatoire
+
+	#if cp_AlphaTest == 1
+		matID |= (4u << 4);  // ListType_Punch_Through = 4
+	#elif IS_TRANSLUCENT == 1
+		matID |= (2u << 4);  // ListType_Translucent = 2
+	#endif
+
+	#if pp_Texture == 1
+		matID |= (1u << 3);
+	#endif
+	#if pp_Gouraud == 1
+		matID |= (1u << 2);
+	#endif
+	#if pp_BumpMap == 1
+		matID |= (1u << 1);
+	#endif
+	#if pp_FogCtrl == 0 || pp_FogCtrl == 1
+		matID |= 1u;
+	#endif
+	MaterialColor = matID;
+
+	// Motion buffer : velocite per-poly encodee [0,1]
+	MotionColor = pushConstants.velocity * 0.5 + 0.5;
+
+	// HUD Separation
 	if (pushConstants.isHUD > 0.0) {
-		// Envoi vers le buffer HUD dédié
-		HUDColor = vec4(color.rgb, 1.0);
+		HUDColor = color;
+		FragColor = vec4(0.0, 0.0, 0.0, 0.0);
 	} else {
-		// Envoi vers les buffers classiques du monde 3D
-		FragColor = color;
-		NormalColor = vec4(N * 0.5 + 0.5, 1.0);
-		MotionColor = pushConstants.velocity.xy * 0.5 + 0.5;
-
-		// Encodage du Material ID
-		uint matID = 0u;
-		matID |= (1u << 7); // Présence
-		#if cp_AlphaTest == 1
-			matID |= (4u << 4);
-		#elif IS_TRANSLUCENT == 1
-			matID |= (2u << 4);
-		#endif
-		#if pp_Texture == 1
-			matID |= (1u << 3);
-		#endif
-		#if pp_Gouraud == 1
-			matID |= (1u << 2);
-		#endif
-		#if pp_BumpMap == 1
-			matID |= (1u << 1);
-		#endif
-		#if pp_FogCtrl == 0 || pp_FogCtrl == 1
-			matID |= 1u;
-		#endif
-		MaterialColor = matID;
+		HUDColor = vec4(0.0);
 	}
-
 	#else
-	// Mode classique (non G-Buffer)
 	#if DITHERING == 1
 	{
 		float ditherTable[16] = float[](
@@ -165,3 +158,4 @@ discard;
 	FragColor = color;
 	#endif
 }
+
