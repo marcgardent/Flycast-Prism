@@ -200,12 +200,14 @@ public:
 					vk::DescriptorSetLayoutCreateInfo(vk::DescriptorSetLayoutCreateFlags(), perPolyBindings));
 			std::array<vk::DescriptorSetLayout, 2> layouts = { *perFrameLayout, *perPolyLayout };
 			// Push constant layout (std430):
-			// offset  0 : vec4  clipTest       (16 bytes)
-			// offset 16 : float trilinearAlpha (4 bytes)
-			// offset 20 : float palette_index  (4 bytes)
-			// offset 24 : vec2  velocity        (8 bytes)
-			// total = 32 bytes — fragment only
-			vk::PushConstantRange pushConstant(vk::ShaderStageFlagBits::eFragment, 0, 32);
+			// offset  0 : float isHUD          (4 bytes)
+			// offset  4 : float padding[3]     (12 bytes)
+			// offset 16 : vec4  clipTest       (16 bytes)
+			// offset 32 : float trilinearAlpha (4 bytes)
+			// offset 36 : float palette_index  (4 bytes)
+			// offset 40 : vec2  velocity        (8 bytes)
+			// total = 48 bytes — fragment only
+			vk::PushConstantRange pushConstant(vk::ShaderStageFlagBits::eFragment, 0, 48);
 			pipelineLayout = GetContext()->GetDevice().createPipelineLayoutUnique(
 					vk::PipelineLayoutCreateInfo(vk::PipelineLayoutCreateFlags(), layouts, pushConstant));
 		}

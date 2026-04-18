@@ -211,9 +211,11 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 
 	if (tileClip == TileClipping::Inside || trilinearAlpha != 1.f || gpuPalette != 0 || config::ShowMotion)
 	{
-		// Push constant layout must match vulkan_top.frag pushBlock (std430, 32 bytes):
-		// [0-3]=clipTest, [4]=trilinear, [5]=palette, [6-7]=velocity
-		const std::array<float, 8> pushConstants = {
+		// Push constant layout must match vulkan_top.frag pushBlock (std430, 48 bytes):
+		// [0]=isHUD, [1-3]=padding, [4-7]=clipTest, [8]=trilinear, [9]=palette, [10-11]=velocity
+		const std::array<float, 12> pushConstants = {
+				(poly.isp.DepthMode >= 6) ? 1.0f : 0.0f, // isHUD
+				0.f, 0.f, 0.f,                           // padding
 				(float)scissorRect.offset.x,
 				(float)scissorRect.offset.y,
 				(float)scissorRect.offset.x + (float)scissorRect.extent.width,
@@ -350,7 +352,7 @@ void Drawer::DrawModVols(const vk::CommandBuffer& cmdBuffer, int first, int coun
 	cmdBuffer.bindVertexBuffers(0, curMainBuffer, {0});
 	SetTileClip(cmdBuffer, 0, scissorRect);
 
-	const std::array<float, 8> pushConstants = { 1 - FPU_SHAD_SCALE.scale_factor / 256.f, 0, 0, 0, 0, 0, 0, 0 };
+	const std::array<float, 12> pushConstants = { 1 - FPU_SHAD_SCALE.scale_factor / 256.f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
 
 	pipeline = pipelineManager->GetModifierVolumePipeline(ModVolMode::Final, 0, false);
@@ -471,7 +473,7 @@ bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 	cmdBuffer.bindIndexBuffer(curMainBuffer, offsets.indexOffset, vk::IndexType::eUint32);
 
 	// Initialize push constants (8 floats: clipTest, trilinear, palette, velocity)
-	const std::array<float, 8> pushConstants = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	const std::array<float, 12> pushConstants = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
 
 	RenderPass previous_pass{};
