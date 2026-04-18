@@ -715,7 +715,7 @@ private:
   std::vector<vk::Image> albedoImages;
 };
 
-class GBufferCompositePass {
+class GBuffer3DResolvePass {
 public:
   void Init(ShaderManager *shaderManager, vk::Extent2D viewport,
             const std::vector<vk::ImageView> &albedoViews,
@@ -967,7 +967,7 @@ private:
         vk::PipelineShaderStageCreateInfo(
             vk::PipelineShaderStageCreateFlags(),
             vk::ShaderStageFlagBits::eFragment,
-            shaderManager->GetGBufferCompositeFragmentShader(), "main"),
+            shaderManager->GetGBuffer3DResolveFragmentShader(), "main"),
     };
     pipeline =
         ctx->GetDevice()
@@ -997,7 +997,7 @@ private:
   std::vector<std::unique_ptr<FramebufferAttachment>> accumulationBuffers;
 };
 
-class FinalPass {
+class GBufferHUDOverlayPass {
 public:
   void Init(ShaderManager *shaderManager, vk::Extent2D viewport,
             const std::vector<vk::ImageView> &accumulationViews,
@@ -1195,7 +1195,7 @@ private:
         vk::PipelineShaderStageCreateInfo(
             vk::PipelineShaderStageCreateFlags(),
             vk::ShaderStageFlagBits::eFragment,
-            shaderManager->GetGBufferFinalFragmentShader(), "main"),
+            shaderManager->GetGBufferHUDOverlayFragmentShader(), "main"),
     };
     pipeline =
         ctx->GetDevice()
@@ -1243,9 +1243,9 @@ public:
       BaseInit(screenDrawer.GetRenderPass());
 
       initSSAO();
-      initComposite();
+      init3DResolve();
       initDoF();
-      initFinal();
+      initHUDOverlay();
 
       return true;
     } catch (const vk::SystemError &err) {
@@ -1258,9 +1258,9 @@ public:
     DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Term");
     GetContext()->WaitIdle();
     ssaoPass.Term();
-    finalPass.Term();
+    hudOverlayPass.Term();
     dofPass.Term();
-    compositePass.Term();
+    resolve3DPass.Term();
     texCommandPool.Term();
     screenDrawer.Term();
     shaderManager.term();
@@ -1297,15 +1297,15 @@ public:
       initDoF();
     else if (!config::EnableDoF && dofPass.IsInitialized())
       dofPass.Term();
-    if (!compositePass.IsInitialized())
-      initComposite();
-    if (!finalPass.IsInitialized())
-      initFinal();
+    if (!resolve3DPass.IsInitialized())
+      init3DResolve();
+    if (!hudOverlayPass.IsInitialized())
+      initHUDOverlay();
 
     bool doSSAO = (config::EnableSSAO || config::ShowSSAO) &&
                   ssaoPass.IsInitialized() && depthAtt && normalAtt;
     bool doDoF = config::EnableDoF && dofPass.IsInitialized() && depthAtt &&
-                 compositePass.GetAccumulationAttachment(imgIdx);
+                 resolve3DPass.GetAccumulationAttachment(imgIdx);
 
     vk::CommandBuffer cmdBuf = screenDrawer.EndRenderPassOnly();
     int viewMode = 0; // Final
@@ -1333,21 +1333,21 @@ public:
         ssaoPass.Draw(cmdBuf, imgIdx, depthAtt->GetImageView(),
                       normalAtt->GetImageView(), viewMode == 6);
 
-      compositePass.Draw(cmdBuf, imgIdx, viewMode);
+      resolve3DPass.Draw(cmdBuf, imgIdx, viewMode);
 
       if (doDoF && viewMode == 0)
         dofPass.Draw(cmdBuf, imgIdx,
-                     compositePass.GetAccumulationImageView(imgIdx),
+                     resolve3DPass.GetAccumulationImageView(imgIdx),
                      depthAtt->GetImageView());
 
       if (viewMode == 0 || viewMode == 7)
-        finalPass.Draw(cmdBuf, imgIdx, viewMode);
+        hudOverlayPass.Draw(cmdBuf, imgIdx, viewMode);
     }
 
     bool ret = screenDrawer.PresentFrame(
         viewMode == 0 || viewMode == 7
-            ? finalPass.GetFinalAttachment(imgIdx)
-            : compositePass.GetAccumulationAttachment(imgIdx));
+            ? hudOverlayPass.GetFinalAttachment(imgIdx)
+            : resolve3DPass.GetAccumulationAttachment(imgIdx));
     DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Present end (%s)",
               ret ? "success" : "skipped");
     return ret;
@@ -1371,9 +1371,9 @@ protected:
     };
     screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
     initSSAO();
-    initComposite();
+    init3DResolve();
     initDoF();
-    initFinal();
+    initHUDOverlay();
   }
 
 private:
@@ -1428,7 +1428,7 @@ private:
     albedoViews.reserve(swapSize);
     albedoImages.reserve(swapSize);
     for (int i = 0; i < swapSize; ++i) {
-      FramebufferAttachment *att = compositePass.GetAccumulationAttachment(i);
+      FramebufferAttachment *att = resolve3DPass.GetAccumulationAttachment(i);
       if (att) {
         albedoViews.push_back(att->GetImageView());
         albedoImages.push_back(att->GetImage());
@@ -1441,8 +1441,8 @@ private:
     DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initDoF end");
   }
 
-  void initComposite() {
-    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initComposite start");
+  void init3DResolve() {
+    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::init3DResolve start");
     int swapSize = (int)screenDrawer.GetSwapChainCount();
     std::vector<vk::ImageView> albedoViews, normalViews, depthViews,
         materialViews, motionViews, ssaoViews, hudViews;
@@ -1466,34 +1466,34 @@ private:
       hudViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_HUD_INDEX)
                              ->GetImageView());
     }
-    compositePass.Init(&shaderManager, viewport, albedoViews, normalViews,
+    resolve3DPass.Init(&shaderManager, viewport, albedoViews, normalViews,
                        depthViews, materialViews, motionViews, ssaoViews,
                        hudViews);
-    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initComposite end");
+    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::init3DResolve end");
   }
 
-  void initFinal() {
-    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initFinal start");
+  void initHUDOverlay() {
+    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initHUDOverlay start");
     int swapSize = (int)screenDrawer.GetSwapChainCount();
     std::vector<vk::ImageView> accumulationViews;
     std::vector<vk::ImageView> hudViews;
     accumulationViews.reserve(swapSize);
     hudViews.reserve(swapSize);
     for (int i = 0; i < swapSize; ++i) {
-      accumulationViews.push_back(compositePass.GetAccumulationImageView(i));
+      accumulationViews.push_back(resolve3DPass.GetAccumulationImageView(i));
       hudViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_HUD_INDEX)
                              ->GetImageView());
     }
-    finalPass.Init(&shaderManager, viewport, accumulationViews, hudViews);
-    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initFinal end");
+    hudOverlayPass.Init(&shaderManager, viewport, accumulationViews, hudViews);
+    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initHUDOverlay end");
   }
 
   SamplerManager samplerManager;
   ScreenDrawer screenDrawer;
   SSAOPass ssaoPass;
   DoFPass dofPass;
-  GBufferCompositePass compositePass;
-  FinalPass finalPass;
+  GBuffer3DResolvePass resolve3DPass;
+  GBufferHUDOverlayPass hudOverlayPass;
 };
 
 void GBufferVulkanRenderer::ExportGBuffer() {

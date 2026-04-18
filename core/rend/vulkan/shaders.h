@@ -181,17 +181,17 @@ public:
 			hudFragmentShader = compileHUDFragmentShader();
 		return *hudFragmentShader;
 	}
-	vk::ShaderModule GetGBufferCompositeFragmentShader()
+	vk::ShaderModule GetGBuffer3DResolveFragmentShader()
 	{
-		if (!gbufferCompositeFragmentShader)
-			gbufferCompositeFragmentShader = compileGBufferCompositeFragmentShader();
-		return *gbufferCompositeFragmentShader;
+		if (!gbuffer3DResolveFragmentShader)
+			gbuffer3DResolveFragmentShader = compileGBuffer3DResolveFragmentShader();
+		return *gbuffer3DResolveFragmentShader;
 	}
-	vk::ShaderModule GetGBufferFinalFragmentShader()
+	vk::ShaderModule GetGBufferHUDOverlayFragmentShader()
 	{
-		if (!gbufferFinalFragmentShader)
-			gbufferFinalFragmentShader = compileGBufferFinalFragmentShader();
-		return *gbufferFinalFragmentShader;
+		if (!gbufferHUDOverlayFragmentShader)
+			gbufferHUDOverlayFragmentShader = compileGBufferHUDOverlayFragmentShader();
+		return *gbufferHUDOverlayFragmentShader;
 	}
 	void term()
 	{
@@ -208,8 +208,8 @@ public:
 		dofFragmentShader.reset();
 		materialFragmentShader.reset();
 		hudFragmentShader.reset();
-		gbufferCompositeFragmentShader.reset();
-		gbufferFinalFragmentShader.reset();
+		gbuffer3DResolveFragmentShader.reset();
+		gbufferHUDOverlayFragmentShader.reset();
 	}
 
 private:
@@ -233,8 +233,8 @@ private:
 	vk::UniqueShaderModule compileDoFFragmentShader();
 	vk::UniqueShaderModule compileMaterialFragmentShader();
 	vk::UniqueShaderModule compileHUDFragmentShader();
-	vk::UniqueShaderModule compileGBufferCompositeFragmentShader();
-	vk::UniqueShaderModule compileGBufferFinalFragmentShader();
+	vk::UniqueShaderModule compileGBuffer3DResolveFragmentShader();
+	vk::UniqueShaderModule compileGBufferHUDOverlayFragmentShader();
 
 	std::map<u32, vk::UniqueShaderModule> vertexShaders;
 	std::map<u32, vk::UniqueShaderModule> fragmentShaders;
@@ -248,6 +248,6 @@ private:
 	vk::UniqueShaderModule dofFragmentShader;
 	vk::UniqueShaderModule materialFragmentShader;
 	vk::UniqueShaderModule hudFragmentShader;
-	vk::UniqueShaderModule gbufferCompositeFragmentShader;
-	vk::UniqueShaderModule gbufferFinalFragmentShader;
+	vk::UniqueShaderModule gbuffer3DResolveFragmentShader;
+	vk::UniqueShaderModule gbufferHUDOverlayFragmentShader;
 };

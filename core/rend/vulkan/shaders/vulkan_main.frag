@@ -1,19 +1,22 @@
 precision highp float;
 precision highp int;
 
+// Les déclarations "out" (FragColor, NormalColor, MaterialColor, MotionColor, HUDColor)
+// sont injectées automatiquement par le moteur. Ne pas les redéclarer ici.
+
 void main()
 {
 	#if pp_ClipInside == 1
 		if (gl_FragCoord.x >= pushConstants.clipTest.x && gl_FragCoord.x <= pushConstants.clipTest.z
-				&& gl_FragCoord.y >= pushConstants.clipTest.y && gl_FragCoord.y <= pushConstants.clipTest.w)
-			discard;
+&& gl_FragCoord.y >= pushConstants.clipTest.y && gl_FragCoord.y <= pushConstants.clipTest.w)
+discard;
 	#endif
 
 	highp vec4 color = vtx_base;
 	highp vec4 offset = vtx_offs;
 	#if pp_Gouraud == 1 && DIV_POS_Z != 1
 		color /= vtx_uv.z;
-		offset /= vtx_uv.z;
+	offset /= vtx_uv.z;
 	#endif
 
 	#if pp_UseAlpha == 0
@@ -29,26 +32,26 @@ void main()
 		#if pp_Palette == 0
 			#if DIV_POS_Z == 1
 				vec4 texcol = texture(tex, vtx_uv.xy);
-			#else
+		#else
 				vec4 texcol = textureProj(tex, vtx_uv);
-			#endif
+		#endif
 		#else
 			#if pp_Palette == 1
 				vec4 texcol = palettePixel(tex, vtx_uv);
-			#else
+		#else
 				vec4 texcol = palettePixelBilinear(tex, vtx_uv);
-			#endif
+		#endif
 		#endif
 
 		#if pp_BumpMap == 1
 			float s = PI / 2.0 * (texcol.a * 15.0 * 16.0 + texcol.r * 15.0) / 255.0;
-			float r = 2.0 * PI * (texcol.g * 15.0 * 16.0 + texcol.b * 15.0) / 255.0;
-			texcol.a = clamp(offset.a + offset.r * sin(s) + offset.g * cos(s) * cos(r - 2.0 * PI * offset.b), 0.0, 1.0);
-			texcol.rgb = vec3(1.0, 1.0, 1.0);
+		float r = 2.0 * PI * (texcol.g * 15.0 * 16.0 + texcol.b * 15.0) / 255.0;
+		texcol.a = clamp(offset.a + offset.r * sin(s) + offset.g * cos(s) * cos(r - 2.0 * PI * offset.b), 0.0, 1.0);
+		texcol.rgb = vec3(1.0, 1.0, 1.0);
 		#else
 			#if pp_IgnoreTexA == 1
 				texcol.a = 1.0;
-			#endif
+		#endif
 		#endif
 
 		#if pp_ShadInstr == 0
@@ -82,73 +85,77 @@ void main()
 
 	#if cp_AlphaTest == 1
 		color.a = round(color.a * 255.0) / 255.0;
-		if (uniformBuffer.cp_AlphaTestValue > color.a)
-			discard;
-		color.a = 1.0;
+	if (uniformBuffer.cp_AlphaTestValue > color.a)
+	discard;
+	color.a = 1.0;
 	#elif GBUFFER == 1 && IS_TRANSLUCENT == 1
 		if (color.a < 0.2)
-			discard;
+	discard;
 	#endif
 
-#if DIV_POS_Z == 1
+	#if DIV_POS_Z == 1
 	highp float w = 100000.0 / vtx_uv.z;
-#else
+	#else
 	highp float w = 100000.0 * vtx_uv.z;
-#endif
+	#endif
 	highp float log_z = log2(1.0 + max(w, -0.999999)) / 34.0;
 
-#if GBUFFER == 1
+	#if GBUFFER == 1
 	gl_FragDepth = log_z;
-	// Normale geometrique + interpolee si disponible
+
+	// Initialisation par défaut pour éviter des restes de mémoire vidéo
+	FragColor = vec4(0.0);
+	NormalColor = vec4(0.5, 0.5, 0.5, 1.0);
+	MaterialColor = 0u;
+	MotionColor = vec2(0.5, 0.5);
+	HUDColor = vec4(0.0);
+
+	// Calcul de la normale
 	vec3 geoNormal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
 	vec3 N = (length(vtx_normal) > 0.001) ? normalize(vtx_normal) : geoNormal;
 
-	FragColor = color;
-	NormalColor = vec4(N * 0.5 + 0.5, 1.0);
-
-	// Material ID encode sur 8 bits
-	// Bit 7 : Presence (Toujours 1 pour la geometrie), Bits 6-4 : list_type, Bit 3 : texture, Bit 2 : gouraud, Bit 1 : bumpmap, Bit 0 : fog/palette
-	uint matID = 0u;
-	matID |= (1u << 7); // Bit de presence obligatoire
-
-	#if cp_AlphaTest == 1
-		matID |= (4u << 4);  // ListType_Punch_Through = 4
-	#elif IS_TRANSLUCENT == 1
-		matID |= (2u << 4);  // ListType_Translucent = 2
-	#endif
-
-	#if pp_Texture == 1
-		matID |= (1u << 3);
-	#endif
-	#if pp_Gouraud == 1
-		matID |= (1u << 2);
-	#endif
-	#if pp_BumpMap == 1
-		matID |= (1u << 1);
-	#endif
-	#if pp_FogCtrl == 0 || pp_FogCtrl == 1
-		matID |= 1u;
-	#endif
-	MaterialColor = matID;
-
-	// Motion buffer : velocite per-poly encodee [0,1]
-	MotionColor = pushConstants.velocity * 0.5 + 0.5;
-
-	// HUD Separation
+	// Séparation selon le flag isHUD
 	if (pushConstants.isHUD > 0.0) {
-		HUDColor = color;
-		FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+		// Envoi vers le buffer HUD dédié
+		HUDColor = vec4(color.rgb, 1.0);
 	} else {
-		HUDColor = vec4(0.0);
+		// Envoi vers les buffers classiques du monde 3D
+		FragColor = color;
+		NormalColor = vec4(N * 0.5 + 0.5, 1.0);
+		MotionColor = pushConstants.velocity.xy * 0.5 + 0.5;
+
+		// Encodage du Material ID
+		uint matID = 0u;
+		matID |= (1u << 7); // Présence
+		#if cp_AlphaTest == 1
+			matID |= (4u << 4);
+		#elif IS_TRANSLUCENT == 1
+			matID |= (2u << 4);
+		#endif
+		#if pp_Texture == 1
+			matID |= (1u << 3);
+		#endif
+		#if pp_Gouraud == 1
+			matID |= (1u << 2);
+		#endif
+		#if pp_BumpMap == 1
+			matID |= (1u << 1);
+		#endif
+		#if pp_FogCtrl == 0 || pp_FogCtrl == 1
+			matID |= 1u;
+		#endif
+		MaterialColor = matID;
 	}
-#else
+
+	#else
+	// Mode classique (non G-Buffer)
 	#if DITHERING == 1
 	{
 		float ditherTable[16] = float[](
-			5., 13.,  7., 15.,
-			9.,  1., 11.,  3.,
-			6., 14.,  4., 12.,
-			10., 2.,  8.,  0.
+		5., 13.,  7., 15.,
+		9.,  1., 11.,  3.,
+		6., 14.,  4., 12.,
+		10., 2.,  8.,  0.
 		);
 		float dr = ditherTable[int(mod(gl_FragCoord.y, 4.)) * 4 + int(mod(gl_FragCoord.x, 4.))];
 		vec4 dv = vec4(dr, dr, dr, 1.) / uniformBuffer.ditherDivisor;
@@ -156,6 +163,5 @@ void main()
 	}
 	#endif
 	FragColor = color;
-#endif
+	#endif
 }
-

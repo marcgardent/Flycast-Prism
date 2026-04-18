@@ -158,16 +158,16 @@ vk::UniqueShaderModule ShaderManager::compileHUDFragmentShader() {
                                  src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileGBufferCompositeFragmentShader() {
+vk::UniqueShaderModule ShaderManager::compileGBuffer3DResolveFragmentShader() {
   VulkanSource src;
-  src.addSource(loadShaderSource("shaders/vulkan_gbuffer_composite.frag"));
+  src.addSource(loadShaderSource("shaders/vulkan_gbuffer_3d_resolve.frag"));
   return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
                                  src.generate());
 }
 
-vk::UniqueShaderModule ShaderManager::compileGBufferFinalFragmentShader() {
+vk::UniqueShaderModule ShaderManager::compileGBufferHUDOverlayFragmentShader() {
   VulkanSource src;
-  src.addSource(loadShaderSource("shaders/vulkan_gbuffer_final.frag"));
+  src.addSource(loadShaderSource("shaders/vulkan_gbuffer_hud_overlay.frag"));
   return ShaderCompiler::Compile(vk::ShaderStageFlagBits::eFragment,
                                  src.generate());
 }

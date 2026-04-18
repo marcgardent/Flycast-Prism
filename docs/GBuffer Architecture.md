@@ -66,7 +66,7 @@ The pipeline follows a strict 5-phase execution order within `GBufferVulkanRende
 
 ### CompositePass (Lighting Pass)
 
-- **Shader**: `vulkan_gbuffer_composite.frag`
+- **Shader**: `vulkan_gbuffer_3d_resolve.frag`
 - **Input**: All G-Buffer attachments + ssaoTex
 - **Output**: Accumulation Buffer (`R16G16B16A16Sfloat`)
 - **Debug modes**: viewMode push constant selects between Final (0), Albedo (1), Normals (2), Depth (3), Material (4), Motion (5), SSAO (6), HUD (7)
@@ -80,7 +80,7 @@ The pipeline follows a strict 5-phase execution order within `GBufferVulkanRende
 
 ### FinalPass (Tonemapping + HUD Overlay)
 
-- **Shader**: `vulkan_gbuffer_final.frag`
+- **Shader**: `vulkan_gbuffer_hud_overlay.frag`
 - **Input**: Accumulation Buffer, HUD attachment
 - **Output**: Final image (`R8G8B8A8Unorm`) ready for swapchain presentation
 - **Note**: Only executed for `viewMode == 0` (Final) or `viewMode == 7` (HUD debug). Other debug views bypass this pass and present the Accumulation Buffer directly.
@@ -187,8 +187,8 @@ input_file.close()
 | :--- | :--- |
 | `core/rend/vulkan/gbuffer/gbuffer_renderer.cpp` | Pipeline orchestration, EXR Export, `Present()` |
 | `core/rend/vulkan/gbuffer/gbuffer_constants.h` | G-Buffer attachment index constants |
-| `core/rend/vulkan/shaders/vulkan_gbuffer_composite.frag` | Deferred Lighting / Debug views shader |
-| `core/rend/vulkan/shaders/vulkan_gbuffer_final.frag` | Tonemapping + HUD overlay shader |
+| `core/rend/vulkan/shaders/vulkan_gbuffer_3d_resolve.frag` | Deferred Lighting / Debug views shader |
+| `core/rend/vulkan/shaders/vulkan_gbuffer_hud_overlay.frag` | Tonemapping + HUD overlay shader |
 | `core/rend/vulkan/shaders/vulkan_ssao.frag` | SSAO computation shader |
 | `core/rend/vulkan/shaders/vulkan_main.frag` | Geometry pass (G-Buffer fill) |
 
