@@ -219,6 +219,7 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 	{
 		currentIsHUD = isHUD;
 		const std::array<float, 9> pushConstants = {
+				isHUD,
 				(float)scissorRect.offset.x,
 				(float)scissorRect.offset.y,
 				(float)scissorRect.offset.x + (float)scissorRect.extent.width,
@@ -227,7 +228,6 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 				palette_index,
 				velocity.x,
 				velocity.y,
- 		isHUD
 		};
 		cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
 	}
@@ -476,7 +476,7 @@ bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 	cmdBuffer.bindVertexBuffers(0, curMainBuffer, {0});
 	cmdBuffer.bindIndexBuffer(curMainBuffer, offsets.indexOffset, vk::IndexType::eUint32);
 
-	// Make sure to push constants even if not used (9 floats: clipTest, trilinear, palette, velocity, isHUD)
+	// Make sure to push constants even if not used (9 floats: isHUD, clipTest, trilinear, palette, velocity)
 	const std::array<float, 9> pushConstants = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
 	currentIsHUD = 0.0f;

@@ -421,11 +421,12 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			isHUD ? (vk::ColorComponentFlags)0 : (vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG)));
-		// Fifth attachment (HUD Color) RGBA, no blending
+		// Fifth attachment (HUD Color) RGBA, standard blending if HUD
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
-			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-			colorComponentFlags));
+			isHUD && !(config::ShowDepth || config::ShowNormals || config::ShowSSAO),
+			getBlendFactor(src, true), getBlendFactor(dst, false), vk::BlendOp::eAdd,
+			getBlendFactor(src, true), getBlendFactor(dst, false), vk::BlendOp::eAdd,
+			isHUD ? colorComponentFlags : (vk::ColorComponentFlags)0));
 	}
 	else
 	{

@@ -22,11 +22,11 @@ layout (std140, set = 0, binding = 1) uniform FragmentShaderUniforms
 
 layout (push_constant) uniform pushBlock
 {
+	float isHUD;
 	vec4 clipTest;
 	float trilinearAlpha;
 	float palette_index;
 	vec2 velocity;
-	float isHUD;
 } pushConstants;
 
 #if pp_Texture == 1

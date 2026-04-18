@@ -135,7 +135,7 @@ void main()
 	MotionColor = pushConstants.velocity * 0.5 + 0.5;
 
 	// HUD Separation
-	if (pushConstants.isHUD > 0.5) {
+	if (pushConstants.isHUD > 0.0) {
 		HUDColor = color;
 		FragColor = vec4(0.0, 0.0, 0.0, 0.0);
 	} else {
