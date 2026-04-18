@@ -209,17 +209,11 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 			velocity = itCurr->second - itPrev->second;
 	}
 
-	// Critere HUD : DepthMode Always(7) ou GreaterOrEqual(6) = polygones rendus par-dessus tout
-	// ZWriteDis peut etre 0 ou 1 (le HUD peut ecrire dans le Z-buffer)
-	bool isHUDPoly = (poly.isp.DepthMode >= 6);
-	float isHUD = isHUDPoly ? 1.0f : 0.0f;
-	DEBUG_LOG(RENDERER, "DrawPoly: listType=%u DepthMode=%u ZWriteDis=%u isHUDPoly=%d",
-		listType, poly.isp.DepthMode, poly.isp.ZWriteDis, (int)isHUDPoly);
-	if (tileClip == TileClipping::Inside || trilinearAlpha != 1.f || gpuPalette != 0 || config::ShowMotion || isHUD != currentIsHUD)
+	if (tileClip == TileClipping::Inside || trilinearAlpha != 1.f || gpuPalette != 0 || config::ShowMotion)
 	{
-		currentIsHUD = isHUD;
-		const std::array<float, 9> pushConstants = {
-				isHUD,
+		// Push constant layout must match vulkan_top.frag pushBlock (std430, 32 bytes):
+		// [0-3]=clipTest, [4]=trilinear, [5]=palette, [6-7]=velocity
+		const std::array<float, 8> pushConstants = {
 				(float)scissorRect.offset.x,
 				(float)scissorRect.offset.y,
 				(float)scissorRect.offset.x + (float)scissorRect.extent.width,
@@ -356,7 +350,7 @@ void Drawer::DrawModVols(const vk::CommandBuffer& cmdBuffer, int first, int coun
 	cmdBuffer.bindVertexBuffers(0, curMainBuffer, {0});
 	SetTileClip(cmdBuffer, 0, scissorRect);
 
-	const std::array<float, 6> pushConstants = { 1 - FPU_SHAD_SCALE.scale_factor / 256.f, 0, 0, 0, 0, 0 };
+	const std::array<float, 8> pushConstants = { 1 - FPU_SHAD_SCALE.scale_factor / 256.f, 0, 0, 0, 0, 0, 0, 0 };
 	cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
 
 	pipeline = pipelineManager->GetModifierVolumePipeline(ModVolMode::Final, 0, false);
@@ -476,10 +470,9 @@ bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 	cmdBuffer.bindVertexBuffers(0, curMainBuffer, {0});
 	cmdBuffer.bindIndexBuffer(curMainBuffer, offsets.indexOffset, vk::IndexType::eUint32);
 
-	// Make sure to push constants even if not used (9 floats: isHUD, clipTest, trilinear, palette, velocity)
-	const std::array<float, 9> pushConstants = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	// Initialize push constants (8 floats: clipTest, trilinear, palette, velocity)
+	const std::array<float, 8> pushConstants = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
-	currentIsHUD = 0.0f;
 
 	RenderPass previous_pass{};
     for (int render_pass = 0; render_pass < (int)rendContext->render_passes.size(); render_pass++)

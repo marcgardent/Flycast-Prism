@@ -23,6 +23,7 @@ layout (std140, set = 0, binding = 1) uniform FragmentShaderUniforms
 layout (push_constant) uniform pushBlock
 {
 	float isHUD;
+	float _pad0, _pad1, _pad2;  // std430: vec4 must be at offset 16 (12 bytes padding after float)
 	vec4 clipTest;
 	float trilinearAlpha;
 	float palette_index;
