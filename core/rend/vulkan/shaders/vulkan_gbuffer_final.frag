@@ -24,8 +24,8 @@ void main() {
 		// Gamma correction is usually done by the swapchain if it's sRGB, but if we need it here:
 		// color = pow(color, vec3(1.0 / 2.2));
 
-		// Combine HUD
-		color = mix(color, hud.rgb, hud.a);
+		// Combine HUD (Alpha pre-multiplié)
+		color = color * (1.0 - hud.a) + hud.rgb;
 		
 		fragColor = vec4(color, 1.0);
 	} else if (pc.viewMode == 7) { // HUD

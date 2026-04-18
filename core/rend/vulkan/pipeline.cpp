@@ -425,7 +425,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
 			isHUD && !(config::ShowDepth || config::ShowNormals || config::ShowSSAO),
 			getBlendFactor(src, true), getBlendFactor(dst, false), vk::BlendOp::eAdd,
-			getBlendFactor(src, true), getBlendFactor(dst, false), vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
 			isHUD ? colorComponentFlags : (vk::ColorComponentFlags)0));
 	}
 	else

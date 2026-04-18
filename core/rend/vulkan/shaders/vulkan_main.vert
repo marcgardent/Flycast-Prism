@@ -40,4 +40,3 @@ void main()
 #endif
 	gl_Position = vpos;
 }
-
