@@ -1,6 +1,6 @@
 # Flycast Prism
 
-<img src="docs/prism/logo-prism.svg" alt="flycast prism logo" width="150"/>
+<img src="docs/prism/logo-prism.svg" alt="flycast prism logo" />
 
 ________________________
 # Flycast
