@@ -1,7 +1,32 @@
-# Flycast Prism
-
 <img src="docs/prism/logo-prism.svg" alt="flycast prism logo" />
 
+**Flycast-Prism** is an experimental fork of the renowned Flycast emulator, dedicated to pushing the visual boundaries of Sega Dreamcast, Naomi, and Atomiswave emulation through modern rendering techniques.
+
+First and foremost, we want to express our deepest gratitude to the original Flycast team, particularly flyinghead and all the contributors. Flycast-Prism is built upon their colossal and brilliant foundational work. We are merely standing on the shoulders of giants, and this project would simply not exist without their dedication to preserving gaming history.
+
+## Current Features (Custom Render Engine)
+
+Our primary focus is overhauling the rendering pipeline to support modern post-processing effects. Currently, the engine features:
+ 
+ * **GBuffer Implementation**: We have successfully integrated a GBuffer that extracts essential scene data in real-time, including:
+   * Albedo: The base color map.
+   * HUD: Separating the user interface from the 3D scene to prevent UI distortion during post-processing.
+   * Normal: Surface direction data for advanced lighting calculations.
+   * Depth: Accurate Z-buffer information.
+   
+ * **Post-Processing Filters**: Leveraging the GBuffer, we have enabled the following effects:
+   * SSAO (Screen Space Ambient Occlusion): Adding realistic shading and depth to geometric intersections.
+   * Optical Blur: Simulating realistic camera lens blurring effects.
+
+## Short-Term Objectives (HUD Customization)
+
+Our immediate goal is to overhaul the HUD composition specifically for widescreen rendering. This will introduce a new level of flexibility, giving users the ability to fully customize the HUD, move specific UI elements across the screen, or hide them entirely according to their preferences.
+
+## Long-Term Objective
+
+Our ultimate goal for the rendering engine is to successfully implement a Velocity Map (motion vectors). Acquiring accurate velocity data is the key to unlocking the most advanced, industry-standard post-processing filters, such as Temporal Anti-Aliasing (TAA) and high-quality Motion Blur.
+
+details of implementation : [GBuffer Architecture.md](docs/prism/GBuffer%20Architecture.md)
 ________________________
 # Flycast
 
