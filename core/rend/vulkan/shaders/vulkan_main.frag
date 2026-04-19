@@ -137,9 +137,9 @@ discard;
 	// HUD Separation
 	if (pushConstants.isHUD > 0.0) {
 		HUDColor = color;
-		FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+		FragColor = vec4(0.0); // discard HUD
 	} else {
-		HUDColor = vec4(0.0);
+		HUDColor = vec4(0.0); // discard albedo
 	}
 	#else
 	#if DITHERING == 1
