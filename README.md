@@ -1,3 +1,8 @@
+# Flycast Prism
+
+<img src="docs/prism/logo-prism.svg" alt="flycast prism logo" width="150"/>
+
+________________________
 # Flycast
 
 [![Android CI](https://github.com/flyinghead/flycast/actions/workflows/android.yml/badge.svg)](https://github.com/flyinghead/flycast/actions/workflows/android.yml)
