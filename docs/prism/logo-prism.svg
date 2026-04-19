@@ -12,11 +12,10 @@
 
             @media (prefers-color-scheme: light) {
             :root {
-            /* Couleurs adaptées au fond clair (Light Mode) */
-            --text-main: #0f172a; /* Ardoise très sombre */
-            --text-sub: #0047ab;  /* Bleu profond */
-            --grad-stop1: #00d2ff; /* Centre de la flamme cyan au lieu de blanc pour rester visible */
-            --grad-stop2: #0055ff; /* Flamme plus sombre */
+            --text-main: #0f172a;
+            --text-sub: #0047ab;
+            --grad-stop1: #ffffff;
+            --grad-stop2: #00ffff;
             }
             }
 
