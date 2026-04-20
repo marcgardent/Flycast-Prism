@@ -33,6 +33,7 @@ enum LOG_TYPE
 	SH4,
 	VMEM,
 
+
 	NUMBER_OF_LOGS  // Must be last
 };
 

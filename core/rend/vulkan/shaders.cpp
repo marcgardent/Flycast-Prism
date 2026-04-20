@@ -83,6 +83,8 @@ ShaderManager::compileShader(const FragmentShaderParams &params) {
       .addConstant("GBUFFER_HUD_INDEX", (int)GBUFFER_HUD_INDEX)
       .addConstant("EnableSSAO", (int)params.enableSSAO)
       .addConstant("ShowSSAO", (int)params.showSSAO)
+      .addConstant("IS_HUD", (int)params.isHud)
+
       .addSource(GouraudSource)
       .addSource(loadShaderSource("shaders/vulkan_top.frag"))
       .addSource(loadShaderSource("shaders/vulkan_common.frag"))

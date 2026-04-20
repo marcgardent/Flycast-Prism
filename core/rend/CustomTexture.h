@@ -68,7 +68,6 @@ private:
 	u8* loadTexture(u32 hash, int& width, int& height);
 	bool isTextureReplaced(BaseTextureCacheData* texture);
 	void loadTexture(BaseTextureCacheData *texture);
-	std::string getGameId();
 	void prepareSource(BaseCustomTextureSource* source);
 	void resetPreloadProgress();
 	

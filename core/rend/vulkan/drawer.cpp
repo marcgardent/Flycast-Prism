@@ -198,8 +198,7 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 			palette_index = float((poly.tcw.PalSelect >> 4) << 8) / 1023.f;
 	}
 
-	// Calcul de isHUD une seule fois ici, puis propagation à pipelineManager->GetPipeline
-	bool isHUD = IsWhiteListTextureHUD(poly);
+	bool isHUD = IsWhiteListTextureHUD(poly); // TODO  compute in Texture instance ?!
 
 	// Velocity for motion buffer: delta centroid N-1 -> N (TCW hash lookup)
 	glm::vec2 velocity(0.f);
@@ -519,7 +518,6 @@ void TextureDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMa
 		rttPipelineManager = std::make_unique<RttPipelineManager>();
 	rttPipelineManager->Init(shaderManager);
 	Drawer::Init(samplerManager, rttPipelineManager.get());
-
 	this->textureCache = textureCache;
 }
 
@@ -683,6 +681,15 @@ void TextureDrawer::EndRenderPass()
 		texture->unprotectVRam();
 	}
 	Drawer::EndRenderPass();
+}
+
+bool Drawer::IsWhiteListTextureHUD(const PolyParam &pp) const {
+		if (pp.texture != nullptr)
+		{
+			pp.texture->ComputeHash();
+			return hudTextureHashWhitelist.isWhitelisted(pp.texture->texture_hash);
+		}
+		return false;
 }
 
 void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderManager, const vk::Extent2D& viewport, const std::vector<vk::Format>& colorFormats)

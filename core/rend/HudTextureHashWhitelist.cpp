@@ -3,6 +3,10 @@
 #include <string>
 #include <vector>
 #include <algorithm> // For std::remove_if, std::isspace
+#include <charconv>  // For std::from_chars
+#include <cstdint>   // For uint32_t
+
+#include "library.h"
 #include "oslib/oslib.h"
 
 namespace rend {
@@ -18,25 +22,33 @@ static std::string trim(const std::string& str) {
 }
 
 // Constructor to initialize with a list of hashes
-HudTextureHashWhitelist::HudTextureHashWhitelist(std::vector<std::string> hashes)
-    : m_whitelistedHashes(std::make_move_iterator(hashes.begin()), std::make_move_iterator(hashes.end())) {
+HudTextureHashWhitelist::HudTextureHashWhitelist()
+    : m_whitelistedHashes() {
     // Hashes are moved into the unordered_set
 }
 
-HudTextureHashWhitelist HudTextureHashWhitelist::createFromDefaultYamlFile() {
-    return HudTextureHashWhitelist::createFromYamlFile(hostfs::getHudConfigurationPath());
+void HudTextureHashWhitelist::populateFromDefaultYamlFile(HudTextureHashWhitelist& ctx) {
+
+    std::string game_id = library::getGameId();
+    if (!game_id.empty()) {
+        return populateFromYamlFile(ctx, hostfs::getHudConfigurationPath() + game_id + "/hud.yaml");
+    } else {
+        ERROR_LOG(RENDERER, "No game ID loaded, using default HUD texture whitelist");
+        ctx.init(std::vector<u32>{});
+    }
 }
 
 // Factory method to create an instance from a YAML file
-HudTextureHashWhitelist HudTextureHashWhitelist::createFromYamlFile(const std::string& file_path) {
-    INFO_LOG(RENDERER, "Loading HUD texture whitelist from: %s", file_path.c_str());
+void HudTextureHashWhitelist::populateFromYamlFile(HudTextureHashWhitelist& ctx, const std::string& file_path) {
+    NOTICE_LOG(RENDERER, "Loading HUD texture whitelist from: %s", file_path.c_str());
 
-    std::vector<std::string> hashes;
+    std::vector<u32> hashes;
     std::ifstream file(file_path);
 
     if (!file.is_open()) {
         WARN_LOG(RENDERER, "Failed to open HUD texture whitelist file: %s", file_path.c_str()); // Warn log added
-        return HudTextureHashWhitelist(std::vector<std::string>{});
+        ctx.init(std::vector<u32>{});
+        return;
     }
 
     std::string line;
@@ -52,13 +64,22 @@ HudTextureHashWhitelist HudTextureHashWhitelist::createFromYamlFile(const std::s
 
         if (in_texture_hashes_section) {
             if (trimmed_line.rfind("- ", 0) == 0) { // Starts with "- "
-                std::string hash = trim(trimmed_line.substr(2)); // Remove "- " prefix
+                std::string hash_str = trim(trimmed_line.substr(2)); // Remove "- " prefix
                 // Remove quotes if present
-                if (hash.length() >= 2 && hash.front() == '"' && hash.back() == '"') {
-                    hash = hash.substr(1, hash.length() - 2);
+                if (hash_str.length() >= 2 && hash_str.front() == '"' && hash_str.back() == '"') {
+                    hash_str = hash_str.substr(1, hash_str.length() - 2);
                 }
-                if (!hash.empty()) {
-                    hashes.push_back(hash);
+                if (!hash_str.empty()) {
+                    u32 hash_val;
+                    // Convert hex string to u32
+                    auto [ptr, ec] = std::from_chars(hash_str.data(), hash_str.data() + hash_str.length(), hash_val, 16);
+
+                    if (ec == std::errc()) {
+                        NOTICE_LOG(RENDERER, "Adding texture hash to hud whitelist: 0x%X", hash_val);
+                        hashes.push_back(hash_val);
+                    } else {
+                        WARN_LOG(RENDERER, "Failed to convert hash string '%s' to u32. Error: %d", hash_str.c_str(), static_cast<int>(ec));
+                    }
                 }
             } else if (!trimmed_line.empty() && trimmed_line.find(':') != std::string::npos) {
                 // Another YAML key, so we're out of the textureHashes section
@@ -68,7 +89,7 @@ HudTextureHashWhitelist HudTextureHashWhitelist::createFromYamlFile(const std::s
     }
     file.close();
 
-    return HudTextureHashWhitelist(std::move(hashes));
+    ctx.init(hashes);
 }
 
 bool HudTextureHashWhitelist::isEmpty() const {
@@ -79,12 +100,14 @@ size_t HudTextureHashWhitelist::size() const {
     return m_whitelistedHashes.size();
 }
 
-bool HudTextureHashWhitelist::isWhitelisted(const std::string& hash_str) const {
-    return m_whitelistedHashes.count(hash_str) > 0;
+bool HudTextureHashWhitelist::isWhitelisted(u32 hash) const {
+    const bool ret = m_whitelistedHashes.count(hash) > 0;
+    if (ret) NOTICE_LOG(RENDERER, "Checking hud whitelist for hash: 0x%X = MATCHED", hash);
+    return ret;
 }
 
-std::vector<std::string> HudTextureHashWhitelist::getWhitelistedHashes() const {
-    std::vector<std::string> hashes;
+std::vector<u32> HudTextureHashWhitelist::getWhitelistedHashes() const {
+    std::vector<u32> hashes;
     hashes.reserve(m_whitelistedHashes.size());
     for (const auto& hash : m_whitelistedHashes) {
         hashes.push_back(hash);
@@ -92,4 +115,11 @@ std::vector<std::string> HudTextureHashWhitelist::getWhitelistedHashes() const {
     return hashes;
 }
 
-} // namespace rend
+void HudTextureHashWhitelist::init(std::vector<u32> hashes) {
+    m_whitelistedHashes.reserve(hashes.size());
+    for (u32 hash : hashes) {
+        m_whitelistedHashes.insert(std::move(hash));
+    }
+}
+
+}

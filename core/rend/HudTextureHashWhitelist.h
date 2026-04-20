@@ -3,18 +3,21 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
-#include <fstream> // Added for file operations
+#include <cstdint> // For uint32_t, assuming u32 is uint32_t
 
 namespace rend {
+
+// Assuming u32 is uint32_t
+using u32 = uint32_t;
 
 class HudTextureHashWhitelist {
 public:
     // Constructor to initialize with a list of hashes
-    explicit HudTextureHashWhitelist(std::vector<std::string> hashes);
+    explicit HudTextureHashWhitelist();
 
     // Factory method to create an instance from a YAML file
-    static HudTextureHashWhitelist createFromYamlFile(const std::string& file_path);
-    static HudTextureHashWhitelist createFromDefaultYamlFile();
+    static void populateFromYamlFile(HudTextureHashWhitelist& ctx,const std::string& file_path);
+    static void populateFromDefaultYamlFile(HudTextureHashWhitelist &ctx);
 
     // Check if the whitelist is empty
     bool isEmpty() const;
@@ -23,20 +26,16 @@ public:
     size_t size() const;
 
     // Check if a hash is whitelisted
-    bool isWhitelisted(const std::string& hash_str) const;
+    bool isWhitelisted(u32 hash) const;
 
     // Get all whitelisted hashes (returns a copy)
-    std::vector<std::string> getWhitelistedHashes() const;
+    std::vector<u32> getWhitelistedHashes() const;
+
+    //init when game loaded
+    void init(std::vector<u32> hashes);
 
 private:
-    // Private default constructor to prevent direct instantiation without hashes
-    HudTextureHashWhitelist() = default;
-
-    // Deleted copy constructor and assignment operator for immutability
-    HudTextureHashWhitelist(const HudTextureHashWhitelist&) = delete;
-    HudTextureHashWhitelist& operator=(const HudTextureHashWhitelist&) = delete;
-
-    const std::unordered_set<std::string> m_whitelistedHashes; // Now const
+    std::unordered_set<u32> m_whitelistedHashes;
 };
 
 } // namespace rend

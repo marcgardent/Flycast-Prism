@@ -135,12 +135,13 @@ discard;
 	MotionColor = pushConstants.velocity * 0.5 + 0.5;
 
 	// HUD Separation
-	if (pushConstants.isHUD > 0.0) {
+	#if IS_HUD == 1
 		HUDColor = color;
 		FragColor = vec4(0.0); // discard HUD
-	} else {
+	#else
 		HUDColor = vec4(0.0); // discard albedo
-	}
+	#endif
+
 	#else
 	#if DITHERING == 1
 	{

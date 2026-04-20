@@ -390,7 +390,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	u32 dst = pp.tsp.DstInstr;
 	vk::PipelineColorBlendAttachmentState pipelineColorBlendAttachmentState
 	{
- 		!(config::ShowDepth || config::ShowNormals || config::ShowSSAO),            // blendEnable
+ 		true, // TODO MGT TEST REMOVE ???? !(config::ShowDepth || config::ShowNormals || config::ShowSSAO),            // blendEnable
 	  getBlendFactor(src, true),     // srcColorBlendFactor
 	  getBlendFactor(dst, false),    // dstColorBlendFactor
 	  vk::BlendOp::eAdd,             // colorBlendOp
@@ -403,8 +403,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
 	if (config::RendererType == RenderType::Vulkan_GBuffer)
 	{
-		// First attachment (Albedo) uses standard blending
-		pipelineColorBlendAttachmentState.colorWriteMask = isHUD ? (vk::ColorComponentFlags)0 : colorComponentFlags;
+		// First attachment (Albedo) uses standard blending, write RGBA
 		colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
 		// Second attachment (Normals) uses no blending, just write
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
@@ -470,6 +469,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	params.gbuffer = config::RendererType == RenderType::Vulkan_GBuffer;
 	params.enableSSAO = config::EnableSSAO;
 	params.showSSAO = config::ShowSSAO;
+	params.isHud = isHUD;
 	vk::ShaderModule fragment_module = shaderManager->GetFragmentShader(params);
 
 	std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {

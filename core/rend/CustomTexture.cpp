@@ -34,6 +34,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
+#include "library.h"
+
 CustomTexture custom_texture;
 
 class CustomTextureSource : public BaseCustomTextureSource
@@ -161,18 +163,6 @@ void CustomTexture::loadTexture(BaseTextureCacheData *texture)
 	texture->custom_load_in_progress--;
 }
 
-std::string CustomTexture::getGameId()
-{
-   std::string game_id(settings.content.gameId);
-   const size_t str_end = game_id.find_last_not_of(' ');
-   if (str_end == std::string::npos)
-	  return "";
-   game_id = game_id.substr(0, str_end + 1);
-   std::replace(game_id.begin(), game_id.end(), ' ', '_');
-
-   return game_id;
-}
-
 bool CustomTexture::init()
 {
 	if (!initialized)
@@ -182,7 +172,7 @@ bool CustomTexture::init()
 		pending_preloads = 0;
 		initialized = true;
 
-		std::string game_id = getGameId();
+		std::string game_id = library::getGameId(); // Use the new GameId::getGameId()
 		if (game_id.length() > 0)
 		{
 			// The first source added has highest priority.
@@ -326,7 +316,7 @@ void CustomTexture::dumpTexture(BaseTextureCacheData* texture, int w, int h, voi
 	std::string base_dump_dir = hostfs::getTextureDumpPath();
 	if (!file_exists(base_dump_dir))
 		make_directory(base_dump_dir);
-	std::string game_id = getGameId();
+	std::string game_id = library::getGameId();
 	if (game_id.length() == 0)
 		return;
 

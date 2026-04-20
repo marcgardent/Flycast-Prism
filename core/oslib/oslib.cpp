@@ -305,9 +305,8 @@ std::string getTextureDumpPath()
 // New function for HUD configuration path
 std::string getHudConfigurationPath()
 {
-	// For now, there's no user-defined path for HUD config, so we directly return the default.
-	// If a config option is added later (e.g., config::HudConfigPath), it can be integrated here.
-	return get_writable_data_path("prism/hud.yaml");
+	//TODO  user-defined path
+	return get_writable_data_path("prism/");
 }
 
 #if (defined(__unix__) && !defined(__ANDROID__)) || defined(__HAIKU__)

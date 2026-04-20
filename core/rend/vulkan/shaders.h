@@ -59,6 +59,7 @@ struct FragmentShaderParams
 	bool gbuffer;
 	bool enableSSAO;
 	bool showSSAO;
+	int isHud;
 
 	u32 hash()
 	{
@@ -69,7 +70,8 @@ struct FragmentShaderParams
 			| ((u32)palette << 14) | ((u32)divPosZ << 16) | ((u32)dithering << 17)
  		| ((u32)showDepth << 18) | ((u32)isTranslucent << 19) | ((u32)showNormals << 20)
 			| ((u32)gbuffer << 21) | ((u32)enableSSAO << 22) | ((u32)showSSAO << 23)
-			| ((u32)showMaterial << 24);
+			| ((u32)showMaterial << 24)
+			| ((u32)isHud << 25);
 	}
 };
 

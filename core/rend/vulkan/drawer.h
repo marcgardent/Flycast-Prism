@@ -254,7 +254,7 @@ protected:
 	{
 		this->pipelineManager = pipelineManager;
 		this->samplerManager = samplerManager;
-
+		rend::HudTextureHashWhitelist::populateFromDefaultYamlFile(hudTextureHashWhitelist);
 		descriptorSets.init(samplerManager, pipelineManager->GetPipelineLayout(), pipelineManager->GetPerFrameDSLayout(), pipelineManager->GetPerPolyDSLayout());
 	}
 
@@ -292,17 +292,9 @@ private:
 	bool dithering = false;
 	std::unordered_map<uint32_t, glm::vec2> prevCentroids; // Motion buffer: TCW -> centroid XY (frame N-1)
 	std::unordered_map<uint32_t, glm::vec2> currCentroids; // Motion buffer: TCW -> centroid XY (frame N, during draw)
-	rend::HudTextureHashWhitelist m_hudTextureHashWhitelist = rend::HudTextureHashWhitelist::createFromDefaultYamlFile();
+	rend::HudTextureHashWhitelist hudTextureHashWhitelist = rend::HudTextureHashWhitelist();
 
-	bool IsWhiteListTextureHUD(const PolyParam& pp) const
-	{
-		if (pp.texture != nullptr)
-		{
-			pp.texture->ComputeHash();
-			return m_hudTextureHashWhitelist.isWhitelisted(std::to_string(pp.texture->texture_hash));
-		}
-		return false;
-	}
+	bool IsWhiteListTextureHUD(const PolyParam& pp) const;
 };
 
 class ScreenDrawer : public Drawer
@@ -411,4 +403,5 @@ private:
 	std::unique_ptr<FramebufferAttachment> colorAttachment;
 	std::unique_ptr<FramebufferAttachment> depthAttachment;
 	TextureCache *textureCache = nullptr;
+
 };

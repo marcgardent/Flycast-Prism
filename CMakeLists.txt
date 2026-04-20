@@ -1096,7 +1096,10 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/rend/texconv.cpp
 		core/rend/texconv.h
 		core/rend/norend/norend.cpp
-		core/rend/HudTextureHashWhitelist.cpp)
+		core/rend/HudTextureHashWhitelist.cpp
+		core/rend/library.cpp
+		core/rend/library.h
+	)
 
 if(USE_VULKAN)
 	target_compile_definitions(${PROJECT_NAME} PUBLIC VK_ENABLE_BETA_EXTENSIONS VK_NO_PROTOTYPES)
