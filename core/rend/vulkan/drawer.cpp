@@ -198,6 +198,9 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 			palette_index = float((poly.tcw.PalSelect >> 4) << 8) / 1023.f;
 	}
 
+	// Calcul de isHUD une seule fois ici, puis propagation à pipelineManager->GetPipeline
+	bool isHUD = IsWhiteListTextureHUD(poly);
+
 	// Velocity for motion buffer: delta centroid N-1 -> N (TCW hash lookup)
 	glm::vec2 velocity(0.f);
 	if (config::ShowMotion)
@@ -214,7 +217,7 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 		// Push constant layout must match vulkan_top.frag pushBlock (std430, 48 bytes):
 		// [0]=isHUD, [1-3]=padding, [4-7]=clipTest, [8]=trilinear, [9]=palette, [10-11]=velocity
 		const std::array<float, 12> pushConstants = {
-				(poly.isp.DepthMode >= 6) ? 1.0f : 0.0f, // isHUD
+				isHUD ? 1.0f : 0.0f, // isHUD
 				0.f, 0.f, 0.f,                           // padding
 				(float)scissorRect.offset.x,
 				(float)scissorRect.offset.y,
@@ -228,7 +231,7 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 		cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, pushConstants);
 	}
 
-	vk::Pipeline pipeline = pipelineManager->GetPipeline(listType, sortTriangles, poly, gpuPalette, dithering);
+	vk::Pipeline pipeline = pipelineManager->GetPipeline(listType, sortTriangles, poly, gpuPalette, dithering, isHUD);
 	cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
 	if (poly.pcw.Texture || poly.isNaomi2())
 	{

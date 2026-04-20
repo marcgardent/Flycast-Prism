@@ -33,6 +33,8 @@
 #include <unordered_map>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "rend/HudTextureHashWhitelist.h"
+
 class BaseDrawer
 {
 public:
@@ -290,7 +292,17 @@ private:
 	bool dithering = false;
 	std::unordered_map<uint32_t, glm::vec2> prevCentroids; // Motion buffer: TCW -> centroid XY (frame N-1)
 	std::unordered_map<uint32_t, glm::vec2> currCentroids; // Motion buffer: TCW -> centroid XY (frame N, during draw)
-	float currentIsHUD = 0.0f;
+	rend::HudTextureHashWhitelist m_hudTextureHashWhitelist = rend::HudTextureHashWhitelist::createFromDefaultYamlFile();
+
+	bool IsWhiteListTextureHUD(const PolyParam& pp) const
+	{
+		if (pp.texture != nullptr)
+		{
+			pp.texture->ComputeHash();
+			return m_hudTextureHashWhitelist.isWhitelisted(std::to_string(pp.texture->texture_hash));
+		}
+		return false;
+	}
 };
 
 class ScreenDrawer : public Drawer

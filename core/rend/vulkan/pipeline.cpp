@@ -290,7 +290,8 @@ void PipelineManager::CreateDepthPassPipeline(int cullMode, bool naomi2)
 					graphicsPipelineCreateInfo).value;
 }
 
-void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const PolyParam& pp, int gpuPalette, bool dithering)
+
+void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const PolyParam& pp, int gpuPalette, bool dithering, bool isHUD)
 {
 	vk::PipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo = GetMainVertexInputStateCreateInfo(true, pp.isNaomi2());
 
@@ -402,7 +403,6 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
 	if (config::RendererType == RenderType::Vulkan_GBuffer)
 	{
-		bool isHUD = (pp.isp.DepthMode >= 6);
 		// First attachment (Albedo) uses standard blending
 		pipelineColorBlendAttachmentState.colorWriteMask = isHUD ? (vk::ColorComponentFlags)0 : colorComponentFlags;
 		colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
@@ -493,6 +493,6 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	  renderPass                                  // renderPass
 	);
 
-	pipelines[hash(listType, sortTriangles, &pp, gpuPalette, dithering)] = GetContext()->GetDevice().createGraphicsPipelineUnique(GetContext()->GetPipelineCache(),
+	pipelines[hash(listType, sortTriangles, &pp, gpuPalette, dithering, isHUD)] = GetContext()->GetDevice().createGraphicsPipelineUnique(GetContext()->GetPipelineCache(),
 			graphicsPipelineCreateInfo).value;
 }

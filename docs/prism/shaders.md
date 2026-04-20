@@ -1,14 +1,24 @@
 # Shader Architecture and Constants Documentation (Vulkan)
 
-This documentation provides an exhaustive overview of the shader architecture in the Flycast Vulkan renderer, including pipeline hashing mechanisms, GLSL macro mappings, and all injected constants (Uniforms and Push Constants).
+This documentation provides an exhaustive overview of the shader architecture in the Flycast Vulkan renderer, including hashing mechanisms, GLSL macro mappings, and all injected constants.
 
-## 1. Pipeline and Polygon Hashing (`shader poly`)
+## 1. Hashing Overview
 
-The `PipelineManager` uses a **64-bit hash** to uniquely identify a rendering state configuration. This hash determines whether a new Vulkan pipeline needs to be created or if an existing one can be reused.
+Flycast uses several levels of hashing to optimize rendering performance by caching expensive objects:
+
+1.  **Pipeline Hash (64-bit)**: The most high-level hash. Used by `PipelineManager::GetPipeline` to select the entire Vulkan pipeline state (shaders, blending, depth/stencil, rasterization).
+2.  **Fragment Shader Hash (32-bit)**: Used by `ShaderManager::GetFragmentShader` to compile and cache SPIR-V fragment modules. Multiple pipelines can share the same fragment shader if their fragment-specific states are identical.
+3.  **Vertex Shader Hash (32-bit)**: Used by `ShaderManager::GetVertexShader` to compile and cache SPIR-V vertex modules.
+
+---
+
+## 2. Pipeline and Polygon Hashing (`shader poly`)
+
+Used to select the full Vulkan pipeline.
 
 **Reference File:** [pipeline.h](file:///mnt/data/projects/core/rend/vulkan/pipeline.h) (Method `PipelineManager::hash`)
 
-### Exhaustive Pipeline Hash Bit Mapping (u64) & GLSL Macros
+### Exhaustive Pipeline Hash Bit Mapping (u64)
 
 | Bits | C++ Source (PolyParam) | GLSL Macro Define | Description |
 | :--- | :--- | :--- | :--- |
@@ -44,84 +54,102 @@ The `PipelineManager` uses a **64-bit hash** to uniquely identify a rendering st
 
 ---
 
-## 2. Fragment Shader Hashing (`shader frag`)
+## 3. Fragment Shader Hashing (`shader frag`)
 
-Used by the `ShaderManager` to compile and cache SPIR-V modules based on the PowerVR fragment state.
+Used to select/compile the SPIR-V fragment module.
 
 **Reference File:** [shaders.h](file:///mnt/data/projects/core/rend/vulkan/shaders.h) (Method `FragmentShaderParams::hash`)
 
-### Fragment Shader Hash Bit Mapping (u32) & GLSL Macros
+### Exhaustive Fragment Hash Bit Mapping (u32)
 
-- **Bits 0-4**: `alphaTest` (`cp_AlphaTest`), `insideClipTest` (`pp_ClipInside`), `useAlpha` (`pp_UseAlpha`), `texture` (`pp_Texture`), `ignoreTexAlpha` (`pp_IgnoreTexA`)
-- **Bits 5-6**: `shaderInstr` (`pp_ShadInstr`)
-- **Bits 7-9**: `offset` (`pp_Offset`), `fog` (`pp_FogCtrl`)
-- **Bits 10-13**: `gouraud` (`pp_Gouraud`), `bumpmap` (`pp_BumpMap`), `clamping` (`ColorClamping`), `trilinear` (`pp_TriLinear`)
-- **Bits 14-15**: `palette` (`pp_Palette`)
-- **Bit 16**: `divPosZ` (`DIV_POS_Z`)
-- **Bit 17**: `dithering` (`DITHERING`)
-- **Bits 18-20**: `showDepth` (`ShowDepth`), `isTranslucent` (`IS_TRANSLUCENT`), `showNormals` (`ShowNormals`)
-- **Bits 21-24**: `gbuffer` (`GBUFFER`), `enableSSAO` (`EnableSSAO`), `showSSAO` (`ShowSSAO`), `showMaterial` (`ShowMaterial`)
+| Bit | C++ Property | GLSL Macro Define | Description |
+| :--- | :--- | :--- | :--- |
+| 0 | `alphaTest` | `cp_AlphaTest` | Alpha test (Punch Through) |
+| 1 | `insideClipTest` | `pp_ClipInside` | Internal clip test (User Clip) |
+| 2 | `useAlpha` | `pp_UseAlpha` | Use alpha component in blending |
+| 3 | `texture` | `pp_Texture` | Texturing enabled |
+| 4 | `ignoreTexAlpha` | `pp_IgnoreTexA` | Ignore alpha from texture sampler |
+| 5-6 | `shaderInstr` | `pp_ShadInstr` | Shader instruction (Decal, Modulate, etc.) |
+| 7 | `offset` | `pp_Offset` | Offset color enabled |
+| 8-9 | `fog` | `pp_FogCtrl` | Fog control mode |
+| 10 | `gouraud` | `pp_Gouraud` | Gouraud shading enabled |
+| 11 | `bumpmap` | `pp_BumpMap` | Bump mapping enabled (Naomi 2) |
+| 12 | `clamping` | `ColorClamping` | Color clamping enabled |
+| 13 | `trilinear` | `pp_TriLinear` | Trilinear filtering enabled |
+| 14-15 | `palette` | `pp_Palette` | Palette mode (0: None, 1: 4bpp, 2: 8bpp) |
+| 16 | `divPosZ` | `DIV_POS_Z` | Position W/Z division flag |
+| 17 | `dithering` | `DITHERING` | Dithering enabled |
+| 18 | `showDepth` | `ShowDepth` | Debug: Display depth buffer |
+| 19 | `isTranslucent` | `IS_TRANSLUCENT` | Translucent list flag |
+| 20 | `showNormals` | `ShowNormals` | Debug: Display normales |
+| 21 | `gbuffer` | `GBUFFER` | Render to G-Buffer (Deferred) |
+| 22 | `enableSSAO` | `EnableSSAO` | SSAO calculation enabled |
+| 23 | `showSSAO` | `ShowSSAO` | Debug: Display SSAO buffer |
+| 24 | `showMaterial` | `ShowMaterial` | Debug: Display Material IDs |
 
 ---
 
-## 3. Injected Constants (Uniforms & Push Constants)
+## 4. Injected Constants (Uniforms & Push Constants)
 
 ### A. Push Constants (48 bytes)
-Injected at every draw call (`DrawPoly`). Accessible in the **Fragment Shader** only.
-**GLSL Declaration:** [vulkan_top.frag](file:///mnt/data/projects/core/rend/vulkan/shaders/vulkan_top.frag)
+Injected at every draw call. Fragment Shader only.
 
 | Struct Field | Type | Description |
 | :--- | :--- | :--- |
-| `pushConstants.isHUD` | `float` | HUD Routing Flag (Whitelist-based). 1.0 = HUD, 0.0 = 3D. |
+| `pushConstants.isHUD` | `float` | HUD Routing Flag. 1.0 = HUD, 0.0 = 3D. |
 | `pushConstants.clipTest` | `vec4` | Clipping coordinates (minX, minY, maxX, maxY). |
-| `pushConstants.trilinearAlpha` | `float` | Alpha coefficient for trilinear filtering interpolation. |
+| `pushConstants.trilinearAlpha` | `float` | Alpha coefficient for trilinear filtering. |
 | `pushConstants.palette_index` | `float` | Base offset for color palette (LUT) access. |
 | `pushConstants.velocity` | `vec2` | Per-poly velocity vector for Motion Blur. |
 
 ### B. Uniform Buffers (UBO)
-Defined in [shaders.h](file:///mnt/data/projects/core/rend/vulkan/shaders.h).
-
-#### Set 0, Binding 0: `VertexShaderUniforms`
-- `uniformBuffer.ndcMat`: Matrix for projection to Normalized Device Coordinates.
 
 #### Set 0, Binding 1: `FragmentShaderUniforms` (as `uniformBuffer`)
 - `uniformBuffer.colorClampMin/Max`: Bounds for color clamping.
 - `uniformBuffer.sp_FOG_COL_RAM`: Fog color (from RAM).
 - `uniformBuffer.sp_FOG_COL_VERT`: Fog color (from Vertex).
-- `uniformBuffer.ditherDivisor`: Divisor for dithering calculations.
-- `uniformBuffer.cp_AlphaTestValue`: Reference value for Alpha Test (Punch Through).
+- `uniformBuffer.ditherDivisor`: Divisor for dithering.
+- `uniformBuffer.cp_AlphaTestValue`: Reference value for Alpha Test.
 - `uniformBuffer.sp_FOG_DENSITY`: Fog density constant.
-
-#### Set 1, Binding 2: `N2VertexShaderUniforms` (Naomi 2 only)
-- `mvMat`, `normalMat`, `projMat`, `envMapping[2]`, `bumpMapping`, `polyNumber`, `glossCoef[2]`, `constantColor[2]`.
 
 ---
 
-## 4. Shader Routing (HUD Separation)
+## 5. Developer Guide: Adding New Parameters
 
-The main fragment shader uses the `isHUD` push constant to decide which G-Buffer attachment to write to.
+### How to add a new Macro Bit (Shader Variation)
+1.  **Modify `shaders.h`**:
+    -   Add a new `bool` or `int` field to `FragmentShaderParams` (or `VertexShaderParams`).
+    -   Update the `hash()` function to include the new field at an unused bit position.
+2.  **Modify `shaders.cpp`**:
+    -   In `compileShader`, add `src.addConstant("MY_NEW_MACRO", (int)params.myField);`.
+3.  **Update Pipelines**:
+    -   In `pipeline.cpp`, find `CreatePipeline` and ensure the new field is correctly initialized in the `params` struct passed to `shaderManager->GetFragmentShader`.
+4.  **GLSL Usage**:
+    -   In the `.frag` or `.vert` file, use `#if MY_NEW_MACRO == 1 ... #endif`.
 
-**Reference File:** [vulkan_main.frag](file:///mnt/data/projects/core/rend/vulkan/shaders/vulkan_main.frag)
+### How to add a new Push Constant
+1.  **Modify `pipeline.h`**:
+    -   Update `vk::PushConstantRange` in `PipelineManager::Init` (increase the size, must be multiple of 4).
+2.  **Modify `vulkan_top.frag`**:
+    -   Add the variable in `layout(push_constant) uniform pushBlock`.
+    -   **Important**: Follow `std430` alignment rules (e.g., `vec4` must start at 16-byte boundaries).
+3.  **Update C++ side**:
+    -   In `drawer.cpp`, update the `pushConstants` array/struct used in `cmdBuffer.pushConstants(...)` calls.
 
-```glsl
-#if GBUFFER == 1
-    if (pushConstants.isHUD > 0.0) {
-        HUDColor = color;      // Writes to dedicated HUD attachment
-        FragColor = vec4(0.0); // Discards output in main Albedo buffer
-    } else {
-        HUDColor = vec4(0.0);
-        FragColor = color;     // Regular 3D rendering
-    }
-#endif
-```
+### How to add a new Uniform (UBO)
+1.  **Modify `shaders.h`**:
+    -   Add the field to `FragmentShaderUniforms` or `VertexShaderUniforms`.
+    -   **Important**: Follow `std140` alignment rules (16-byte padding for vectors).
+2.  **Modify `vulkan_top.frag`**:
+    -   Add the field to the corresponding `uniform` block.
+3.  **Populate the data**:
+    -   In `drawer.h`, update `BaseDrawer::MakeFragmentUniforms` to fill the new field with data from the emulation state.
 
 ---
 
 ## Key Files Reference
-- [shaders.h](file:///mnt/data/projects/core/rend/vulkan/shaders.h): Uniform structures and shader hashing logic.
-- [shaders.cpp](file:///mnt/data/projects/core/rend/vulkan/shaders.cpp): Mapping between C++ params and GLSL `#define` macros.
-- [pipeline.h](file:///mnt/data/projects/core/rend/vulkan/pipeline.h): Pipeline hashing logic and layout definition.
-- [vulkan_top.frag](file:///mnt/data/projects/core/rend/vulkan/shaders/vulkan_top.frag): GLSL declarations (Bindings, Push Constants).
-- [vulkan_main.frag](file:///mnt/data/projects/core/rend/vulkan/shaders/vulkan_main.frag): Core rendering logic implementation.
-- [drawer.cpp](file:///mnt/data/projects/core/rend/vulkan/drawer.cpp): C++ side constant upload and draw dispatch.
-- [ta_structs.h](file:///mnt/data/projects/core/hw/pvr/ta_structs.h): Hardware PowerVR structures (PCW, TSP, ISP).
+- [shaders.h](file:///mnt/data/projects/core/rend/vulkan/shaders.h): Uniform structures and hashing logic.
+- [shaders.cpp](file:///mnt/data/projects/core/rend/vulkan/shaders.cpp): Mapping params to GLSL macros.
+- [pipeline.h](file:///mnt/data/projects/core/rend/vulkan/pipeline.h): Pipeline hashing logic.
+- [vulkan_top.frag](file:///mnt/data/projects/core/rend/vulkan/shaders/vulkan_top.frag): GLSL declarations.
+- [vulkan_main.frag](file:///mnt/data/projects/core/rend/vulkan/shaders/vulkan_main.frag): Main logic.

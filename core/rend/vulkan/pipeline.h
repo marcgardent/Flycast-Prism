@@ -174,6 +174,9 @@ private:
 class PipelineManager
 {
 public:
+
+	PipelineManager(){};
+
 	virtual ~PipelineManager() = default;
 
 	void Init(ShaderManager *shaderManager, vk::RenderPass renderPass)
@@ -219,15 +222,14 @@ public:
 		}
 	}
 
-	vk::Pipeline GetPipeline(u32 listType, bool sortTriangles, const PolyParam& pp, int gpuPalette, bool dithering)
+	vk::Pipeline GetPipeline(u32 listType, bool sortTriangles, const PolyParam& pp, int gpuPalette, bool dithering, bool isHUD)
 	{
-		u64 pipehash = hash(listType, sortTriangles, &pp, gpuPalette, dithering);
+		u64 pipehash = hash(listType, sortTriangles, &pp, gpuPalette, dithering, isHUD);
 		const auto &pipeline = pipelines.find(pipehash);
 		if (pipeline != pipelines.end())
 			return pipeline->second.get();
 
-		CreatePipeline(listType, sortTriangles, pp, gpuPalette, dithering);
-
+		CreatePipeline(listType, sortTriangles, pp, gpuPalette, dithering, isHUD);
 		return *pipelines[pipehash];
 	}
 
@@ -241,6 +243,8 @@ public:
 
 		return *modVolPipelines[pipehash];
 	}
+
+
 
 	vk::Pipeline GetDepthPassPipeline(int cullMode, bool naomi2)
 	{
@@ -268,7 +272,7 @@ private:
 	void CreateModVolPipeline(ModVolMode mode, int cullMode, bool naomi2);
 	void CreateDepthPassPipeline(int cullMode, bool naomi2);
 
-	u64 hash(u32 listType, bool sortTriangles, const PolyParam *pp, int gpuPalette, bool dithering) const
+	u64 hash(u32 listType, bool sortTriangles, const PolyParam *pp, int gpuPalette, bool dithering, bool isHud) const
 	{
 		u64 hash = pp->pcw.Gouraud | (pp->pcw.Offset << 1) | (pp->pcw.Texture << 2) | (pp->pcw.Shadow << 3)
 			| (((pp->tileclip >> 28) == 3) << 4);
@@ -288,6 +292,7 @@ private:
 		hash |= (u64)config::ShowSSAO << 36;
 		hash |= (u64)config::EnableSSAO << 37;
 		hash |= (u64)config::ShowMaterial << 38;
+		hash |= (u64)isHud << 39;
 		return hash;
 	}
 	u32 hash(ModVolMode mode, int cullMode, bool naomi2) const
@@ -338,7 +343,7 @@ private:
 		);
 	}
 
-	void CreatePipeline(u32 listType, bool sortTriangles, const PolyParam& pp, int gpuPalette, bool dithering);
+	void CreatePipeline(u32 listType, bool sortTriangles, const PolyParam& pp, int gpuPalette, bool dithering, bool isHud);
 
 	std::map<u64, vk::UniquePipeline> pipelines;
 	std::map<u32, vk::UniquePipeline> modVolPipelines;
@@ -358,6 +363,9 @@ protected:
 class RttPipelineManager : public PipelineManager
 {
 public:
+	// Explicit constructor to call the base class constructor
+	RttPipelineManager() : PipelineManager() {}
+
 	void Init(ShaderManager *shaderManager)
 	{
 		// RTT render pass
