@@ -346,7 +346,11 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	else
 		depthOp = depthOps[pp.isp.DepthMode];
 	bool depthWriteEnable;
-	if (sortTriangles /* && !config::PerStripSorting */)
+	if (isHUD)
+	{
+		depthWriteEnable = false;
+	}
+	else if (sortTriangles /* && !config::PerStripSorting */)
 		// FIXME temporary work-around for intel driver bug
 		depthWriteEnable = GetContext()->GetVendorID() == VulkanContext::VENDOR_INTEL;
 	else
@@ -404,22 +408,31 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 	if (config::RendererType == RenderType::Vulkan_GBuffer)
 	{
 		// First attachment (Albedo) uses standard blending, write RGBA
-		colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
+		//colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
+		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
+			true, // blending (souvent true pour l'albedo)
+			vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
+			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+			isHUD ? (vk::ColorComponentFlags)0 : colorComponentFlags));
+
 		// Second attachment (Normals) uses no blending, just write
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
 			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			isHUD ? (vk::ColorComponentFlags)0 : colorComponentFlags));
+
 		// Third attachment (Material ID) uses no blending, write R only
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
 			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			isHUD ? (vk::ColorComponentFlags)0 : vk::ColorComponentFlagBits::eR));
+
 		// Fourth attachment (Motion/Velocity) RG only, no blending
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
 			false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
 			isHUD ? (vk::ColorComponentFlags)0 : (vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG)));
+
 		// Fifth attachment (HUD Color) RGBA, always writable (shader-side routing)
 		colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
 			!(config::ShowDepth || config::ShowNormals || config::ShowSSAO),

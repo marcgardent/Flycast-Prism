@@ -85,10 +85,13 @@ discard;
 	if (uniformBuffer.cp_AlphaTestValue > color.a)
 	discard;
 	color.a = 1.0;
-	#elif GBUFFER == 1 && IS_TRANSLUCENT == 1
-		if (color.a < 0.2)
-	discard;
 	#endif
+	// TODO MGT TEXTURE TRANSLUSCIDE A FIX
+	//#elif GBUFFER == 1 && IS_TRANSLUCENT == 1
+	//	if (color.a < 0.2)
+	//discard;
+	//#endif
+
 
 	#if DIV_POS_Z == 1
 	highp float w = 100000.0 / vtx_uv.z;
@@ -98,13 +101,22 @@ discard;
 	highp float log_z = log2(1.0 + max(w, -0.999999)) / 34.0;
 
 	#if GBUFFER == 1
-	gl_FragDepth = log_z;
+
 	// Normale geometrique + interpolee si disponible
 	vec3 geoNormal = normalize(cross(dFdx(vtx_pos), dFdy(vtx_pos)));
 	vec3 N = (length(vtx_normal) > 0.001) ? normalize(vtx_normal) : geoNormal;
 
-	FragColor = color;
-	NormalColor = vec4(N * 0.5 + 0.5, 1.0);
+	// HUD Separation
+	#if IS_HUD == 1
+		HUDColor = vec4(color.rgb * color.a, color.a);
+		//FragColor =  vec4(0.0, 0.0, 0.0, 0.0); // discard discard HUD
+		//NormalColor = vec4(N * 0.5 + 0.5, 1.0);
+	#else
+		HUDColor = vec4(0.0, 0.0, 0.0, 0.0); // discard albedo
+		FragColor = color;
+		NormalColor = vec4(N * 0.5 + 0.5, 1.0);
+		gl_FragDepth = log_z;
+	#endif
 
 	// Material ID encode sur 8 bits
 	// Bit 7 : Presence (Toujours 1 pour la geometrie), Bits 6-4 : list_type, Bit 3 : texture, Bit 2 : gouraud, Bit 1 : bumpmap, Bit 0 : fog/palette
@@ -134,13 +146,7 @@ discard;
 	// Motion buffer : velocite per-poly encodee [0,1]
 	MotionColor = pushConstants.velocity * 0.5 + 0.5;
 
-	// HUD Separation
-	#if IS_HUD == 1
-		HUDColor = color;
-		FragColor = vec4(0.0); // discard HUD
-	#else
-		HUDColor = vec4(0.0); // discard albedo
-	#endif
+
 
 	#else
 	#if DITHERING == 1

@@ -35,6 +35,7 @@
 
 #include "rend/HudTextureHashWhitelist.h"
 
+
 class BaseDrawer
 {
 public:
@@ -236,6 +237,8 @@ public:
 	}
 	vk::CommandBuffer GetCurrentCommandBuffer() const { return currentCommandBuffer; }
 
+	void resetHudPassIndicator();
+
 protected:
 	virtual u32 GetSwapChainSize() { return GetContext()->GetSwapChainSize(); }
 	virtual vk::CommandBuffer BeginRenderPass() = 0;
@@ -293,7 +296,8 @@ private:
 	std::unordered_map<uint32_t, glm::vec2> prevCentroids; // Motion buffer: TCW -> centroid XY (frame N-1)
 	std::unordered_map<uint32_t, glm::vec2> currCentroids; // Motion buffer: TCW -> centroid XY (frame N, during draw)
 	rend::HudTextureHashWhitelist hudTextureHashWhitelist = rend::HudTextureHashWhitelist();
-
+	bool isLikelyHUD= false;
+	bool hudPassStarted = false;
 	bool IsWhiteListTextureHUD(const PolyParam& pp) const;
 };
 
@@ -305,17 +309,18 @@ public:
 	void Term()
 	{
 		screenPipelineManager.reset();
-		renderPassLoad.reset();
-		renderPassClear.reset();
+		// renderPassLoad.reset(); // Removed
+		// renderPassClear.reset(); // Removed
+		renderPass.reset(); // New
 		framebuffers.clear();
 		colorAttachments.clear();
 		depthAttachment.reset();
 		transitionNeeded.clear();
-		clearNeeded.clear();
+		// clearNeeded.clear(); // Removed
 		Drawer::Term();
 	}
 
-	vk::RenderPass GetRenderPass() const { return *renderPassClear; }
+	vk::RenderPass GetRenderPass() const { return *renderPass; } // Changed
 	void EndRenderPass(FramebufferAttachment* customPresentationTarget = nullptr);
 	// Termine le render pass sans soumettre le command buffer.
 	// Retourne le command buffer pour y enregistrer des commandes supplementaires.
@@ -339,6 +344,7 @@ public:
 		if (attachmentIndex < 0 || attachmentIndex >= (int)colorAttachments[imageIndex].size()) return nullptr;
 		return colorAttachments[imageIndex][attachmentIndex].get();
 	}
+
 	bool PresentFrame(FramebufferAttachment* customPresentationTarget = nullptr)
 	{
 		EndRenderPass(customPresentationTarget);
@@ -358,8 +364,9 @@ protected:
 private:
 	std::unique_ptr<PipelineManager> screenPipelineManager;
 
-	vk::UniqueRenderPass renderPassLoad;
-	vk::UniqueRenderPass renderPassClear;
+	// vk::UniqueRenderPass renderPassLoad; // Removed
+	// vk::UniqueRenderPass renderPassClear; // Removed
+	vk::UniqueRenderPass renderPass; // New
 	std::vector<vk::UniqueFramebuffer> framebuffers;
 	std::vector<std::vector<std::unique_ptr<FramebufferAttachment>>> colorAttachments;
 	std::unique_ptr<FramebufferAttachment> depthAttachment;
@@ -367,10 +374,11 @@ private:
 	vk::Extent2D viewport;
 	ShaderManager *shaderManager = nullptr;
 	std::vector<bool> transitionNeeded;
-	std::vector<bool> clearNeeded;
+	// std::vector<bool> clearNeeded; // Removed
 	bool frameRendered = false;
 	float aspectRatio = 0.f;
 	bool emulateFramebuffer = false;
+
 };
 
 class TextureDrawer : public Drawer

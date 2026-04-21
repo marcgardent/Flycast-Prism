@@ -102,7 +102,6 @@ size_t HudTextureHashWhitelist::size() const {
 
 bool HudTextureHashWhitelist::isWhitelisted(u32 hash) const {
     const bool ret = m_whitelistedHashes.count(hash) > 0;
-    if (ret) NOTICE_LOG(RENDERER, "Checking hud whitelist for hash: 0x%X = MATCHED", hash);
     return ret;
 }
 

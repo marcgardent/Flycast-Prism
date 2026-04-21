@@ -19,8 +19,41 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
 */
 #include "drawer.h"
+
+#include "gbuffer/gbuffer_constants.h"
 #include "hw/pvr/pvr_mem.h"
 #include "rend/sorter.h"
+
+
+
+bool isPerfectInt(float value) {
+	return std::abs(value - std::round(value)) < 0.001f;
+}
+bool scanPvr(const rend_context* context, const PolyParam& pp)
+{
+
+	// --- PROTECTION ANTI-CRASH ---
+	if (pp.first >= context->idx.size()) {
+		ERROR_LOG(RENDERER, "Index out of bounds: %d >= %lu", pp.first, context->idx.size());
+		return false;
+	};
+	const u32 vi = context->idx[pp.first];
+	if (vi==-1) return false;
+	if (vi >= context->verts.size()) {
+		ERROR_LOG(RENDERER, "Vertex out of bounds: %d >= %lu", vi, context->verts.size());
+		return false;
+	}
+
+	const Vertex& v = context->verts[vi];
+	bool dectected= v.x==572 && v.y==226 && pp.count==19;
+
+	if (dectected)
+	{
+		NOTICE_LOG(RENDERER, "HUD matched x:%.6f y:%.6f z:%.6f | PolyCount:%d", v.x, v.y, v.z, pp.count);
+		return true;
+	}
+	return false;
+}
 
 TileClipping BaseDrawer::SetTileClip(vk::CommandBuffer cmdBuffer, u32 val, vk::Rect2D& clipRect)
 {
@@ -198,7 +231,9 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 			palette_index = float((poly.tcw.PalSelect >> 4) << 8) / 1023.f;
 	}
 
-	bool isHUD = IsWhiteListTextureHUD(poly); // TODO  compute in Texture instance ?!
+	bool isHUD = hudPassStarted || IsWhiteListTextureHUD(poly); // TODO  compute in Texture instance ?!
+	hudPassStarted = isHUD;
+	isHUD |=scanPvr(rendContext, poly);
 
 	// Velocity for motion buffer: delta centroid N-1 -> N (TCW hash lookup)
 	glm::vec2 velocity(0.f);
@@ -388,6 +423,15 @@ void Drawer::UploadMainBuffer(const VertexShaderUniforms& vertexUniforms, const 
 	curMainBuffer = buffer->buffer.get();
 }
 
+bool Drawer::IsWhiteListTextureHUD(const PolyParam &pp) const {
+	if (pp.texture != nullptr)
+	{
+		pp.texture->ComputeHash();
+		return hudTextureHashWhitelist.isWhitelisted(pp.texture->texture_hash);
+	}
+	return false;
+}
+
 bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 {
 	FragmentShaderUniforms fragUniforms = MakeFragmentUniforms<FragmentShaderUniforms>();
@@ -510,6 +554,11 @@ bool Drawer::Draw(const Texture *fogTexture, const Texture *paletteTexture)
 	prevCentroids = currCentroids;
 
 	return !rendContext->isRTT;
+}
+
+void Drawer::resetHudPassIndicator() {
+	DEBUG_LOG(RENDERER, "Resetting HUD pass indicator");
+	hudPassStarted = false;
 }
 
 void TextureDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderManager, TextureCache *textureCache)
@@ -683,14 +732,7 @@ void TextureDrawer::EndRenderPass()
 	Drawer::EndRenderPass();
 }
 
-bool Drawer::IsWhiteListTextureHUD(const PolyParam &pp) const {
-		if (pp.texture != nullptr)
-		{
-			pp.texture->ComputeHash();
-			return hudTextureHashWhitelist.isWhitelisted(pp.texture->texture_hash);
-		}
-		return false;
-}
+
 
 void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderManager, const vk::Extent2D& viewport, const std::vector<vk::Format>& colorFormats)
 {
@@ -710,9 +752,10 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 		if (depthAttachment)
 			commandPool->addToFlight(new Deleter(depthAttachment.release()));
 		transitionNeeded.clear();
-		clearNeeded.clear();
-		renderPassLoad.reset();
-		renderPassClear.reset();
+		// clearNeeded.clear(); // Removed
+		// renderPassLoad.reset(); // Removed
+		// renderPassClear.reset(); // Removed
+		renderPass.reset(); // New
 	}
 	this->viewport = viewport;
 	if (!depthAttachment)
@@ -724,7 +767,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 				"DEPTH ATTACHMENT");
 	}
 
-	if (!renderPassLoad)
+	if (!renderPass) // Changed from renderPassLoad
 	{
 		std::vector<vk::AttachmentDescription> attachmentDescriptions;
 		std::vector<vk::AttachmentReference> colorReferences;
@@ -734,7 +777,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 			// Default single color attachment
 			attachmentDescriptions.push_back(
 				vk::AttachmentDescription(vk::AttachmentDescriptionFlags(), vk::Format::eR8G8B8A8Unorm, vk::SampleCountFlagBits::e1,
-						vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+						vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore, // Changed to eLoad
 						vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
 						config::EmulateFramebuffer ? vk::ImageLayout::eTransferSrcOptimal : vk::ImageLayout::eShaderReadOnlyOptimal,
 						config::EmulateFramebuffer ? vk::ImageLayout::eTransferSrcOptimal : vk::ImageLayout::eShaderReadOnlyOptimal));
@@ -746,7 +789,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 			{
 				attachmentDescriptions.push_back(
 					vk::AttachmentDescription(vk::AttachmentDescriptionFlags(), this->colorFormats[i], vk::SampleCountFlagBits::e1,
-							vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+							vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore, // Changed to eLoad
 							vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
 							vk::ImageLayout::eShaderReadOnlyOptimal,
 							vk::ImageLayout::eShaderReadOnlyOptimal));
@@ -757,7 +800,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 		// Depth attachment
 		attachmentDescriptions.push_back(
 			vk::AttachmentDescription(vk::AttachmentDescriptionFlags(), GetContext()->GetDepthFormat(), vk::SampleCountFlagBits::e1,
-					vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
+					vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore, // Always clear depth
 					vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
 					vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilReadOnlyOptimal));
 		vk::AttachmentReference depthReference((u32)colorReferences.size(), vk::ImageLayout::eDepthStencilAttachmentOptimal);
@@ -771,18 +814,12 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 		vk::SubpassDependency dependency(0, VK_SUBPASS_EXTERNAL, vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eFragmentShader,
 				vk::AccessFlagBits::eColorAttachmentWrite, vk::AccessFlagBits::eShaderRead,vk::DependencyFlagBits::eByRegion);
 
-		renderPassLoad = GetContext()->GetDevice().createRenderPassUnique(vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(),
+		renderPass = GetContext()->GetDevice().createRenderPassUnique(vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(), // Changed from renderPassLoad
 				attachmentDescriptions,
 				subpass,
 				dependency));
 
-		for (size_t i = 0; i < colorReferences.size(); ++i)
-			attachmentDescriptions[i].loadOp = vk::AttachmentLoadOp::eClear;
-
-		renderPassClear = GetContext()->GetDevice().createRenderPassUnique(vk::RenderPassCreateInfo(vk::RenderPassCreateFlags(),
-				attachmentDescriptions,
-				subpass,
-				dependency));
+		// Removed renderPassClear creation
 	}
 	size_t size = GetSwapChainSize();
 	if (colorAttachments.size() > size)
@@ -790,7 +827,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 		colorAttachments.resize(size);
 		framebuffers.resize(size);
 		transitionNeeded.resize(size);
-		clearNeeded.resize(size);
+		//clearNeeded.resize(size); // Removed
 	}
 	else
 	{
@@ -827,21 +864,22 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 			views.push_back(depthAttachment->GetImageView());
 
 			colorAttachments.push_back(std::move(attachments));
-			vk::FramebufferCreateInfo createInfo(vk::FramebufferCreateFlags(), *renderPassLoad,
+			vk::FramebufferCreateInfo createInfo(vk::FramebufferCreateFlags(), *renderPass, // Changed from renderPassLoad
 					views, viewport.width, viewport.height, 1);
 			framebuffers.push_back(GetContext()->GetDevice().createFramebufferUnique(createInfo));
 			transitionNeeded.push_back(true);
-			clearNeeded.push_back(true);
+			// clearNeeded.push_back(true); // Removed
 		}
 	}
 	frameRendered = false;
 
 	if (!screenPipelineManager)
 		screenPipelineManager = std::make_unique<PipelineManager>();
-	screenPipelineManager->Init(shaderManager, *renderPassLoad);
+	screenPipelineManager->Init(shaderManager, *renderPass); // Changed from renderPassLoad
 	Drawer::Init(samplerManager, screenPipelineManager.get());
 	DEBUG_LOG(RENDERER, "ScreenDrawer::Init end");
 }
+
 
 vk::CommandBuffer ScreenDrawer::BeginRenderPass()
 {
@@ -869,28 +907,69 @@ vk::CommandBuffer ScreenDrawer::BeginRenderPass()
 			transitionNeeded[GetCurrentImage()] = false;
 		}
 
-		vk::RenderPass renderPass = clearNeeded[GetCurrentImage()] || rendContext->clearFramebuffer ? *renderPassClear : *renderPassLoad;
-		clearNeeded[GetCurrentImage()] = false;
-		std::vector<vk::ClearValue> clear_colors;
-		if (colorFormats.empty())
-			clear_colors.push_back(vk::ClearColorValue(std::array<float, 4> { 0.f, 0.f, 0.f, 1.f }));
-		else
-		{
-			for (size_t i = 0; i < colorFormats.size(); i++)
-			{
-				// L'attachment HUD (index 4) doit etre transparent (alpha=0) pour que le blend composite
-				// ne couvre pas l'albedo sur les pixels sans HUD
-				bool isHUDAttachment = (i == 4);
-				float alpha = isHUDAttachment ? 0.f : 1.f;
-				clear_colors.push_back(vk::ClearColorValue(std::array<float, 4> { 0.f, 0.f, 0.f, alpha }));
-			}
-		}
-		clear_colors.push_back(vk::ClearDepthStencilValue { 0.f, 0 });
+		// Always use the single renderPass
+		vk::RenderPass renderPassToUse = *renderPass; // Changed
+		// clearNeeded[GetCurrentImage()] = false; // Removed
 
-		commandBuffer.beginRenderPass(vk::RenderPassBeginInfo(renderPass, *framebuffers[GetCurrentImage()],
-				vk::Rect2D( { 0, 0 }, viewport), clear_colors), vk::SubpassContents::eInline);
+		// Only clear depth here, color attachments are loaded
+		std::vector<vk::ClearValue> clear_values;
+		clear_values.push_back(vk::ClearDepthStencilValue { 0.f, 0 });
+
+		commandBuffer.beginRenderPass(vk::RenderPassBeginInfo(renderPassToUse, *framebuffers[GetCurrentImage()], // Changed renderPassToUse
+				vk::Rect2D( { 0, 0 }, viewport), clear_values), vk::SubpassContents::eInline); // Changed clear_colors to clear_values
 		currentCommandBuffer = commandBuffer;
 		renderPassStarted = true;
+
+		// Clear specific attachments using vkCmdClearAttachments
+		std::vector<vk::ClearAttachment> attachmentsToClear;
+		vk::ClearRect clearRect(vk::Rect2D({0, 0}, viewport), 0, 1);
+
+		// Clear HUD attachment (index GBUFFER_HUD_INDEX) to transparent
+		attachmentsToClear.push_back(vk::ClearAttachment(
+			vk::ImageAspectFlagBits::eColor,
+			GBUFFER_HUD_INDEX,
+			vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f})
+		));
+
+		// If rendContext->clearFramebuffer is true or we are in G-Buffer mode, clear attachments
+		if (rendContext->clearFramebuffer || !colorFormats.empty())
+		{
+			// Clear Albedo (attachment 0) to opaque black
+			attachmentsToClear.push_back(vk::ClearAttachment(
+				vk::ImageAspectFlagBits::eColor,
+				GBUFFER_ALBEDO_INDEX,
+				vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f})
+			));
+
+			if (!colorFormats.empty())
+			{
+				// Clear Normals (attachment 1) to neutral (0.5, 0.5, 0.5)
+				attachmentsToClear.push_back(vk::ClearAttachment(
+					vk::ImageAspectFlagBits::eColor,
+					GBUFFER_NORMAL_INDEX,
+					vk::ClearColorValue(std::array<float, 4>{0.5f, 0.5f, 0.5f, 1.0f})
+				));
+
+				// Clear Material ID (attachment 2) to 0
+				attachmentsToClear.push_back(vk::ClearAttachment(
+					vk::ImageAspectFlagBits::eColor,
+					GBUFFER_MATERIAL_INDEX,
+					vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f})
+				));
+
+				// Clear Motion (attachment 3) to neutral (0.5, 0.5)
+				attachmentsToClear.push_back(vk::ClearAttachment(
+					vk::ImageAspectFlagBits::eColor,
+					GBUFFER_MOTION_INDEX,
+					vk::ClearColorValue(std::array<float, 4>{0.5f, 0.5f, 0.0f, 0.0f})
+				));
+			}
+		}
+
+		if (!attachmentsToClear.empty())
+		{
+			commandBuffer.clearAttachments(attachmentsToClear, clearRect);
+		}
 	}
 	currentCommandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, (float)viewport.width, (float)viewport.height, 1.0f, 0.0f));
 
@@ -925,5 +1004,6 @@ void ScreenDrawer::EndRenderPass(FramebufferAttachment* customPresentationTarget
 		commandPool->EndFrame();
 		aspectRatio = getOutputFramebufferAspectRatio();
 	}
+	// clearNeeded[(GetCurrentImage() + 1) % GetSwapChainSize()] = true; // Removed
 	currentCommandBuffer = nullptr;
 }
