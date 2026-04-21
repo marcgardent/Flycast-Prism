@@ -251,7 +251,7 @@ void Drawer::DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sor
 		// Push constant layout must match vulkan_top.frag pushBlock (std430, 48 bytes):
 		// [0]=isHUD, [1-3]=padding, [4-7]=clipTest, [8]=trilinear, [9]=palette, [10-11]=velocity
 		const std::array<float, 12> pushConstants = {
-				isHUD ? 1.0f : 0.0f, // isHUD
+				0.f, // padding (was isHUD)
 				0.f, 0.f, 0.f,                           // padding
 				(float)scissorRect.offset.x,
 				(float)scissorRect.offset.y,
@@ -924,46 +924,53 @@ vk::CommandBuffer ScreenDrawer::BeginRenderPass()
 		std::vector<vk::ClearAttachment> attachmentsToClear;
 		vk::ClearRect clearRect(vk::Rect2D({0, 0}, viewport), 0, 1);
 
-		// Clear HUD attachment (index GBUFFER_HUD_INDEX) to transparent
-		attachmentsToClear.push_back(vk::ClearAttachment(
-			vk::ImageAspectFlagBits::eColor,
-			GBUFFER_HUD_INDEX,
-			vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f})
-		));
-
-		// If rendContext->clearFramebuffer is true or we are in G-Buffer mode, clear attachments
-		if (rendContext->clearFramebuffer || !colorFormats.empty())
+		// Clear attachments at the start of the frame
+		if (colorFormats.size() >= 5)
 		{
-			// Clear Albedo (attachment 0) to opaque black
+			// Clear all 5 G-Buffer attachments unconditionally in G-Buffer mode
+			// Attachment 0: Albedo (Opaque black)
 			attachmentsToClear.push_back(vk::ClearAttachment(
 				vk::ImageAspectFlagBits::eColor,
 				GBUFFER_ALBEDO_INDEX,
 				vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f})
 			));
 
-			if (!colorFormats.empty())
-			{
-				// Clear Normals (attachment 1) to neutral (0.5, 0.5, 0.5)
-				attachmentsToClear.push_back(vk::ClearAttachment(
-					vk::ImageAspectFlagBits::eColor,
-					GBUFFER_NORMAL_INDEX,
-					vk::ClearColorValue(std::array<float, 4>{0.5f, 0.5f, 0.5f, 1.0f})
-				));
+			// Attachment 1: Normals (Neutral 0.5)
+			attachmentsToClear.push_back(vk::ClearAttachment(
+				vk::ImageAspectFlagBits::eColor,
+				GBUFFER_NORMAL_INDEX,
+				vk::ClearColorValue(std::array<float, 4>{0.5f, 0.5f, 0.5f, 1.0f})
+			));
 
-				// Clear Material ID (attachment 2) to 0
-				attachmentsToClear.push_back(vk::ClearAttachment(
-					vk::ImageAspectFlagBits::eColor,
-					GBUFFER_MATERIAL_INDEX,
-					vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f})
-				));
+			// Attachment 2: Material ID (0)
+			attachmentsToClear.push_back(vk::ClearAttachment(
+				vk::ImageAspectFlagBits::eColor,
+				GBUFFER_MATERIAL_INDEX,
+				vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f})
+			));
 
-				// Clear Motion (attachment 3) to neutral (0.5, 0.5)
-				attachmentsToClear.push_back(vk::ClearAttachment(
-					vk::ImageAspectFlagBits::eColor,
-					GBUFFER_MOTION_INDEX,
-					vk::ClearColorValue(std::array<float, 4>{0.5f, 0.5f, 0.0f, 0.0f})
-				));
-			}
+			// Attachment 3: Motion (Neutral 0.5)
+			attachmentsToClear.push_back(vk::ClearAttachment(
+				vk::ImageAspectFlagBits::eColor,
+				GBUFFER_MOTION_INDEX,
+				vk::ClearColorValue(std::array<float, 4>{0.5f, 0.5f, 0.0f, 0.0f})
+			));
+
+			// Attachment 4: HUD (Transparent)
+			attachmentsToClear.push_back(vk::ClearAttachment(
+				vk::ImageAspectFlagBits::eColor,
+				GBUFFER_HUD_INDEX,
+				vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.0f})
+			));
+		}
+		else if (rendContext->clearFramebuffer)
+		{
+			// Standard mode: clear only attachment 0 if requested
+			attachmentsToClear.push_back(vk::ClearAttachment(
+				vk::ImageAspectFlagBits::eColor,
+				0,
+				vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f})
+			));
 		}
 
 		if (!attachmentsToClear.empty())
