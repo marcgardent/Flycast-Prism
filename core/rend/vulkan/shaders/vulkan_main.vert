@@ -3,15 +3,6 @@ layout (std140, set = 0, binding = 0) uniform VertexShaderUniforms
         mat4 ndcMat;
 } uniformBuffer;
 
-layout (push_constant) uniform pushBlock
-{
-	float isHUD, _pad1, _pad2;
-	vec4 clipTest;
-	float trilinearAlpha;
-	float palette_index;
-	vec2 velocity;
-} pushConstants;
-
 layout (location = 0) in vec4         in_pos;
 layout (location = 1) in vec4        in_base;
 layout (location = 2) in vec4        in_offs;
@@ -28,11 +19,8 @@ void main()
 {
 	vec4 vpos = uniformBuffer.ndcMat * in_pos;
 #if DIV_POS_Z == 1
-	if (pushConstants.isHUD == 0.0)
-	{
-		vpos /= vpos.z;
-		vpos.z = vpos.w;
-	}
+	vpos /= vpos.z;
+	vpos.z = vpos.w;
 #endif
         vtx_base = in_base;
         vtx_offs = in_offs;

@@ -309,18 +309,17 @@ public:
 	void Term()
 	{
 		screenPipelineManager.reset();
-		// renderPassLoad.reset(); // Removed
-		// renderPassClear.reset(); // Removed
-		renderPass.reset(); // New
+		renderPassLoad.reset();
+		renderPassClear.reset();
 		framebuffers.clear();
 		colorAttachments.clear();
 		depthAttachment.reset();
 		transitionNeeded.clear();
-		// clearNeeded.clear(); // Removed
+		clearNeeded.clear();
 		Drawer::Term();
 	}
 
-	vk::RenderPass GetRenderPass() const { return *renderPass; } // Changed
+	vk::RenderPass GetRenderPass() const { return *renderPassClear; }
 	void EndRenderPass(FramebufferAttachment* customPresentationTarget = nullptr);
 	// Termine le render pass sans soumettre le command buffer.
 	// Retourne le command buffer pour y enregistrer des commandes supplementaires.
@@ -364,9 +363,8 @@ protected:
 private:
 	std::unique_ptr<PipelineManager> screenPipelineManager;
 
-	// vk::UniqueRenderPass renderPassLoad; // Removed
-	// vk::UniqueRenderPass renderPassClear; // Removed
-	vk::UniqueRenderPass renderPass; // New
+	vk::UniqueRenderPass renderPassLoad;
+	vk::UniqueRenderPass renderPassClear;
 	std::vector<vk::UniqueFramebuffer> framebuffers;
 	std::vector<std::vector<std::unique_ptr<FramebufferAttachment>>> colorAttachments;
 	std::unique_ptr<FramebufferAttachment> depthAttachment;
@@ -374,11 +372,10 @@ private:
 	vk::Extent2D viewport;
 	ShaderManager *shaderManager = nullptr;
 	std::vector<bool> transitionNeeded;
-	// std::vector<bool> clearNeeded; // Removed
+	std::vector<bool> clearNeeded;
 	bool frameRendered = false;
 	float aspectRatio = 0.f;
 	bool emulateFramebuffer = false;
-
 };
 
 class TextureDrawer : public Drawer
