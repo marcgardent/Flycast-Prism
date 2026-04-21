@@ -786,12 +786,12 @@ void ScreenDrawer::Init(SamplerManager *samplerManager, ShaderManager *shaderMan
 		{
 			for (size_t i = 0; i < this->colorFormats.size(); ++i)
 			{
-				attachmentDescriptions.push_back(
-					vk::AttachmentDescription(vk::AttachmentDescriptionFlags(), this->colorFormats[i], vk::SampleCountFlagBits::e1,
-							vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
-							vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
-							vk::ImageLayout::eShaderReadOnlyOptimal,
-							vk::ImageLayout::eShaderReadOnlyOptimal));
+ 				attachmentDescriptions.push_back(
+ 					vk::AttachmentDescription(vk::AttachmentDescriptionFlags(), this->colorFormats[i], vk::SampleCountFlagBits::e1,
+ 							(i == GBUFFER_HUD_INDEX) ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore,
+ 							vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+ 							vk::ImageLayout::eShaderReadOnlyOptimal,
+ 							vk::ImageLayout::eShaderReadOnlyOptimal));
 				colorReferences.push_back(vk::AttachmentReference((u32)i, vk::ImageLayout::eColorAttachmentOptimal));
 			}
 		}

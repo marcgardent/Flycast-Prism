@@ -359,6 +359,9 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles, const Pol
 			depthWriteEnable = !pp.isp.ZWriteDis;
 	}
 
+	if (isHUD)
+		depthWriteEnable = false;
+
 	bool shadowed = listType == ListType_Opaque || listType == ListType_Punch_Through;
 	vk::StencilOpState stencilOpState;
 	if (shadowed)
