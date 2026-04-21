@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engine Development Roadmap</title>
+    <!-- Chargement des bibliothèques via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-[#0f172a] text-slate-200 min-h-screen">
+<div id="root"></div>
+
+<script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Icônes SVG simples pour éviter les dépendances externes lourdes
+    const Icons = {
+        Layers: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>,
+        Cpu: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>,
+        Settings: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+        Trash: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+    };
+
+    const App = () => {
+        const [tasks, setTasks] = useState(() => {
+            const saved = localStorage.getItem('engine-roadmap');
+            return saved ? JSON.parse(saved) : [
+                { id: 1, title: 'Finir le Gbuffers (filtre blur, ssao)', category: 'Moteur', priority: 'Critique', status: 'A faire' },
+                { id: 2, title: 'Ajouter metadata buffer (isoler/tager polygones)', category: 'Moteur', priority: 'Critique', status: 'A faire' },
+                { id: 3, title: 'Faire le viewer des metadata (EXR)', category: 'Outils', priority: 'Haute', status: 'A faire' },
+                { id: 4, title: 'Passe de luminance (compatibilité HDR)', category: 'Moteur', priority: 'Haute', status: 'A faire' },
+                { id: 5, title: 'HUD widescreen via metadata buffer', category: 'Effets', priority: 'Moyenne', status: 'A faire' },
+                { id: 6, title: 'Filtre cinéma effet diaphragme', category: 'Effets', priority: 'Basse', status: 'A faire' },
+                { id: 7, title: 'Jeu de voiture (IA-Master generation)', category: 'IA', priority: 'Moyenne', status: 'A faire' },
+                { id: 8, title: 'IA-élève motion buffer (temps réel)', category: 'IA', priority: 'Moyenne', status: 'A faire' }
+            ];
+        });
+
+        const [view, setView] = useState('kanban'); // 'kanban' or 'list'
+
+        useEffect(() => {
+            localStorage.setItem('engine-roadmap', JSON.stringify(tasks));
+        }, [tasks]);
+
+        const updateStatus = (id, newStatus) => {
+            setTasks(tasks.map(t => t.id === id ? { ...t, status: newStatus } : t));
+        };
+
+        const deleteTask = (id) => {
+            setTasks(tasks.filter(t => t.id !== id));
+        };
+
+        const categories = {
+            'Moteur': 'bg-blue-600',
+            'Outils': 'bg-purple-600',
+            'IA': 'bg-emerald-600',
+            'Effets': 'bg-pink-600'
+        };
+
+        const priorities = {
+            'Critique': 'text-red-400 border-red-900 bg-red-950/30',
+            'Haute': 'text-orange-400 border-orange-900 bg-orange-950/30',
+            'Moyenne': 'text-yellow-400 border-yellow-900 bg-yellow-950/30',
+            'Basse': 'text-blue-400 border-blue-900 bg-blue-950/30'
+        };
+
+        const statusCols = ['A faire', 'En cours', 'Terminé'];
+
+        const TaskCard = ({ task }) => (
+            <div className="bg-slate-800/50 border border-slate-700 p-4 rounded-xl mb-3 hover:border-blue-500/50 transition-all group">
+                <div className="flex justify-between items-start mb-3">
+                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${categories[task.category]}`}>
+                            {task.category}
+                        </span>
+                    <button onClick={() => deleteTask(task.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Icons.Trash />
+                    </button>
+                </div>
+                <h3 className="text-sm font-semibold text-slate-100 mb-4">{task.title}</h3>
+                <div className="flex items-center justify-between">
+                        <span className={`text-[10px] border px-2 py-0.5 rounded-full font-medium ${priorities[task.priority]}`}>
+                            {task.priority}
+                        </span>
+                    <select
+                        value={task.status}
+                        onChange={(e) => updateStatus(task.id, e.target.value)}
+                        className="bg-slate-900 text-[11px] border-none rounded text-slate-400 focus:ring-0 cursor-pointer"
+                    >
+                        {statusCols.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+            </div>
+        );
+
+        const total = tasks.length;
+        const done = tasks.filter(t => t.status === 'Terminé').length;
+        const progress = Math.round((done / total) * 100);
+
+        return (
+            <div className="p-4 md:p-8 max-w-7xl mx-auto">
+                <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+                    <div>
+                        <h1 className="text-3xl font-black tracking-tighter text-white flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                <Icons.Layers />
+                            </div>
+                            ENGINE ROADMAP
+                        </h1>
+                        <div className="flex items-center gap-4 mt-2">
+                            <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500 transition-all duration-700" style={{width: `${progress}%`}}></div>
+                            </div>
+                            <span className="text-xs text-slate-500 font-bold">{progress}% COMPLET</span>
+                        </div>
+                    </div>
+
+                    <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700">
+                        <button onClick={() => setView('kanban')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${view === 'kanban' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>KANBAN</button>
+                        <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>LISTE PRIORITAIRE</button>
+                    </div>
+                </header>
+
+                {view === 'kanban' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {statusCols.map(col => (
+                            <div key={col} className="flex flex-col h-full">
+                                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 px-2 flex justify-between">
+                                    {col}
+                                    <span className="text-slate-600">{tasks.filter(t => t.status === col).length}</span>
+                                </h2>
+                                <div className="bg-slate-900/30 border border-slate-800/50 rounded-2xl p-4 flex-1 custom-scrollbar overflow-y-auto max-h-[70vh]">
+                                    {tasks.filter(t => t.status === col).map(t => <TaskCard key={t.id} task={t} />)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
+                        <table className="w-full text-left border-collapse text-sm">
+                            <thead className="bg-slate-800/50 text-slate-500 text-[10px] font-black uppercase tracking-wider">
+                            <tr>
+                                <th className="px-6 py-4">Priorité</th>
+                                <th className="px-6 py-4">Tâche</th>
+                                <th className="px-6 py-4">Catégorie</th>
+                                <th className="px-6 py-4 text-right">Statut</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {[...tasks].sort((a,b) => {
+                                const order = {'Critique': 0, 'Haute': 1, 'Moyenne': 2, 'Basse': 3};
+                                return order[a.priority] - order[b.priority];
+                            }).map(t => (
+                                <tr key={t.id} className="border-b border-slate-800/50 hover:bg-white/5 transition-colors">
+                                    <td className="px-6 py-4">
+                                                <span className={`text-[10px] font-bold border px-2 py-0.5 rounded-full ${priorities[t.priority]}`}>
+                                                    {t.priority}
+                                                </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-slate-200 font-medium">{t.title}</td>
+                                    <td className="px-6 py-4 text-slate-500 text-xs">{t.category}</td>
+                                    <td className="px-6 py-4 text-right">
+                                        <select
+                                            value={t.status}
+                                            onChange={(e) => updateStatus(t.id, e.target.value)}
+                                            className="bg-transparent border-none text-xs text-slate-400 focus:ring-0 cursor-pointer text-right"
+                                        >
+                                            {statusCols.map(s => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                    </td>
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                <div className="mt-8 text-center text-slate-600 text-[10px] uppercase tracking-[0.2em]">
+                    Données synchronisées localement dans le navigateur
+                </div>
+            </div>
+        );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+</script>
+</body>
+</html>

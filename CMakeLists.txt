@@ -116,6 +116,7 @@ include(CMakeRC)
 
 if(ENABLE_CTEST)
 	include(CTest)
+	add_compile_definitions(FLYCAST_TEST_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/files")
 endif()
 
 if(IOS AND NOT LIBRETRO)
@@ -446,13 +447,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE xxHash::xxhash)
 option(BUILD_SHARED_LIBS "Build shared library" OFF)
 add_subdirectory(core/deps/glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
-
-# yaml-cpp
-set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
-add_subdirectory(core/deps/yaml-cpp EXCLUDE_FROM_ALL)
-target_link_libraries(${PROJECT_NAME} PRIVATE yaml-cpp)
 
 if(USE_VULKAN)
 	if(USE_HOST_GLSLANG)
@@ -789,7 +783,7 @@ endif()
 if(NOT LIBRETRO AND NOT NINTENDO_SWITCH)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE USE_ICE)
 	# libjuice
-	option(BUILD_SHARED_LIBS "Build shared library" OFF)
+	option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 	option(NO_SERVER "Disable server support" ON)
 	option(NO_TESTS "Disable tests build" ON)
 	add_subdirectory(core/deps/libjuice EXCLUDE_FROM_ALL)
@@ -1102,7 +1096,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/rend/texconv.cpp
 		core/rend/texconv.h
 		core/rend/norend/norend.cpp
-		core/rend/HudTextureHashWhitelist.cpp
+		core/rend/PolyRoutingManager.cpp
 		core/rend/library.cpp
 		core/rend/library.h
 	)
@@ -1437,7 +1431,7 @@ if(NOT LIBRETRO)
 				shell/apple/emulator-ios/emulator/FlycastStoryboard.storyboard
 				shell/apple/emulator-ios/emulator/LaunchScreen.storyboard
 				shell/apple/emulator-ios/emulator/PadViewController.xib
-				shell/apple/emulator/EditPadViewController.xib)
+				shell/apple/emulator-ios/emulator/EditPadViewController.xib)
 			target_sources(${PROJECT_NAME} PRIVATE ${IOS_RESOURCES})
 			source_group("Resources" FILES ${IOS_RESOURCES})
 			set_source_files_properties(${IOS_RESOURCES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
@@ -1590,6 +1584,7 @@ if(NOT LIBRETRO)
 				target_include_directories(${PROJECT_NAME} PRIVATE core/deps/Spout/SPOUTSDK/SpoutDirectX/SpoutDX)
 				SET(SPOUT_BUILD_CMT OFF CACHE BOOL "For Visual Studio - build /MT to link runtime libraries" FORCE)
 				SET(SPOUT_BUILD_SPOUTDX ON CACHE BOOL "Build SpoutDX DirectX11 support library" FORCE)
+				SET(SPOUT_BUILD_LIBRARY OFF CACHE BOOL "Build C-compatible cross compiler library" FORCE)
 				SET(SKIP_INSTALL_ALL ON CACHE BOOL "Install headers and libraries" FORCE)
 				add_subdirectory(core/deps/Spout)
 				target_link_libraries(${PROJECT_NAME} PRIVATE Spout_static SpoutDX_static)
@@ -1603,7 +1598,6 @@ if(NOT LIBRETRO)
 endif()
 
 if(BUILD_TESTING)
-	add_compile_definitions(FLYCAST_TEST_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/files")
 	add_subdirectory(core/deps/googletest EXCLUDE_FROM_ALL)
 	add_subdirectory(tests)
 endif()

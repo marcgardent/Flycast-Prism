@@ -1264,12 +1264,12 @@ public:
   bool Render() override {
     resize(rendContext->framebufferWidth, rendContext->framebufferHeight);
 
-    NOTICE_LOG(RENDERER, "GBufferVulkanRenderer::Render screenDrawer.Draw");
-    screenDrawer.resetHudPassIndicator();
+    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Render screenDrawer.Draw");
+    screenDrawer.NewFrame();
     screenDrawer.setRendContext(rendContext);
     screenDrawer.Draw(fogTexture.get(), paletteTexture.get());
 
-    NOTICE_LOG(RENDERER, "GBufferVulkanRenderer::Render end");
+    DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Render end");
 
     return true;
   }

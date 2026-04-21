@@ -2,9 +2,12 @@
 #include "hw/pvr/ta_ctx.h"
 #include "TexCache.h"
 #include "log/LogManager.h"
-#include "yaml-cpp/yaml.h"
+#include "json.hpp"
+#include <fstream>
 #include <charconv>
 #include <cmath>
+
+#include "library.h"
 
 namespace rend {
 
@@ -18,28 +21,42 @@ bool PolyRoutingManager::Criteria::matches(float vx, float vy, float vz, int pCo
 }
 
 PolyRoutingManager::PolyRoutingManager() {
-    LoadConfig("polyrouting.yaml");
+
+    std::string game_id = library::getGameId();
+    if (!game_id.empty()) {
+        LoadConfig(hostfs::getHudConfigurationPath() + game_id + "/poly_routing.yaml");
+    } else {
+        ERROR_LOG(RENDERER, "No game ID loaded : cannot load custom poly routing configuration");
+    }
 }
 
 void PolyRoutingManager::LoadConfig(const std::string& filename) {
     rules.clear();
+    std::ifstream i(filename);
+    if (!i.is_open()) return;
+
     try {
-        YAML::Node config = YAML::LoadFile(filename);
-        if (config["routing"]) {
+        nlohmann::json config;
+        i >> config;
+        if (config.contains("routing") && config["routing"].is_array()) {
             for (const auto& node : config["routing"]) {
                 Rule rule;
-                if (node["match"]) {
-                    auto match = node["match"];
-                    if (match["x"]) rule.criteria.x = match["x"].as<float>();
-                    if (match["y"]) rule.criteria.y = match["y"].as<float>();
-                    if (match["z"]) rule.criteria.z = match["z"].as<float>();
-                    if (match["count"]) rule.criteria.count = match["count"].as<int>();
-                    if (match["texHash"]) {
-                        std::string s = match["texHash"].as<std::string>();
-                        if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
-                            std::from_chars(s.data() + 2, s.data() + s.size(), rule.criteria.texHash, 16);
-                        else
-                            std::from_chars(s.data(), s.data() + s.size(), rule.criteria.texHash, 16);
+                if (node.contains("match")) {
+                    auto& match = node["match"];
+                    if (match.contains("x")) rule.criteria.x = match["x"].get<float>();
+                    if (match.contains("y")) rule.criteria.y = match["y"].get<float>();
+                    if (match.contains("z")) rule.criteria.z = match["z"].get<float>();
+                    if (match.contains("count")) rule.criteria.count = match["count"].get<int>();
+                    if (match.contains("texHash")) {
+                        if (match["texHash"].is_string()) {
+                            std::string s = match["texHash"].get<std::string>();
+                            if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
+                                std::from_chars(s.data() + 2, s.data() + s.size(), rule.criteria.texHash, 16);
+                            else
+                                std::from_chars(s.data(), s.data() + s.size(), rule.criteria.texHash, 16);
+                        } else {
+                            rule.criteria.texHash = match["texHash"].get<u32>();
+                        }
                     }
                 }
                 
@@ -54,19 +71,18 @@ void PolyRoutingManager::LoadConfig(const std::string& filename) {
                     return Action_None;
                 };
 
-                if (node["actions"]) {
+                if (node.contains("actions") && node["actions"].is_array()) {
                     for (const auto& a : node["actions"])
-                        rule.actions |= parseAction(a.as<std::string>());
-                } else if (node["action"]) {
-                    rule.actions |= parseAction(node["action"].as<std::string>());
+                        rule.actions |= parseAction(a.get<std::string>());
+                } else if (node.contains("action")) {
+                    rule.actions |= parseAction(node["action"].get<std::string>());
                 }
                 rules.push_back(rule);
             }
         }
         NOTICE_LOG(RENDERER, "Loaded %zu polyrouting rules", rules.size());
     } catch (const std::exception& e) {
-        // Log error if file exists but parsing failed
-        // For now, just ignore if file is missing
+        ERROR_LOG(RENDERER, "Failed to parse %s: %s", filename.c_str(), e.what());
     }
 }
 

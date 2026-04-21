@@ -6,28 +6,29 @@ using namespace rend;
 
 class PolyRoutingManagerTest : public ::testing::Test {
 protected:
-    void CreateYaml(const std::string& yaml) {
-        std::ofstream ofs("test_routing.yaml");
-        ofs << yaml;
+    void CreateJson(const std::string& json) {
+        std::ofstream ofs("test_routing.json");
+        ofs << json;
         ofs.close();
-        manager.LoadConfig("test_routing.yaml");
+        manager.LoadConfig("test_routing.json");
     }
 
     PolyRoutingManager manager;
 };
 
 TEST_F(PolyRoutingManagerTest, BasicMatching) {
-    CreateYaml(R"---(
-routing:
-  - match:
-      texHash: "0xABCDEF"
-    actions: ["toHud"]
-  - match:
-      x: 10.0
-      y: 20.0
-      z: 0.5
-    actions: ["avoidDepth", "avoidNormal"]
-)---");
+    CreateJson(R"({
+"routing": [
+  {
+    "match": { "texHash": "0xABCDEF" },
+    "actions": ["toHud"]
+  },
+  {
+    "match": { "x": 10.0, "y": 20.0, "z": 0.5 },
+    "actions": ["avoidDepth", "avoidNormal"]
+  }
+]
+})");
 
     PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 0, 0xABCDEF};
     u32 actions = manager.GetActions(params);
@@ -42,15 +43,18 @@ routing:
 }
 
 TEST_F(PolyRoutingManagerTest, OverlappingRules) {
-    CreateYaml(R"---(
-routing:
-  - match:
-      texHash: "0x123"
-    actions: ["avoidAlbedo"]
-  - match:
-      texHash: "0x123"
-    actions: ["avoidNormal"]
-)---");
+    CreateJson(R"({
+"routing": [
+  {
+    "match": { "texHash": "0x123" },
+    "actions": ["avoidAlbedo"]
+  },
+  {
+    "match": { "texHash": "0x123" },
+    "actions": ["avoidNormal"]
+  }
+]
+})");
 
     PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 0, 0x123};
     u32 actions = manager.GetActions(params);
@@ -59,12 +63,14 @@ routing:
 }
 
 TEST_F(PolyRoutingManagerTest, CoordinateTolerance) {
-    CreateYaml(R"---(
-routing:
-  - match:
-      x: 10.0
-    action: "avoidDepth"
-)---");
+    CreateJson(R"({
+"routing": [
+  {
+    "match": { "x": 10.0 },
+    "action": "avoidDepth"
+  }
+]
+})");
 
     // Exact match
     PolyRoutingManager::PolyMatchParams params = {10.0f, 0, 0, 0, 0};
@@ -80,12 +86,14 @@ routing:
 }
 
 TEST_F(PolyRoutingManagerTest, HudPassPersistence) {
-    CreateYaml(R"---(
-routing:
-  - match:
-      texHash: "0x123456"
-    actions: ["startHudPass"]
-)---");
+    CreateJson(R"({
+"routing": [
+  {
+    "match": { "texHash": "0x123456" },
+    "actions": ["startHudPass"]
+  }
+]
+})");
 
     PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 0, 0};
     EXPECT_FALSE(PolyRoutingManager::IsToHud(manager.GetActions(params)));
@@ -105,32 +113,35 @@ routing:
     EXPECT_FALSE(PolyRoutingManager::IsToHud(manager.GetActions(params)));
 }
 
-TEST_F(PolyRoutingManagerTest, MalformedYaml) {
+TEST_F(PolyRoutingManagerTest, MalformedJson) {
     // Missing 'routing' key
-    CreateYaml(R"---(
-other_key:
-  - match: { texHash: "0x1" }
-    action: "toHud"
-)---");
+    CreateJson(R"({
+"other_key": [
+  { "match": { "texHash": "0x1" }, "action": "toHud" }
+]
+})");
     PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 0, 0x1};
     EXPECT_FALSE(PolyRoutingManager::IsToHud(manager.GetActions(params)));
 
     // Invalid action string
-    CreateYaml(R"---(
-routing:
-  - match: { texHash: "0x2" }
-    action: "garbageAction"
-)---");
+    CreateJson(R"({
+"routing": [
+  { "match": { "texHash": "0x2" }, "action": "garbageAction" }
+]
+})");
     params.texHash = 0x2;
     EXPECT_EQ(manager.GetActions(params), Action_None);
 }
 
 TEST_F(PolyRoutingManagerTest, MultiActionList) {
-    CreateYaml(R"---(
-routing:
-  - match: { count: 4 }
-    actions: ["avoidMotion", "avoidMaterial", "avoidNormal"]
-)---");
+    CreateJson(R"({
+"routing": [
+  {
+    "match": { "count": 4 },
+    "actions": ["avoidMotion", "avoidMaterial", "avoidNormal"]
+  }
+]
+})");
 
     PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 4, 0};
     u32 actions = manager.GetActions(params);

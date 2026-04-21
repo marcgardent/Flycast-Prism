@@ -241,16 +241,16 @@ public:
   }
 
   bool Draw(const Texture *fogTexture, const Texture *paletteTexture);
-  virtual void EndRenderPass() { renderPassStarted = false; }
+  virtual void EndRenderPass() {
+    renderPassStarted = false;
+    polyRoutingManager.NewFrame();
+  }
+
   vk::CommandBuffer GetCurrentCommandBuffer() const {
     return currentCommandBuffer;
   }
 
   void NewFrame() {
-    polyRoutingManager.NewFrame();
-  }
-
-  void resetHudPassIndicator() {
     polyRoutingManager.NewFrame();
   }
 

@@ -59,6 +59,3 @@
 [submodule "core/deps/tinygettext"]
 	path = core/deps/tinygettext
 	url = https://github.com/flyinghead/tinygettext
-[submodule "core/deps/yaml-cpp"]
-	path = core/deps/yaml-cpp
-	url = https://github.com/jbeder/yaml-cpp.git
