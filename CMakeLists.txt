@@ -116,7 +116,6 @@ include(CMakeRC)
 
 if(ENABLE_CTEST)
 	include(CTest)
-	add_compile_definitions(FLYCAST_TEST_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/files")
 endif()
 
 if(IOS AND NOT LIBRETRO)
@@ -447,6 +446,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE xxHash::xxhash)
 option(BUILD_SHARED_LIBS "Build shared library" OFF)
 add_subdirectory(core/deps/glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
+
+# yaml-cpp
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+add_subdirectory(core/deps/yaml-cpp EXCLUDE_FROM_ALL)
+target_link_libraries(${PROJECT_NAME} PRIVATE yaml-cpp)
 
 if(USE_VULKAN)
 	if(USE_HOST_GLSLANG)
@@ -1597,6 +1603,7 @@ if(NOT LIBRETRO)
 endif()
 
 if(BUILD_TESTING)
+	add_compile_definitions(FLYCAST_TEST_FILES="${CMAKE_CURRENT_SOURCE_DIR}/tests/files")
 	add_subdirectory(core/deps/googletest EXCLUDE_FROM_ALL)
 	add_subdirectory(tests)
 endif()

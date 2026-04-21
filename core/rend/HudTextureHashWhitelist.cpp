@@ -1,8 +1,8 @@
 #include "HudTextureHashWhitelist.h"
+#include <yaml-cpp/yaml.h>
 #include <fstream>
 #include <string>
 #include <vector>
-#include <algorithm> // For std::remove_if, std::isspace
 #include <charconv>  // For std::from_chars
 #include <cstdint>   // For uint32_t
 
@@ -10,16 +10,6 @@
 #include "oslib/oslib.h"
 
 namespace rend {
-
-// Helper function to trim whitespace from a string
-static std::string trim(const std::string& str) {
-    size_t first = str.find_first_not_of(" \t\n\r\f\v");
-    if (std::string::npos == first) {
-        return str;
-    }
-    size_t last = str.find_last_not_of(" \t\n\r\f\v");
-    return str.substr(first, (last - first + 1));
-}
 
 // Constructor to initialize with a list of hashes
 HudTextureHashWhitelist::HudTextureHashWhitelist()
@@ -43,51 +33,34 @@ void HudTextureHashWhitelist::populateFromYamlFile(HudTextureHashWhitelist& ctx,
     NOTICE_LOG(RENDERER, "Loading HUD texture whitelist from: %s", file_path.c_str());
 
     std::vector<u32> hashes;
-    std::ifstream file(file_path);
-
-    if (!file.is_open()) {
-        WARN_LOG(RENDERER, "Failed to open HUD texture whitelist file: %s", file_path.c_str()); // Warn log added
-        ctx.init(std::vector<u32>{});
-        return;
-    }
-
-    std::string line;
-    bool in_texture_hashes_section = false;
-
-    while (std::getline(file, line)) {
-        std::string trimmed_line = trim(line);
-
-        if (trimmed_line == "textureHashes:") {
-            in_texture_hashes_section = true;
-            continue;
-        }
-
-        if (in_texture_hashes_section) {
-            if (trimmed_line.rfind("- ", 0) == 0) { // Starts with "- "
-                std::string hash_str = trim(trimmed_line.substr(2)); // Remove "- " prefix
-                // Remove quotes if present
-                if (hash_str.length() >= 2 && hash_str.front() == '"' && hash_str.back() == '"') {
-                    hash_str = hash_str.substr(1, hash_str.length() - 2);
+    
+    try {
+        YAML::Node config = YAML::LoadFile(file_path);
+        if (config["textureHashes"] && config["textureHashes"].IsSequence()) {
+            for (const auto& node : config["textureHashes"]) {
+                std::string hash_str = node.as<std::string>();
+                
+                // Remove hex prefix if present (0x)
+                if (hash_str.size() > 2 && hash_str[0] == '0' && (hash_str[1] == 'x' || hash_str[1] == 'X')) {
+                    hash_str = hash_str.substr(2);
                 }
+
                 if (!hash_str.empty()) {
                     u32 hash_val;
                     // Convert hex string to u32
                     auto [ptr, ec] = std::from_chars(hash_str.data(), hash_str.data() + hash_str.length(), hash_val, 16);
 
                     if (ec == std::errc()) {
-                        NOTICE_LOG(RENDERER, "Adding texture hash to hud whitelist: 0x%X", hash_val);
                         hashes.push_back(hash_val);
                     } else {
-                        WARN_LOG(RENDERER, "Failed to convert hash string '%s' to u32. Error: %d", hash_str.c_str(), static_cast<int>(ec));
+                        WARN_LOG(RENDERER, "Failed to convert hash string '%s' to u32", hash_str.c_str());
                     }
                 }
-            } else if (!trimmed_line.empty() && trimmed_line.find(':') != std::string::npos) {
-                // Another YAML key, so we're out of the textureHashes section
-                in_texture_hashes_section = false;
             }
         }
+    } catch (const std::exception& e) {
+        WARN_LOG(RENDERER, "Failed to load/parse HUD texture whitelist file: %s (%s)", file_path.c_str(), e.what());
     }
-    file.close();
 
     ctx.init(hashes);
 }
