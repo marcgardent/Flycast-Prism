@@ -1,9 +1,9 @@
 /*
-	Created on: Oct 8, 2019
+        Created on: Oct 8, 2019
 
-	Copyright 2019 flyinghead
+        Copyright 2019 flyinghead
 
-	This file is part of Flycast.
+        This file is part of Flycast.
 
     Flycast is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,394 +19,427 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
 */
 #pragma once
-#include "rend/tileclip.h"
-#include "rend/transform_matrix.h"
-#include "vulkan.h"
 #include "buffer.h"
 #include "commandpool.h"
 #include "pipeline.h"
+#include "rend/tileclip.h"
+#include "rend/transform_matrix.h"
 #include "shaders.h"
 #include "texture.h"
+#include "vulkan.h"
 
-#include <memory>
-#include <vector>
-#include <unordered_map>
 #include <glm/gtc/type_ptr.hpp>
+#include <memory>
+#include <unordered_map>
+#include <vector>
 
-#include "rend/HudTextureHashWhitelist.h"
+#include "rend/PolyRoutingManager.h"
 
-
-class BaseDrawer
-{
+class BaseDrawer {
 public:
-	void SetCommandPool(CommandPool *commandPool) { this->commandPool = commandPool; }
-	void setRendContext(rend_context *rendContext) {
-		this->rendContext = rendContext;
-	}
+  void SetCommandPool(CommandPool *commandPool) {
+    this->commandPool = commandPool;
+  }
+  void setRendContext(rend_context *rendContext) {
+    this->rendContext = rendContext;
+  }
 
 protected:
-	VulkanContext *GetContext() const { return VulkanContext::Instance(); }
-	TileClipping SetTileClip(vk::CommandBuffer cmdBuffer, u32 val, vk::Rect2D& clipRect);
-	void SetBaseScissor(const vk::Extent2D& viewport = vk::Extent2D());
-	void scaleAndWriteFramebuffer(vk::CommandBuffer commandBuffer, FramebufferAttachment *finalFB);
+  VulkanContext *GetContext() const { return VulkanContext::Instance(); }
+  TileClipping SetTileClip(vk::CommandBuffer cmdBuffer, u32 val,
+                           vk::Rect2D &clipRect);
+  void SetBaseScissor(const vk::Extent2D &viewport = vk::Extent2D());
+  void scaleAndWriteFramebuffer(vk::CommandBuffer commandBuffer,
+                                FramebufferAttachment *finalFB);
 
-	void SetScissor(vk::CommandBuffer cmdBuffer, const vk::Rect2D& scissor)
-	{
-		if (scissor != currentScissor)
-		{
-			cmdBuffer.setScissor(0, scissor);
-			currentScissor = scissor;
-		}
-	}
+  void SetScissor(vk::CommandBuffer cmdBuffer, const vk::Rect2D &scissor) {
+    if (scissor != currentScissor) {
+      cmdBuffer.setScissor(0, scissor);
+      currentScissor = scissor;
+    }
+  }
 
-	BufferData* GetMainBuffer(u32 size, vk::BufferUsageFlags extraFlags = {})
-	{
-		const vk::BufferUsageFlags usageFlags
-			{ vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eUniformBuffer | extraFlags };
-		BufferData *buffer;
-		if (!mainBuffers.empty())
-		{
-			buffer = mainBuffers.back().release();
-			mainBuffers.pop_back();
-			if (buffer->bufferSize < size)
-			{
-				// FIXME vf4evob still complains about buffer in use after 2 frames. Due to swap chain size of 3
-				commandPool->addToFlight(new Deleter(buffer));
-				u32 newSize = (u32)buffer->bufferSize;
-				while (newSize < size)
-					newSize *= 2;
-				INFO_LOG(RENDERER, "Increasing main buffer size %zd -> %d", buffer->bufferSize, newSize);
-				buffer = new BufferData(newSize, usageFlags);
-			}
-		}
-		else {
-			buffer = new BufferData(std::max(512 * 1024u, size), usageFlags);
-		}
+  BufferData *GetMainBuffer(u32 size, vk::BufferUsageFlags extraFlags = {}) {
+    const vk::BufferUsageFlags usageFlags{
+        vk::BufferUsageFlagBits::eVertexBuffer |
+        vk::BufferUsageFlagBits::eIndexBuffer |
+        vk::BufferUsageFlagBits::eUniformBuffer | extraFlags};
+    BufferData *buffer;
+    if (!mainBuffers.empty()) {
+      buffer = mainBuffers.back().release();
+      mainBuffers.pop_back();
+      if (buffer->bufferSize < size) {
+        // FIXME vf4evob still complains about buffer in use after 2 frames. Due
+        // to swap chain size of 3
+        commandPool->addToFlight(new Deleter(buffer));
+        u32 newSize = (u32)buffer->bufferSize;
+        while (newSize < size)
+          newSize *= 2;
+        INFO_LOG(RENDERER, "Increasing main buffer size %zd -> %d",
+                 buffer->bufferSize, newSize);
+        buffer = new BufferData(newSize, usageFlags);
+      }
+    } else {
+      buffer = new BufferData(std::max(512 * 1024u, size), usageFlags);
+    }
 
-		class BufferHolder : public Deletable
-		{
-		public:
-			BufferHolder(BufferData *buffer, BaseDrawer *drawer) : buffer(buffer), drawer(drawer) {}
+    class BufferHolder : public Deletable {
+    public:
+      BufferHolder(BufferData *buffer, BaseDrawer *drawer)
+          : buffer(buffer), drawer(drawer) {}
 
-			~BufferHolder() override {
-				drawer->mainBuffers.emplace_back(buffer);
-			}
+      ~BufferHolder() override { drawer->mainBuffers.emplace_back(buffer); }
 
-		private:
-			BufferData *buffer;
-			BaseDrawer *drawer;
-		};
-		commandPool->addToFlight(new BufferHolder(buffer, this));
+    private:
+      BufferData *buffer;
+      BaseDrawer *drawer;
+    };
+    commandPool->addToFlight(new BufferHolder(buffer, this));
 
-		return buffer;
-	}
+    return buffer;
+  }
 
-	template<typename T>
-	T MakeFragmentUniforms()
-	{
-		T fragUniforms;
+  template <typename T> T MakeFragmentUniforms() {
+    T fragUniforms;
 
-		//VERT and RAM fog color constants
-		FOG_COL_VERT.getRGBColor(fragUniforms.sp_FOG_COL_VERT);
-		FOG_COL_RAM.getRGBColor(fragUniforms.sp_FOG_COL_RAM);
+    // VERT and RAM fog color constants
+    FOG_COL_VERT.getRGBColor(fragUniforms.sp_FOG_COL_VERT);
+    FOG_COL_RAM.getRGBColor(fragUniforms.sp_FOG_COL_RAM);
 
-		//Fog density constant
-		fragUniforms.sp_FOG_DENSITY = FOG_DENSITY.get() * config::ExtraDepthScale;
+    // Fog density constant
+    fragUniforms.sp_FOG_DENSITY = FOG_DENSITY.get() * config::ExtraDepthScale;
 
-		rendContext->fog_clamp_min.getRGBAColor(fragUniforms.colorClampMin);
-		rendContext->fog_clamp_max.getRGBAColor(fragUniforms.colorClampMax);
+    rendContext->fog_clamp_min.getRGBAColor(fragUniforms.colorClampMin);
+    rendContext->fog_clamp_max.getRGBAColor(fragUniforms.colorClampMax);
 
-		fragUniforms.cp_AlphaTestValue = (PT_ALPHA_REF & 0xFF) / 255.0f;
+    fragUniforms.cp_AlphaTestValue = (PT_ALPHA_REF & 0xFF) / 255.0f;
 
-		return fragUniforms;
-	}
+    return fragUniforms;
+  }
 
-	template<typename Offsets>
-	void packNaomi2Uniforms(BufferPacker& packer, Offsets& offsets, std::vector<u8>& n2uniforms, bool trModVolIncluded)
-	{
-		size_t n2UniformSize = sizeof(N2VertexShaderUniforms) + align(sizeof(N2VertexShaderUniforms), GetContext()->GetUniformBufferAlignment());
-		int items = rendContext->global_param_op.size() + rendContext->global_param_pt.size() + rendContext->global_param_tr.size() + rendContext->global_param_mvo.size();
-		if (trModVolIncluded)
-			items += rendContext->global_param_mvo_tr.size();
-		n2uniforms.resize(items * n2UniformSize);
-		size_t bufIdx = 0;
-		auto addUniform = [&](const PolyParam& pp, int polyNumber) {
-			if (pp.isNaomi2())
-			{
-				N2VertexShaderUniforms& uni = *(N2VertexShaderUniforms *)&n2uniforms[bufIdx];
-				memcpy(glm::value_ptr(uni.mvMat), rendContext->matrices[pp.mvMatrix].mat, sizeof(uni.mvMat));
-				memcpy(glm::value_ptr(uni.normalMat), rendContext->matrices[pp.normalMatrix].mat, sizeof(uni.normalMat));
-				memcpy(glm::value_ptr(uni.projMat), rendContext->matrices[pp.projMatrix].mat, sizeof(uni.projMat));
-				uni.bumpMapping = pp.pcw.Texture == 1 && pp.tcw.PixelFmt == PixelBumpMap;
-				uni.polyNumber = polyNumber;
-				for (size_t i = 0; i < 2; i++)
-				{
-					uni.envMapping[i] = pp.envMapping[i];
-					uni.glossCoef[i] = pp.glossCoef[i];
-					uni.constantColor[i] = pp.constantColor[i];
-				}
-			}
-			bufIdx += n2UniformSize;
-		};
-		for (const PolyParam& pp : rendContext->global_param_op)
-			addUniform(pp, 0);
-		size_t ptOffset = bufIdx;
-		for (const PolyParam& pp : rendContext->global_param_pt)
-			addUniform(pp, 0);
-		size_t trOffset = bufIdx;
-		if (!rendContext->global_param_tr.empty())
-		{
-			u32 firstVertexIdx = rendContext->idx[rendContext->global_param_tr[0].first];
-			for (const PolyParam& pp : rendContext->global_param_tr)
-				addUniform(pp, ((&pp - &rendContext->global_param_tr[0]) << 17) - firstVertexIdx);
-		}
-		size_t mvOffset = bufIdx;
-		for (const ModifierVolumeParam& mvp : rendContext->global_param_mvo)
-		{
-			if (mvp.isNaomi2())
-			{
-				N2VertexShaderUniforms& uni = *(N2VertexShaderUniforms *)&n2uniforms[bufIdx];
-				memcpy(glm::value_ptr(uni.mvMat), rendContext->matrices[mvp.mvMatrix].mat, sizeof(uni.mvMat));
-				memcpy(glm::value_ptr(uni.projMat), rendContext->matrices[mvp.projMatrix].mat, sizeof(uni.projMat));
-			}
-			bufIdx += n2UniformSize;
-		}
-		size_t trMvOffset = bufIdx;
-		if (trModVolIncluded)
-			for (const ModifierVolumeParam& mvp : rendContext->global_param_mvo_tr)
-			{
-				if (mvp.isNaomi2())
-				{
-					N2VertexShaderUniforms& uni = *(N2VertexShaderUniforms *)&n2uniforms[bufIdx];
-					memcpy(glm::value_ptr(uni.mvMat), rendContext->matrices[mvp.mvMatrix].mat, sizeof(uni.mvMat));
-					memcpy(glm::value_ptr(uni.projMat), rendContext->matrices[mvp.projMatrix].mat, sizeof(uni.projMat));
-				}
-				bufIdx += n2UniformSize;
-			}
-		offsets.naomi2OpaqueOffset = packer.addUniform(n2uniforms.data(), bufIdx);
-		offsets.naomi2PunchThroughOffset = offsets.naomi2OpaqueOffset + ptOffset;
-		offsets.naomi2TranslucentOffset = offsets.naomi2OpaqueOffset + trOffset;
-		offsets.naomi2ModVolOffset = offsets.naomi2OpaqueOffset + mvOffset;
-		offsets.naomi2TrModVolOffset = offsets.naomi2OpaqueOffset + trMvOffset;
-	}
+  template <typename Offsets>
+  void packNaomi2Uniforms(BufferPacker &packer, Offsets &offsets,
+                          std::vector<u8> &n2uniforms, bool trModVolIncluded) {
+    size_t n2UniformSize = sizeof(N2VertexShaderUniforms) +
+                           align(sizeof(N2VertexShaderUniforms),
+                                 GetContext()->GetUniformBufferAlignment());
+    int items = rendContext->global_param_op.size() +
+                rendContext->global_param_pt.size() +
+                rendContext->global_param_tr.size() +
+                rendContext->global_param_mvo.size();
+    if (trModVolIncluded)
+      items += rendContext->global_param_mvo_tr.size();
+    n2uniforms.resize(items * n2UniformSize);
+    size_t bufIdx = 0;
+    auto addUniform = [&](const PolyParam &pp, int polyNumber) {
+      if (pp.isNaomi2()) {
+        N2VertexShaderUniforms &uni =
+            *(N2VertexShaderUniforms *)&n2uniforms[bufIdx];
+        memcpy(glm::value_ptr(uni.mvMat),
+               rendContext->matrices[pp.mvMatrix].mat, sizeof(uni.mvMat));
+        memcpy(glm::value_ptr(uni.normalMat),
+               rendContext->matrices[pp.normalMatrix].mat,
+               sizeof(uni.normalMat));
+        memcpy(glm::value_ptr(uni.projMat),
+               rendContext->matrices[pp.projMatrix].mat, sizeof(uni.projMat));
+        uni.bumpMapping =
+            pp.pcw.Texture == 1 && pp.tcw.PixelFmt == PixelBumpMap;
+        uni.polyNumber = polyNumber;
+        for (size_t i = 0; i < 2; i++) {
+          uni.envMapping[i] = pp.envMapping[i];
+          uni.glossCoef[i] = pp.glossCoef[i];
+          uni.constantColor[i] = pp.constantColor[i];
+        }
+      }
+      bufIdx += n2UniformSize;
+    };
+    for (const PolyParam &pp : rendContext->global_param_op)
+      addUniform(pp, 0);
+    size_t ptOffset = bufIdx;
+    for (const PolyParam &pp : rendContext->global_param_pt)
+      addUniform(pp, 0);
+    size_t trOffset = bufIdx;
+    if (!rendContext->global_param_tr.empty()) {
+      u32 firstVertexIdx =
+          rendContext->idx[rendContext->global_param_tr[0].first];
+      for (const PolyParam &pp : rendContext->global_param_tr)
+        addUniform(pp, ((&pp - &rendContext->global_param_tr[0]) << 17) -
+                           firstVertexIdx);
+    }
+    size_t mvOffset = bufIdx;
+    for (const ModifierVolumeParam &mvp : rendContext->global_param_mvo) {
+      if (mvp.isNaomi2()) {
+        N2VertexShaderUniforms &uni =
+            *(N2VertexShaderUniforms *)&n2uniforms[bufIdx];
+        memcpy(glm::value_ptr(uni.mvMat),
+               rendContext->matrices[mvp.mvMatrix].mat, sizeof(uni.mvMat));
+        memcpy(glm::value_ptr(uni.projMat),
+               rendContext->matrices[mvp.projMatrix].mat, sizeof(uni.projMat));
+      }
+      bufIdx += n2UniformSize;
+    }
+    size_t trMvOffset = bufIdx;
+    if (trModVolIncluded)
+      for (const ModifierVolumeParam &mvp : rendContext->global_param_mvo_tr) {
+        if (mvp.isNaomi2()) {
+          N2VertexShaderUniforms &uni =
+              *(N2VertexShaderUniforms *)&n2uniforms[bufIdx];
+          memcpy(glm::value_ptr(uni.mvMat),
+                 rendContext->matrices[mvp.mvMatrix].mat, sizeof(uni.mvMat));
+          memcpy(glm::value_ptr(uni.projMat),
+                 rendContext->matrices[mvp.projMatrix].mat,
+                 sizeof(uni.projMat));
+        }
+        bufIdx += n2UniformSize;
+      }
+    offsets.naomi2OpaqueOffset = packer.addUniform(n2uniforms.data(), bufIdx);
+    offsets.naomi2PunchThroughOffset = offsets.naomi2OpaqueOffset + ptOffset;
+    offsets.naomi2TranslucentOffset = offsets.naomi2OpaqueOffset + trOffset;
+    offsets.naomi2ModVolOffset = offsets.naomi2OpaqueOffset + mvOffset;
+    offsets.naomi2TrModVolOffset = offsets.naomi2OpaqueOffset + trMvOffset;
+  }
 
-	vk::DeviceSize packNaomi2Lights(BufferPacker& packer)
-	{
-		vk::DeviceSize offset = -1;
+  vk::DeviceSize packNaomi2Lights(BufferPacker &packer) {
+    vk::DeviceSize offset = -1;
 
-		size_t n2LightSize = sizeof(N2LightModel) + align(sizeof(N2LightModel), GetContext()->GetUniformBufferAlignment());
-		if (n2LightSize == sizeof(N2LightModel) && !rendContext->lightModels.empty())
-		{
-			offset = packer.addUniform(&rendContext->lightModels[0], rendContext->lightModels.size() * sizeof(decltype(rendContext->lightModels[0])));
-		}
-		else
-		{
-			for (const N2LightModel& model : rendContext->lightModels)
-			{
-				vk::DeviceSize ioffset = packer.addUniform(&model, sizeof(N2LightModel));
-				if (offset == (vk::DeviceSize)-1)
-					offset = ioffset;
-			}
-		}
+    size_t n2LightSize =
+        sizeof(N2LightModel) +
+        align(sizeof(N2LightModel), GetContext()->GetUniformBufferAlignment());
+    if (n2LightSize == sizeof(N2LightModel) &&
+        !rendContext->lightModels.empty()) {
+      offset =
+          packer.addUniform(&rendContext->lightModels[0],
+                            rendContext->lightModels.size() *
+                                sizeof(decltype(rendContext->lightModels[0])));
+    } else {
+      for (const N2LightModel &model : rendContext->lightModels) {
+        vk::DeviceSize ioffset =
+            packer.addUniform(&model, sizeof(N2LightModel));
+        if (offset == (vk::DeviceSize)-1)
+          offset = ioffset;
+      }
+    }
 
-		return offset;
-	}
+    return offset;
+  }
 
-	vk::Rect2D baseScissor;
-	vk::Rect2D currentScissor;
-	TransformMatrix<COORD_VULKAN> matrices;
-	CommandPool *commandPool = nullptr;
-	std::vector<std::unique_ptr<BufferData>> mainBuffers;
-	rend_context *rendContext = nullptr;
+  vk::Rect2D baseScissor;
+  vk::Rect2D currentScissor;
+  TransformMatrix<COORD_VULKAN> matrices;
+  CommandPool *commandPool = nullptr;
+  std::vector<std::unique_ptr<BufferData>> mainBuffers;
+  rend_context *rendContext = nullptr;
 };
 
-class Drawer : public BaseDrawer
-{
+class Drawer : public BaseDrawer {
 public:
-	virtual ~Drawer() = default;
+  virtual ~Drawer() = default;
 
-	void Term()
-	{
-		descriptorSets.term();
-		mainBuffers.clear();
-	}
+  void Term() {
+    descriptorSets.term();
+    mainBuffers.clear();
+  }
 
-	bool Draw(const Texture *fogTexture, const Texture *paletteTexture);
-	virtual void EndRenderPass() {
-		renderPassStarted = false;
-	}
-	vk::CommandBuffer GetCurrentCommandBuffer() const { return currentCommandBuffer; }
+  bool Draw(const Texture *fogTexture, const Texture *paletteTexture);
+  virtual void EndRenderPass() { renderPassStarted = false; }
+  vk::CommandBuffer GetCurrentCommandBuffer() const {
+    return currentCommandBuffer;
+  }
 
-	void resetHudPassIndicator();
+  void NewFrame() {
+    polyRoutingManager.NewFrame();
+  }
+
+  void resetHudPassIndicator() {
+    polyRoutingManager.NewFrame();
+  }
 
 protected:
-	virtual u32 GetSwapChainSize() { return GetContext()->GetSwapChainSize(); }
-	virtual vk::CommandBuffer BeginRenderPass() = 0;
-	void NewImage()
-	{
-		descriptorSets.nextFrame();
-		imageIndex = (imageIndex + 1) % GetSwapChainSize();
-		if (perStripSorting != config::PerStripSorting)
-		{
-			perStripSorting = config::PerStripSorting;
-			pipelineManager->Reset();
-		}
-	}
+  virtual u32 GetSwapChainSize() { return GetContext()->GetSwapChainSize(); }
+  virtual vk::CommandBuffer BeginRenderPass() = 0;
+  void NewImage() {
+    descriptorSets.nextFrame();
+    imageIndex = (imageIndex + 1) % GetSwapChainSize();
+    if (perStripSorting != config::PerStripSorting) {
+      perStripSorting = config::PerStripSorting;
+      pipelineManager->Reset();
+    }
+  }
 
-	void Init(SamplerManager *samplerManager, PipelineManager *pipelineManager)
-	{
-		this->pipelineManager = pipelineManager;
-		this->samplerManager = samplerManager;
-		rend::HudTextureHashWhitelist::populateFromDefaultYamlFile(hudTextureHashWhitelist);
-		descriptorSets.init(samplerManager, pipelineManager->GetPipelineLayout(), pipelineManager->GetPerFrameDSLayout(), pipelineManager->GetPerPolyDSLayout());
-	}
+  void Init(SamplerManager *samplerManager, PipelineManager *pipelineManager) {
+    this->pipelineManager = pipelineManager;
+    this->samplerManager = samplerManager;
+    descriptorSets.init(samplerManager, pipelineManager->GetPipelineLayout(),
+                        pipelineManager->GetPerFrameDSLayout(),
+                        pipelineManager->GetPerPolyDSLayout());
+  }
 
-	int GetCurrentImage() const { return imageIndex; }
+  int GetCurrentImage() const { return imageIndex; }
 
-	vk::CommandBuffer currentCommandBuffer;
-	SamplerManager *samplerManager = nullptr;
-	bool renderPassStarted = false;
+  vk::CommandBuffer currentCommandBuffer;
+  SamplerManager *samplerManager = nullptr;
+  bool renderPassStarted = false;
 
 private:
-	void SortTriangles();
-	void DrawPoly(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sortTriangles, const PolyParam& poly, u32 first, u32 count);
-	void DrawSorted(const vk::CommandBuffer& cmdBuffer, const std::vector<SortedTriangle>& polys, u32 first, u32 last, bool multipass);
-	void DrawList(const vk::CommandBuffer& cmdBuffer, u32 listType, bool sortTriangles, const std::vector<PolyParam>& polys, u32 first, u32 last);
-	void DrawModVols(const vk::CommandBuffer& cmdBuffer, int first, int count);
-	void UploadMainBuffer(const VertexShaderUniforms& vertexUniforms, const FragmentShaderUniforms& fragmentUniforms);
+  void SortTriangles();
+  void DrawPoly(const vk::CommandBuffer &cmdBuffer, u32 listType,
+                bool sortTriangles, const PolyParam &poly, u32 first,
+                u32 count);
+  void DrawSorted(const vk::CommandBuffer &cmdBuffer,
+                  const std::vector<SortedTriangle> &polys, u32 first, u32 last,
+                  bool multipass);
+  void DrawList(const vk::CommandBuffer &cmdBuffer, u32 listType,
+                bool sortTriangles, const std::vector<PolyParam> &polys,
+                u32 first, u32 last);
+  void DrawModVols(const vk::CommandBuffer &cmdBuffer, int first, int count);
+  void UploadMainBuffer(const VertexShaderUniforms &vertexUniforms,
+                        const FragmentShaderUniforms &fragmentUniforms);
 
-	int imageIndex = 0;
-	struct {
-		vk::DeviceSize indexOffset = 0;
-		vk::DeviceSize modVolOffset = 0;
-		vk::DeviceSize vertexUniformOffset = 0;
-		vk::DeviceSize fragmentUniformOffset = 0;
-		vk::DeviceSize naomi2OpaqueOffset = 0;
-		vk::DeviceSize naomi2PunchThroughOffset = 0;
-		vk::DeviceSize naomi2TranslucentOffset = 0;
-		vk::DeviceSize naomi2ModVolOffset = 0;
-		vk::DeviceSize naomi2TrModVolOffset = 0;
-		vk::DeviceSize lightsOffset = 0;
-	} offsets;
-	DescriptorSets descriptorSets;
-	vk::Buffer curMainBuffer;
-	PipelineManager *pipelineManager = nullptr;
-	bool perStripSorting = false;
-	bool dithering = false;
-	std::unordered_map<uint32_t, glm::vec2> prevCentroids; // Motion buffer: TCW -> centroid XY (frame N-1)
-	std::unordered_map<uint32_t, glm::vec2> currCentroids; // Motion buffer: TCW -> centroid XY (frame N, during draw)
-	rend::HudTextureHashWhitelist hudTextureHashWhitelist = rend::HudTextureHashWhitelist();
-	bool isLikelyHUD= false;
-	bool hudPassStarted = false;
-	bool IsWhiteListTextureHUD(const PolyParam& pp) const;
+  rend::PolyRoutingManager polyRoutingManager;
+
+  int imageIndex = 0;
+  struct {
+    vk::DeviceSize indexOffset = 0;
+    vk::DeviceSize modVolOffset = 0;
+    vk::DeviceSize vertexUniformOffset = 0;
+    vk::DeviceSize fragmentUniformOffset = 0;
+    vk::DeviceSize naomi2OpaqueOffset = 0;
+    vk::DeviceSize naomi2PunchThroughOffset = 0;
+    vk::DeviceSize naomi2TranslucentOffset = 0;
+    vk::DeviceSize naomi2ModVolOffset = 0;
+    vk::DeviceSize naomi2TrModVolOffset = 0;
+    vk::DeviceSize lightsOffset = 0;
+  } offsets;
+  DescriptorSets descriptorSets;
+  vk::Buffer curMainBuffer;
+  PipelineManager *pipelineManager = nullptr;
+  bool perStripSorting = false;
+  bool dithering = false;
+  std::unordered_map<uint32_t, glm::vec2>
+      prevCentroids; // Motion buffer: TCW -> centroid XY (frame N-1)
+  std::unordered_map<uint32_t, glm::vec2>
+      currCentroids; // Motion buffer: TCW -> centroid XY (frame N, during draw)
+  bool isLikelyHUD = false;
 };
 
-class ScreenDrawer : public Drawer
-{
+class ScreenDrawer : public Drawer {
 public:
-	void Init(SamplerManager *samplerManager, ShaderManager *shaderManager, const vk::Extent2D& viewport, const std::vector<vk::Format>& colorFormats = {});
+  void Init(SamplerManager *samplerManager, ShaderManager *shaderManager,
+            const vk::Extent2D &viewport,
+            const std::vector<vk::Format> &colorFormats = {});
 
-	void Term()
-	{
-		screenPipelineManager.reset();
-		renderPassLoad.reset();
-		renderPassClear.reset();
-		framebuffers.clear();
-		colorAttachments.clear();
-		depthAttachment.reset();
-		transitionNeeded.clear();
-		clearNeeded.clear();
-		Drawer::Term();
-	}
+  void Term() {
+    screenPipelineManager.reset();
+    renderPassLoad.reset();
+    renderPassClear.reset();
+    framebuffers.clear();
+    colorAttachments.clear();
+    depthAttachment.reset();
+    transitionNeeded.clear();
+    clearNeeded.clear();
+    Drawer::Term();
+  }
 
-	vk::RenderPass GetRenderPass() const { return *renderPassClear; }
-	void EndRenderPass(FramebufferAttachment* customPresentationTarget = nullptr);
-	// Termine le render pass sans soumettre le command buffer.
-	// Retourne le command buffer pour y enregistrer des commandes supplementaires.
-	// Appeler EndRenderPass() ou PresentFrame() pour soumettre.
-	vk::CommandBuffer EndRenderPassOnly()
-	{
-		if (!renderPassStarted)
-			return nullptr;
-		currentCommandBuffer.endRenderPass();
-		renderPassStarted = false;
-		frameRendered = true;
-		return currentCommandBuffer;
-	}
-	vk::CommandBuffer GetCurrentCommandBuffer() const { return currentCommandBuffer; }
-	int GetCurrentImageIndex() const { return GetCurrentImage(); }
-	u32 GetSwapChainCount() const { return 2; }
-	FramebufferAttachment *GetDepthAttachment() const { return depthAttachment.get(); }
-	vk::Format GetDepthFormat() const { return depthAttachment ? depthAttachment->GetImageFormat() : vk::Format::eUndefined; }
-	FramebufferAttachment *GetColorAttachment(int imageIndex, int attachmentIndex) const {
-		if (imageIndex < 0 || imageIndex >= (int)colorAttachments.size()) return nullptr;
-		if (attachmentIndex < 0 || attachmentIndex >= (int)colorAttachments[imageIndex].size()) return nullptr;
-		return colorAttachments[imageIndex][attachmentIndex].get();
-	}
+  vk::RenderPass GetRenderPass() const { return *renderPassClear; }
+  void EndRenderPass(FramebufferAttachment *customPresentationTarget = nullptr);
+  // Termine le render pass sans soumettre le command buffer.
+  // Retourne le command buffer pour y enregistrer des commandes
+  // supplementaires. Appeler EndRenderPass() ou PresentFrame() pour soumettre.
+  vk::CommandBuffer EndRenderPassOnly() {
+    if (!renderPassStarted)
+      return nullptr;
+    currentCommandBuffer.endRenderPass();
+    renderPassStarted = false;
+    frameRendered = true;
+    return currentCommandBuffer;
+  }
+  vk::CommandBuffer GetCurrentCommandBuffer() const {
+    return currentCommandBuffer;
+  }
+  int GetCurrentImageIndex() const { return GetCurrentImage(); }
+  u32 GetSwapChainCount() const { return 2; }
+  FramebufferAttachment *GetDepthAttachment() const {
+    return depthAttachment.get();
+  }
+  vk::Format GetDepthFormat() const {
+    return depthAttachment ? depthAttachment->GetImageFormat()
+                           : vk::Format::eUndefined;
+  }
+  FramebufferAttachment *GetColorAttachment(int imageIndex,
+                                            int attachmentIndex) const {
+    if (imageIndex < 0 || imageIndex >= (int)colorAttachments.size())
+      return nullptr;
+    if (attachmentIndex < 0 ||
+        attachmentIndex >= (int)colorAttachments[imageIndex].size())
+      return nullptr;
+    return colorAttachments[imageIndex][attachmentIndex].get();
+  }
 
-	bool PresentFrame(FramebufferAttachment* customPresentationTarget = nullptr)
-	{
-		EndRenderPass(customPresentationTarget);
-		if (!frameRendered)
-			return false;
-		frameRendered = false;
-		FramebufferAttachment* target = customPresentationTarget ? customPresentationTarget : colorAttachments[GetCurrentImage()][0].get();
-		GetContext()->PresentFrame(target->GetImage(), target->GetImageView(), viewport, aspectRatio);
+  bool PresentFrame(FramebufferAttachment *customPresentationTarget = nullptr) {
+    EndRenderPass(customPresentationTarget);
+    if (!frameRendered)
+      return false;
+    frameRendered = false;
+    FramebufferAttachment *target =
+        customPresentationTarget ? customPresentationTarget
+                                 : colorAttachments[GetCurrentImage()][0].get();
+    GetContext()->PresentFrame(target->GetImage(), target->GetImageView(),
+                               viewport, aspectRatio);
 
-		return true;
-	}
+    return true;
+  }
 
 protected:
-	vk::CommandBuffer BeginRenderPass() override;
-	u32 GetSwapChainSize() override { return 2; }
+  vk::CommandBuffer BeginRenderPass() override;
+  u32 GetSwapChainSize() override { return 2; }
 
 private:
-	std::unique_ptr<PipelineManager> screenPipelineManager;
+  std::unique_ptr<PipelineManager> screenPipelineManager;
 
-	vk::UniqueRenderPass renderPassLoad;
-	vk::UniqueRenderPass renderPassClear;
-	std::vector<vk::UniqueFramebuffer> framebuffers;
-	std::vector<std::vector<std::unique_ptr<FramebufferAttachment>>> colorAttachments;
-	std::unique_ptr<FramebufferAttachment> depthAttachment;
-	std::vector<vk::Format> colorFormats;
-	vk::Extent2D viewport;
-	ShaderManager *shaderManager = nullptr;
-	std::vector<bool> transitionNeeded;
-	std::vector<bool> clearNeeded;
-	bool frameRendered = false;
-	float aspectRatio = 0.f;
-	bool emulateFramebuffer = false;
+  vk::UniqueRenderPass renderPassLoad;
+  vk::UniqueRenderPass renderPassClear;
+  std::vector<vk::UniqueFramebuffer> framebuffers;
+  std::vector<std::vector<std::unique_ptr<FramebufferAttachment>>>
+      colorAttachments;
+  std::unique_ptr<FramebufferAttachment> depthAttachment;
+  std::vector<vk::Format> colorFormats;
+  vk::Extent2D viewport;
+  ShaderManager *shaderManager = nullptr;
+  std::vector<bool> transitionNeeded;
+  std::vector<bool> clearNeeded;
+  bool frameRendered = false;
+  float aspectRatio = 0.f;
+  bool emulateFramebuffer = false;
 };
 
-class TextureDrawer : public Drawer
-{
+class TextureDrawer : public Drawer {
 public:
-	void Init(SamplerManager *samplerManager, ShaderManager *shaderManager, TextureCache *textureCache);
+  void Init(SamplerManager *samplerManager, ShaderManager *shaderManager,
+            TextureCache *textureCache);
 
-	void Term()
-	{
-		rttPipelineManager.reset();
-		framebuffers.clear();
-		colorAttachment.reset();
-		depthAttachment.reset();
-		Drawer::Term();
-	}
+  void Term() {
+    rttPipelineManager.reset();
+    framebuffers.clear();
+    colorAttachment.reset();
+    depthAttachment.reset();
+    Drawer::Term();
+  }
 
-	void EndRenderPass() override;
+  void EndRenderPass() override;
 
 protected:
-	vk::CommandBuffer BeginRenderPass() override;
+  vk::CommandBuffer BeginRenderPass() override;
 
 private:
-	u32 width = 0;
-	u32 height = 0;
-	u32 textureAddr = 0;
-	std::unique_ptr<RttPipelineManager> rttPipelineManager;
+  u32 width = 0;
+  u32 height = 0;
+  u32 textureAddr = 0;
+  std::unique_ptr<RttPipelineManager> rttPipelineManager;
 
-	Texture *texture = nullptr;
-	std::vector<vk::UniqueFramebuffer> framebuffers;
-	std::unique_ptr<FramebufferAttachment> colorAttachment;
-	std::unique_ptr<FramebufferAttachment> depthAttachment;
-	TextureCache *textureCache = nullptr;
-
+  Texture *texture = nullptr;
+  std::vector<vk::UniqueFramebuffer> framebuffers;
+  std::unique_ptr<FramebufferAttachment> colorAttachment;
+  std::unique_ptr<FramebufferAttachment> depthAttachment;
+  TextureCache *textureCache = nullptr;
 };
+
