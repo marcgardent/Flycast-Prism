@@ -22,15 +22,19 @@ bool PolyRoutingManager::Criteria::matches(float vx, float vy, float vz, int pCo
 
 PolyRoutingManager::PolyRoutingManager() {
 
+
+}
+
+void PolyRoutingManager::LoadDefautConfig() {
     std::string game_id = library::getGameId();
     if (!game_id.empty()) {
+
         LoadConfig(hostfs::getHudConfigurationPath() + game_id + "/poly_routing.yaml");
-    } else {
-        ERROR_LOG(RENDERER, "No game ID loaded : cannot load custom poly routing configuration");
     }
 }
 
 void PolyRoutingManager::LoadConfig(const std::string& filename) {
+    DEBUG_LOG(RENDERER, "Loading default poly routing configuration for game ID: %s", filename.c_str());
     rules.clear();
     std::ifstream i(filename);
     if (!i.is_open()) return;
@@ -80,7 +84,7 @@ void PolyRoutingManager::LoadConfig(const std::string& filename) {
                 rules.push_back(rule);
             }
         }
-        NOTICE_LOG(RENDERER, "Loaded %zu polyrouting rules", rules.size());
+        NOTICE_LOG(RENDERER, "Loaded %zu polyrouting rules from %s", rules.size(), filename.c_str());
     } catch (const std::exception& e) {
         ERROR_LOG(RENDERER, "Failed to parse %s: %s", filename.c_str(), e.what());
     }

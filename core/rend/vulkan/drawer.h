@@ -272,6 +272,7 @@ protected:
     descriptorSets.init(samplerManager, pipelineManager->GetPipelineLayout(),
                         pipelineManager->GetPerFrameDSLayout(),
                         pipelineManager->GetPerPolyDSLayout());
+    polyRoutingManager.LoadDefautConfig();
   }
 
   int GetCurrentImage() const { return imageIndex; }

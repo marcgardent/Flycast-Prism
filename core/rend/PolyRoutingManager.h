@@ -38,6 +38,9 @@ public:
     };
 
     PolyRoutingManager();
+
+    void LoadDefautConfig();
+
     void LoadConfig(const std::string& filename);
     void NewFrame();
 
