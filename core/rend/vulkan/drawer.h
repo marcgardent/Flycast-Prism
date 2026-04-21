@@ -269,10 +269,12 @@ protected:
   void Init(SamplerManager *samplerManager, PipelineManager *pipelineManager) {
     this->pipelineManager = pipelineManager;
     this->samplerManager = samplerManager;
+
+    polyRoutingManager.LoadDefautConfig();
+
     descriptorSets.init(samplerManager, pipelineManager->GetPipelineLayout(),
                         pipelineManager->GetPerFrameDSLayout(),
                         pipelineManager->GetPerPolyDSLayout());
-    polyRoutingManager.LoadDefautConfig();
   }
 
   int GetCurrentImage() const { return imageIndex; }

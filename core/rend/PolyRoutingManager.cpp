@@ -28,8 +28,8 @@ PolyRoutingManager::PolyRoutingManager() {
 void PolyRoutingManager::LoadDefautConfig() {
     std::string game_id = library::getGameId();
     if (!game_id.empty()) {
-
-        LoadConfig(hostfs::getHudConfigurationPath() + game_id + "/poly_routing.yaml");
+        auto filename = hostfs::getHudConfigurationPath();
+        LoadConfig(filename + game_id + "/poly_routing.json");
     }
 }
 
@@ -37,7 +37,10 @@ void PolyRoutingManager::LoadConfig(const std::string& filename) {
     DEBUG_LOG(RENDERER, "Loading default poly routing configuration for game ID: %s", filename.c_str());
     rules.clear();
     std::ifstream i(filename);
-    if (!i.is_open()) return;
+    if (!i.is_open()) {
+        NOTICE_LOG(RENDERER, "poly_routing configuration not found: %s", filename.c_str());
+        return;
+    }
 
     try {
         nlohmann::json config;

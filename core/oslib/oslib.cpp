@@ -305,7 +305,7 @@ std::string getTextureDumpPath()
 // New function for HUD configuration path
 std::string getHudConfigurationPath()
 {
-	//TODO  user-defined path
+	//TODO MGT user-defined path
 	return get_writable_data_path("prism/");
 }
 
