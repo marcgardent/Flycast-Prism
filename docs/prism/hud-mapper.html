@@ -6,7 +6,7 @@
     <title>HUD Mapper For Flycast Prism</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
-    <!-- js-yaml for parsing imports -->
+    <!-- js-yaml pour le parsing des imports -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
@@ -15,6 +15,8 @@
             --bg-deep: #020617;
             --panel-bg: rgba(15, 23, 42, 0.85);
             --accent-primary: #6366f1;
+            --error-red: #ef4444;
+            --warning-orange: #f59e0b;
         }
 
         body {
@@ -43,6 +45,7 @@
             justify-content: space-between;
             padding: 0.6rem 0;
             border-bottom: 1px solid rgba(255,255,255,0.03);
+            align-items: center;
         }
 
         .detail-label {
@@ -68,9 +71,14 @@
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
         }
-        .btn-prism:hover {
+        .btn-prism:not(:disabled):hover {
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+        .btn-prism:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            filter: grayscale(1);
         }
 
         .mono { font-family: 'JetBrains Mono', monospace; }
@@ -88,41 +96,69 @@
         .markdown-content code { font-family: 'JetBrains Mono'; background: #0f172a; padding: 0.2rem 0.4rem; border-radius: 4px; color: #60a5fa; font-size: 0.85rem; }
         .markdown-content pre { background: #0f172a; padding: 1rem; border-radius: 8px; border: 1px solid #1e293b; overflow-x: auto; margin-bottom: 1rem; }
         .markdown-content ul { list-style: disc; margin-left: 1.5rem; color: #94a3b8; font-size: 0.9rem; margin-bottom: 1rem; }
+
+        /* Custom Checkbox */
+        .prism-checkbox {
+            appearance: none;
+            background-color: rgba(255, 255, 255, 0.05);
+            margin: 0;
+            font: inherit;
+            color: #6366f1;
+            width: 1.15em;
+            height: 1.15em;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.35em;
+            display: grid;
+            place-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .prism-checkbox::before {
+            content: "";
+            width: 0.65em;
+            height: 0.65em;
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            box-shadow: inset 1em 1em var(--accent-primary);
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
+        .prism-checkbox:checked { border-color: var(--accent-primary); background: rgba(99, 102, 241, 0.1); }
+        .prism-checkbox:checked::before { transform: scale(1); }
     </style>
 </head>
 <body class="min-h-screen flex flex-col overflow-hidden text-white">
 
-<!-- Ratio Warning Notification -->
+<!-- Notification d'avertissement de ratio -->
 <div id="ratio-warning" class="hidden bg-gradient-to-r from-amber-500 to-orange-600 text-white px-8 py-3 flex items-center justify-center gap-4 font-bold text-sm z-[100] shadow-2xl">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
     <span>Resolution mismatch: Loaded image ratio is lower than target safezone (<span id="target-res-display">640x480</span>).</span>
-    <button onclick="document.getElementById('ratio-warning').classList.add('hidden')" class="ml-auto bg-black/10 hover:bg-black/20 p-1 rounded text-white">✕</button>
+    <button onclick="document.getElementById('ratio-warning').classList.add('hidden')" class="ml-auto bg-black/10 hover:bg-black/20 p-1 rounded">✕</button>
 </div>
 
 <!-- Header -->
 <header class="bg-slate-950/80 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex flex-row items-center justify-between sticky top-0 z-50 whitespace-nowrap text-white">
     <div class="flex items-center gap-8">
         <div class="flex items-center gap-3">
-            <div class="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-xl shadow-lg shadow-indigo-500/20">
+            <div class="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-xl shadow-lg shadow-indigo-500/20 text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" /></svg>
             </div>
             <h1 class="text-lg font-extrabold tracking-tight text-white flex items-center gap-2 uppercase">
-                HUD Mapper <span class="text-slate-500 font-light">|</span> <a href="https://github.com/marcgardent/Flycast-Prism/tree/feat/prism" target="_blank" class="text-indigo-400 hover:text-indigo-300 transition-all">Prism</a>
+                HUD Mapper <span class="text-slate-500 font-light">|</span> Prism
             </h1>
         </div>
 
         <div class="flex items-center bg-white/5 rounded-full border border-white/10 px-4 py-1.5 gap-4">
             <span id="platform-label" class="text-[10px] text-indigo-400 font-bold uppercase tracking-[0.2em]">Dreamcast</span>
             <div class="w-1 h-1 bg-slate-700 rounded-full"></div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 text-white">
                 <span class="text-[9px] text-slate-500 font-bold uppercase">Safezone</span>
                 <span id="res-label" class="text-[11px] text-slate-200 mono font-bold">640x480</span>
             </div>
         </div>
 
         <div class="flex gap-2">
-            <button onclick="openModal('user')" class="text-[9px] font-bold text-slate-400 hover:text-white border border-white/10 px-3 py-1 rounded-full transition-colors uppercase tracking-widest">User Info</button>
-            <button onclick="openModal('dev')" class="text-[9px] font-bold text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 px-3 py-1 rounded-full transition-colors uppercase tracking-widest">Dev Info</button>
+            <button onclick="openModal('user')" class="text-[9px] font-bold text-slate-400 hover:text-white border border-white/10 px-3 py-1 rounded-full transition-colors uppercase tracking-widest text-white">User Info</button>
+            <button onclick="openModal('dev')" class="text-[9px] font-bold text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 px-3 py-1 rounded-full transition-colors uppercase tracking-widest text-white">Dev Info</button>
         </div>
 
         <p id="status-text" class="text-[10px] text-indigo-500/50 mono uppercase hidden xl:block tracking-widest animate-pulse">System ready</p>
@@ -130,17 +166,17 @@
 
     <div class="flex items-center gap-3">
         <input type="file" id="imageLoader" accept="image/*" class="hidden">
-        <label for="imageLoader" class="btn-prism cursor-pointer bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl transition-all text-[11px] font-bold border border-white/5 flex items-center gap-2 text-white">
+        <label for="imageLoader" class="btn-prism cursor-pointer bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl transition-all text-[11px] font-bold border border-white/5 flex items-center gap-2">
             IMPORT REFERENCE
         </label>
     </div>
 </header>
 
-<!-- Landing Screen -->
+<!-- Écran d'accueil -->
 <div id="landing-screen" class="flex-1 flex flex-col items-center justify-center bg-slate-950 relative overflow-hidden text-white">
     <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-500/10 to-transparent opacity-50"></div>
     <div class="relative z-10 flex flex-col items-center gap-8 max-w-md text-center px-6">
-        <div class="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-3xl shadow-2xl shadow-indigo-500/20 mb-4 animate-bounce">
+        <div class="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-3xl shadow-2xl shadow-indigo-500/20 mb-4 animate-bounce text-white">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" /></svg>
         </div>
         <div class="space-y-3">
@@ -156,31 +192,31 @@
     </div>
 </div>
 
-<!-- Workspace -->
+<!-- Workspace principal -->
 <main id="main-workspace" class="flex-1 flex min-h-0 overflow-hidden text-white">
-    <div class="flex-1 flex flex-col divide-y divide-white/5 bg-slate-950 overflow-hidden">
+    <div class="flex-1 flex flex-col divide-y divide-white/5 bg-slate-950 overflow-hidden text-white">
         <!-- SOURCE SPACE -->
-        <section id="wrapper-anno" class="flex-1 flex flex-row items-center justify-center p-6 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-500/5 to-transparent overflow-hidden">
-            <div class="flex flex-col justify-center items-center h-full pr-8">
+        <section id="wrapper-anno" class="flex-1 flex flex-row items-center justify-center p-6 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-500/5 to-transparent overflow-hidden text-white">
+            <div class="flex flex-col justify-center items-center h-full pr-8 text-white">
                 <div class="vertical-legend flex items-center gap-3 bg-slate-900/90 backdrop-blur-md px-3 py-4 rounded-xl border border-white/10 shadow-2xl">
                     <div class="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
                     <span class="text-[9px] uppercase font-black tracking-[0.2em] text-slate-300">SOURCE INPUT</span>
                 </div>
             </div>
-            <div id="container-anno" class="relative z-10 transition-all duration-700 flex-shrink-0">
+            <div id="container-anno" class="relative z-10 transition-all duration-700 flex-shrink-0 text-white">
                 <canvas id="c-anno"></canvas>
             </div>
         </section>
 
         <!-- DESTINATION SPACE -->
-        <section id="wrapper-calib" class="flex-1 flex flex-row items-center justify-center p-6 bg-slate-950 overflow-hidden">
-            <div class="flex flex-col justify-center items-center h-full pr-8">
+        <section id="wrapper-calib" class="flex-1 flex flex-row items-center justify-center p-6 bg-slate-950 overflow-hidden text-white">
+            <div class="flex flex-col justify-center items-center h-full pr-8 text-white">
                 <div class="vertical-legend flex items-center gap-3 bg-slate-900/90 backdrop-blur-md px-3 py-4 rounded-xl border border-white/10 shadow-2xl">
                     <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
                     <span class="text-[9px] uppercase font-black tracking-[0.2em] text-slate-300">DESTINATION OUTPUT</span>
                 </div>
             </div>
-            <div id="container-calib" class="relative z-10 transition-all duration-700 flex-shrink-0">
+            <div id="container-calib" class="relative z-10 transition-all duration-700 flex-shrink-0 text-white">
                 <canvas id="c-calib"></canvas>
             </div>
         </section>
@@ -189,10 +225,15 @@
     <!-- Sidebar -->
     <aside class="w-80 bg-slate-900/50 backdrop-blur-2xl border-l border-white/5 flex flex-col shadow-[-20px_0_40px_rgba(0,0,0,0.4)] z-50 shrink-0 overflow-hidden text-white">
 
-        <!-- Inspector -->
+        <!-- Inspecteur de zone -->
         <div class="flex-1 flex flex-col min-h-0 overflow-y-auto">
-            <div class="p-6 bg-slate-900/80 border-b border-white/5">
+            <div class="p-6 bg-slate-900/80 border-b border-white/5 flex justify-between items-center">
                 <h3 class="text-[11px] uppercase font-black tracking-[0.2em] text-indigo-500">Zone Inspector</h3>
+                <!-- INDICATEUR DE CHEVAUCHEMENT -->
+                <div id="overlap-indicator" class="hidden flex items-center gap-1.5 bg-amber-500/10 text-amber-500 px-2 py-1 rounded border border-amber-500/20">
+                    <div class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
+                    <span class="text-[8px] font-black uppercase tracking-tighter">Overlap Detected</span>
+                </div>
             </div>
 
             <div id="no-selection-msg" class="flex-1 flex flex-col items-center justify-center p-12 text-center text-white">
@@ -200,15 +241,15 @@
                 <p class="text-slate-500 text-xs font-medium leading-relaxed italic">Select a zone to adjust mapping.</p>
             </div>
 
-            <div id="detail-content" class="hidden p-6 space-y-8">
-                <!-- SOURCE DATA -->
+            <div id="detail-content" class="hidden p-6 space-y-8 text-white">
+                <!-- DONNÉES SOURCE -->
                 <div class="space-y-4">
                     <div class="flex items-center gap-3">
                         <div class="w-2 h-2 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.6)]"></div>
                         <h4 class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Source (Input)</h4>
                     </div>
-                    <div class="bg-white/5 rounded-2xl p-4 border border-white/5 space-y-1 text-white">
-                        <div class="detail-row"><span class="detail-label">Anchor</span><span class="detail-value text-indigo-400">CENTER</span></div>
+                    <div class="bg-white/5 rounded-2xl p-4 border border-white/5 space-y-1">
+                        <div class="detail-row"><span class="detail-label text-indigo-400 font-bold">Anchor</span><span class="detail-value text-indigo-400">CENTER</span></div>
                         <div class="detail-row"><span class="detail-label">Offset X</span><span id="src-x" class="detail-value text-slate-300">0</span></div>
                         <div class="detail-row"><span class="detail-label">Offset Y</span><span id="src-y" class="detail-value text-slate-300">0</span></div>
                         <div class="detail-row"><span class="detail-label">W (Norm)</span><span id="src-w" class="detail-value text-slate-300">0</span></div>
@@ -216,19 +257,23 @@
                     </div>
                 </div>
 
-                <!-- DESTINATION DATA -->
-                <div class="space-y-4">
+                <!-- DONNÉES DESTINATION -->
+                <div class="space-y-4 text-white">
                     <div class="flex items-center gap-3">
                         <div class="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.6)]"></div>
                         <h4 class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Destination (Output)</h4>
                     </div>
-                    <div class="bg-white/5 rounded-2xl p-4 border border-white/5 space-y-1 text-white">
-                        <div class="detail-row"><span class="detail-label text-emerald-500 font-bold">Anchor</span><span id="map-anchor" class="detail-value text-emerald-400 uppercase">CENTER</span></div>
+                    <div class="bg-white/5 rounded-2xl p-4 border border-white/5 space-y-1">
+                        <div class="detail-row">
+                            <span class="detail-label text-emerald-500 font-bold">Zen Mode</span>
+                            <input type="checkbox" id="zen-mode-toggle" class="prism-checkbox">
+                        </div>
+                        <div class="detail-row"><span class="detail-label text-emerald-500 font-bold">Anchor</span><span id="map-anchor" class="detail-value text-emerald-400 uppercase font-bold">CENTER</span></div>
                         <div class="detail-row"><span class="detail-label">Rel X</span><span id="map-x" class="detail-value text-slate-300">0</span></div>
                         <div class="detail-row"><span class="detail-label">Rel Y</span><span id="map-y" class="detail-value text-slate-300">0</span></div>
                         <div class="detail-row"><span class="detail-label">W (Norm)</span><span id="map-w" class="detail-value text-slate-300">0</span></div>
                         <div class="detail-row"><span class="detail-label">H (Norm)</span><span id="map-h" class="detail-value text-slate-300">0</span></div>
-                        <div class="detail-row mt-2 pt-2 border-t border-white/10">
+                        <div id="scaling-row" class="detail-row mt-2 pt-2 border-t border-white/10 text-white text-white">
                             <span class="detail-label font-bold text-emerald-500">Scaling</span>
                             <span id="map-scale" class="detail-value text-emerald-400">1.000</span>
                         </div>
@@ -239,12 +284,12 @@
             </div>
         </div>
 
-        <!-- Actions Panel -->
-        <div class="p-6 bg-slate-950 border-t border-white/10 space-y-3">
+        <!-- Volet d'actions -->
+        <div class="p-6 bg-slate-950 border-t border-white/10 space-y-3 text-white">
             <h3 class="text-[9px] uppercase font-black tracking-[0.2em] text-slate-500 mb-2">Actions</h3>
 
             <input type="file" id="importYamlLoader" accept=".yaml,.yml" class="hidden">
-            <button id="importYamlBtn" class="btn-prism w-full bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase py-4 rounded-xl transition-all border border-white/10 tracking-widest flex items-center justify-center gap-2">
+            <button id="importYamlBtn" class="btn-prism w-full bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase py-4 rounded-xl transition-all border border-white/10 tracking-widest flex items-center justify-center gap-2 text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                 IMPORT YAML
             </button>
@@ -257,38 +302,38 @@
     </aside>
 </main>
 
-<!-- Info Modal System -->
+<!-- Modales d'info -->
 <div id="modal-container" class="hidden fixed inset-0 z-[200] flex items-center justify-center p-8 text-white">
     <div class="modal-overlay absolute inset-0" onclick="closeModal()"></div>
-    <div class="relative bg-slate-900 w-full max-w-3xl max-h-full rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden">
+    <div class="relative bg-slate-900 w-full max-w-3xl max-h-full rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden text-white">
         <div class="p-6 border-b border-white/5 flex justify-between items-center bg-slate-950/50 text-white">
-            <h3 id="modal-title" class="text-sm font-black uppercase tracking-widest text-indigo-400">Info</h3>
-            <div class="flex gap-2">
-                <button id="modal-copy" class="text-[10px] font-bold text-slate-400 hover:text-white bg-white/5 px-4 py-2 rounded-lg transition-colors">COPY AS MD</button>
-                <button onclick="closeModal()" class="text-slate-400 hover:text-white p-2 text-xl font-bold">✕</button>
+            <h3 id="modal-title" class="text-sm font-black uppercase tracking-widest text-indigo-400 text-white">Info</h3>
+            <div class="flex gap-2 text-white">
+                <button id="modal-copy" class="text-[10px] font-bold text-slate-400 hover:text-white bg-white/5 px-4 py-2 rounded-lg transition-colors text-white">COPY AS MD</button>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white p-2 text-xl font-bold text-white">✕</button>
             </div>
         </div>
         <div id="modal-body" class="p-10 overflow-y-auto markdown-content text-white"></div>
     </div>
 </div>
 
-<!-- Image Load Action Modal -->
+<!-- Modale de chargement d'image -->
 <div id="load-image-modal" class="hidden fixed inset-0 z-[200] flex items-center justify-center p-8 text-white">
-    <div class="modal-overlay absolute inset-0"></div>
-    <div class="relative bg-slate-900 w-full max-w-md rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden">
+    <div class="modal-overlay absolute inset-0 text-white"></div>
+    <div class="relative bg-slate-900 w-full max-w-md rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden text-white">
         <div class="p-6 border-b border-white/5 flex justify-between items-center bg-slate-950/50 text-white">
-            <h3 class="text-sm font-black uppercase tracking-widest text-indigo-400">New Reference Image</h3>
-            <button onclick="cancelImageLoad()" class="text-slate-400 hover:text-white p-2 text-xl font-bold">✕</button>
+            <h3 class="text-sm font-black uppercase tracking-widest text-indigo-400 text-white">New Reference Image</h3>
+            <button onclick="cancelImageLoad()" class="text-slate-400 hover:text-white p-2 text-xl font-bold text-white text-white">✕</button>
         </div>
-        <div class="p-8 flex flex-col gap-6">
-            <p class="text-sm text-slate-300 leading-relaxed text-center">
+        <div class="p-8 flex flex-col gap-6 text-white">
+            <p class="text-sm text-slate-300 leading-relaxed text-center text-white">
                 You are loading a new reference image. What would you like to do with the current HUD mapping zones?
             </p>
-            <div class="flex flex-col gap-3">
-                <button onclick="confirmImageLoad(true)" class="btn-prism w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/30 tracking-widest">
+            <div class="flex flex-col gap-3 text-white">
+                <button onclick="confirmImageLoad(true)" class="btn-prism w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/30 tracking-widest text-white">
                     Keep Existing Mapping
                 </button>
-                <button onclick="confirmImageLoad(false)" class="btn-prism w-full bg-red-600/10 hover:bg-red-600/20 text-red-400 text-xs font-black uppercase py-4 rounded-xl transition-all border border-red-500/20 tracking-widest">
+                <button onclick="confirmImageLoad(false)" class="btn-prism w-full bg-red-600/10 hover:bg-red-600/20 text-red-400 text-xs font-black uppercase py-4 rounded-xl transition-all border border-red-500/20 tracking-widest text-white">
                     Clear Existing Mapping
                 </button>
             </div>
@@ -298,8 +343,13 @@
 
 <script>
     /**
-     * PrismTransformer Class
-     * Handles coordinate conversion and data serialization.
+     * V1 / V2 CONFIGURATION CONSTANTS
+     * ALLOW_SCALING: Set to true to enable resizing in panels.
+     */
+    const ALLOW_SCALING = false;
+
+    /**
+     * Classe PrismTransformer
      */
     class PrismTransformer {
         constructor(platform, scale, centerX, centerY, anchors) {
@@ -349,17 +399,17 @@
                 const scaleFactor = (val.twin.getScaledWidth() / left.getScaledWidth()).toFixed(3);
                 yaml += `  - name: "zone_${Math.round(left.left)}"\n`;
                 yaml += `    source: { x: ${src.x}, y: ${src.y}, w: ${src.w}, h: ${src.h}, anchor: "SCREEN_CENTER" }\n`;
-                yaml += `    mapping: { x: ${dst.x}, y: ${dst.y}, w: ${dst.w}, h: ${dst.h}, scale: ${scaleFactor}, anchor: "${val.originId.toUpperCase()}" }\n`;
+                yaml += `    mapping: { x: ${dst.x}, y: ${dst.y}, w: ${dst.w}, h: ${dst.h}, scale: ${scaleFactor}, anchor: "${val.originId.toUpperCase()}", zen_mode: ${val.zenMode} }\n`;
             });
             return yaml;
         }
     }
 
-    // --- APP STATE & CONSTANTS ---
     const PLATFORM = { name: "Dreamcast", w: 640, h: 480 };
     const COLORS = {
         SAFE_ZONE: '#86efac', FOCUS: '#ef4444', BLUR: '#334155', ORIGIN_IMG: '#818cf8', ORIGIN_CENTER: '#ffffff',
-        SELECTION_SOURCE: 'rgba(239, 68, 68, 0.2)', SELECTION_MAP: 'rgba(239, 68, 68, 0.1)'
+        SELECTION_SOURCE: 'rgba(239, 68, 68, 0.2)', SELECTION_MAP: 'rgba(239, 68, 68, 0.1)',
+        OVERLAP: '#f59e0b'
     };
 
     const canvasAnno = new fabric.Canvas('c-anno', { backgroundColor: 'transparent', preserveObjectStacking: true });
@@ -377,20 +427,28 @@
         transparentCorners: false, cornerColor: COLORS.FOCUS, cornerStrokeColor: '#ffffff', cornerStyle: 'circle', cornerSize: 10, padding: 8, lockRotation: true, hasRotatingPoint: false
     });
 
-    // --- INFO CONTENT ---
     const INFO_CONTENT = {
         user: {
             title: "USER GUIDE",
             body: `<h1>About HUD Mapper</h1>
 <p>This tool is specifically designed for <b>reconstructing classic 4:3 HUDs for modern wide-screen resolutions</b> in emulators.</p>
-<p>By attaching your destination elements to <b>Anchor points</b> (the diamond nodes), you ensure that the HUD scales and positions correctly across <b>all display resolutions and aspect ratios</b> (16:9, 21:9, ultrawide, etc.). The anchor acts as a magnetic reference point that dynamically adapts to the emulator's viewport.</p>
+<p>By attaching destination elements to <b>Anchor points</b> (the diamond nodes), you ensure that the HUD scales and positions correctly across <b>all display resolutions and aspect ratios</b>.</p>
+
+<h2>HUD Display Modes</h2>
+<p>In-game, Prism supports 3 display states:</p>
+<ul>
+    <li><b>1. No HUD:</b> Total immersion, all UI elements are hidden.</li>
+    <li><b>2. Full HUD:</b> All mapped elements are displayed as defined.</li>
+    <li><b>3. Zen Mode:</b> A minimalist state where <b>only elements marked with the 'Zen Mode' checkbox</b> in this tool will remain visible.</li>
+</ul>
+
 <h2>Workflow</h2>
 <ul>
-    <li><b>1. Import:</b> Load a game screenshot.</li>
-    <li><b>2. Define Source:</b> Draw rectangles on the Source panel (Input) to define the original elements.</li>
-    <li><b>3. Map Destination:</b> Adjust the mapped element on the Destination panel (Output).</li>
-    <li><b>4. Set Anchor:</b> Click a diamond node to link the destination position to a specific screen or safe zone edge.</li>
-    <li><b>5. Export:</b> Download the YAML configuration.</li>
+    <li><b>1. Import Image:</b> Load your native resolution screenshot.</li>
+    <li><b>2. Define Source:</b> Draw capture areas on the top panel. These must stay within the 4:3 Safe Zone.</li>
+    <li><b>3. Map Destination:</b> Adjust position on the bottom panel. You can move these anywhere on the screen (widescreen support).</li>
+    <li><b>4. Set Zen Mode:</b> Check 'Zen Mode' for critical HUD items to keep them in minimalist mode.</li>
+    <li><b>5. Export:</b> Download the YAML configuration once validation is green.</li>
 </ul>`
         },
         dev: {
@@ -440,7 +498,7 @@ Let <code>SAFE_X_OFFSET = (SCREEN_WIDTH - SAFE_WIDTH) / 2.0f</code>.</p>
         }
     };
 
-    // --- UI FUNCTIONS ---
+    // --- DÉFINITIONS DES FONCTIONS ---
 
     function openModal(type) {
         document.getElementById('modal-title').innerText = INFO_CONTENT[type].title;
@@ -461,27 +519,94 @@ Let <code>SAFE_X_OFFSET = (SCREEN_WIDTH - SAFE_WIDTH) / 2.0f</code>.</p>
         return new PrismTransformer(PLATFORM, canvasToPlatformScale, currentImageW/2 + OFFSET_MARGIN, currentImageH/2 + OFFSET_MARGIN, calibrationPoints);
     }
 
+    function clampObject(obj, bounds) {
+        if (!obj || !bounds) return;
+        const w = obj.getScaledWidth(), h = obj.getScaledHeight();
+        if (obj.left < bounds.left) obj.left = bounds.left;
+        if (obj.left + w > bounds.right) obj.left = bounds.right - w;
+        if (obj.top < bounds.top) obj.top = bounds.top;
+        if (obj.top + h > bounds.bottom) obj.top = bounds.bottom - h;
+    }
+
+    function clampScaling(obj, bounds) {
+        if (!obj || !bounds || !ALLOW_SCALING) return;
+        if (obj.left < bounds.left) obj.left = bounds.left;
+        if (obj.top < bounds.top) obj.top = bounds.top;
+        if (obj.left + obj.getScaledWidth() > bounds.right) obj.scaleX = (bounds.right - obj.left) / obj.width;
+        if (obj.top + obj.getScaledHeight() > bounds.bottom) obj.scaleY = (bounds.bottom - obj.top) / obj.height;
+    }
+
+    function checkValidation() {
+        let hasOverlap = false;
+        const indicator = document.getElementById('overlap-indicator');
+        const exportBtn = document.getElementById('downloadBtnSide');
+
+        zones.forEach((v, k) => {
+            const isSelected = (k === currentActiveZone);
+            k.set({ stroke: isSelected ? COLORS.FOCUS : COLORS.BLUR, strokeDashArray: null });
+            v.twin.set({ stroke: isSelected ? COLORS.FOCUS : COLORS.BLUR, strokeDashArray: isSelected ? [5, 5] : null });
+        });
+
+        const sourceRects = Array.from(zones.keys());
+        const destRects = Array.from(zones.values()).map(v => v.twin);
+
+        const findRealIntersections = (list) => {
+            for (let i = 0; i < list.length; i++) {
+                const a = list[i];
+                const aX1 = a.left, aY1 = a.top;
+                const aX2 = a.left + a.getScaledWidth(), aY2 = a.top + a.getScaledHeight();
+                for (let j = i + 1; j < list.length; j++) {
+                    const b = list[j];
+                    const bX1 = b.left, bY1 = b.top;
+                    const bX2 = b.left + b.getScaledWidth(), bY2 = b.top + b.getScaledHeight();
+                    if (aX1 < bX2 && aX2 > bX1 && aY1 < bY2 && aY2 > bY1) {
+                        hasOverlap = true;
+                        a.set({ stroke: COLORS.OVERLAP, strokeDashArray: [5, 5] });
+                        b.set({ stroke: COLORS.OVERLAP, strokeDashArray: [5, 5] });
+                    }
+                }
+            }
+        };
+
+        findRealIntersections(sourceRects);
+        findRealIntersections(destRects);
+
+        if (hasOverlap) { indicator.classList.remove('hidden'); exportBtn.disabled = true; }
+        else { indicator.classList.add('hidden'); exportBtn.disabled = false; }
+
+        canvasAnno.renderAll(); canvasCalib.renderAll();
+    }
+
     function updateTwinStyles() {
         zones.forEach((val, key) => {
             if (!key.canvas || !val.twin.canvas) return;
             const isSelected = (key === currentActiveZone);
-            key.set({ stroke: isSelected ? COLORS.FOCUS : COLORS.BLUR, fill: isSelected ? COLORS.SELECTION_SOURCE : 'rgba(51, 65, 85, 0.1)' });
-            val.twin.set({ stroke: isSelected ? COLORS.FOCUS : COLORS.BLUR, fill: isSelected ? COLORS.SELECTION_MAP : 'rgba(51, 65, 85, 0.1)', strokeDashArray: isSelected ? [5, 5] : null });
+
+            key.set({
+                stroke: isSelected ? COLORS.FOCUS : COLORS.BLUR, fill: isSelected ? COLORS.SELECTION_SOURCE : 'rgba(51, 65, 85, 0.1)',
+                hasControls: ALLOW_SCALING, lockScalingX: !ALLOW_SCALING, lockScalingY: !ALLOW_SCALING, hasRotatingPoint: false
+            });
+            key.setControlsVisibility({ mtr: false });
+
+            val.twin.set({
+                stroke: isSelected ? COLORS.FOCUS : COLORS.BLUR, fill: isSelected ? COLORS.SELECTION_MAP : 'rgba(51, 65, 85, 0.1)', strokeDashArray: isSelected ? [5, 5] : null,
+                hasControls: ALLOW_SCALING, lockScalingX: !ALLOW_SCALING, lockScalingY: !ALLOW_SCALING, hasRotatingPoint: false
+            });
+            val.twin.setControlsVisibility({ mtr: false, ml: ALLOW_SCALING, mr: ALLOW_SCALING, mt: ALLOW_SCALING, mb: ALLOW_SCALING });
         });
-        canvasAnno.renderAll();
-        canvasCalib.renderAll();
+        checkValidation();
     }
 
     function updateDetailUI() {
         const detailContent = document.getElementById('detail-content');
         const noSelectionMsg = document.getElementById('no-selection-msg');
         if (!currentActiveZone) {
-            if(detailContent) detailContent.classList.add('hidden');
-            if(noSelectionMsg) noSelectionMsg.classList.remove('hidden');
+            if (detailContent) detailContent.classList.add('hidden');
+            if (noSelectionMsg) noSelectionMsg.classList.remove('hidden');
             return;
         }
-        if(detailContent) detailContent.classList.remove('hidden');
-        if(noSelectionMsg) noSelectionMsg.classList.add('hidden');
+        if (detailContent) detailContent.classList.remove('hidden');
+        if (noSelectionMsg) noSelectionMsg.classList.add('hidden');
 
         const transformer = getTransformer();
         const zoneData = zones.get(currentActiveZone);
@@ -499,24 +624,24 @@ Let <code>SAFE_X_OFFSET = (SCREEN_WIDTH - SAFE_WIDTH) / 2.0f</code>.</p>
         document.getElementById('map-w').innerText = dst.w;
         document.getElementById('map-h').innerText = dst.h;
         document.getElementById('map-anchor').innerText = zoneData.originId.replace(/_/g, " ").toUpperCase();
-        document.getElementById('map-scale').innerText = (zoneData.twin.getScaledWidth() / currentActiveZone.getScaledWidth()).toFixed(3);
+
+        document.getElementById('zen-mode-toggle').checked = zoneData.zenMode;
+
+        const scaleRow = document.getElementById('scaling-row');
+        if (ALLOW_SCALING) {
+            scaleRow.classList.remove('hidden');
+            document.getElementById('map-scale').innerText = (zoneData.twin.getScaledWidth() / currentActiveZone.getScaledWidth()).toFixed(3);
+        } else { scaleRow.classList.add('hidden'); }
+
+        checkValidation();
     }
 
     function clearAllZones() {
-        isSyncing = true;
-        canvasAnno.discardActiveObject();
-        canvasCalib.discardActiveObject();
-        isSyncing = false;
-
-        zones.forEach((v, k) => {
-            canvasAnno.remove(k);
-            canvasCalib.remove(v.twin);
-        });
-        zones.clear();
-        reverseZones.clear();
-        currentActiveZone = null;
+        isSyncing = true; canvasAnno.discardActiveObject(); canvasCalib.discardActiveObject(); isSyncing = false;
+        zones.forEach((v, k) => { canvasAnno.remove(k); canvasCalib.remove(v.twin); });
+        zones.clear(); reverseZones.clear(); currentActiveZone = null;
         if (connectionLine) connectionLine.set({ visible: false });
-        updatePointUI(null);
+        updatePointUI(null); checkValidation();
     }
 
     function deleteSelectedZone() {
@@ -529,22 +654,14 @@ Let <code>SAFE_X_OFFSET = (SCREEN_WIDTH - SAFE_WIDTH) / 2.0f</code>.</p>
         }
         if (targetSource) {
             const data = zones.get(targetSource);
-            isSyncing = true;
-            canvasAnno.discardActiveObject();
-            canvasCalib.discardActiveObject();
-            isSyncing = false;
-
+            isSyncing = true; canvasAnno.discardActiveObject(); canvasCalib.discardActiveObject(); isSyncing = false;
             if (data && data.twin) canvasCalib.remove(data.twin);
             canvasAnno.remove(targetSource);
             zones.delete(targetSource);
             if (data && data.twin) reverseZones.delete(data.twin);
             currentActiveZone = null;
             if (connectionLine) connectionLine.set({ visible: false });
-
-            updatePointUI(null);
-
-            canvasAnno.renderAll();
-            canvasCalib.renderAll();
+            updatePointUI(null); canvasAnno.renderAll(); canvasCalib.renderAll();
             updateDetailUI();
         }
     }
@@ -609,190 +726,82 @@ Let <code>SAFE_X_OFFSET = (SCREEN_WIDTH - SAFE_WIDTH) / 2.0f</code>.</p>
         canvasCalib.renderAll();
     }
 
-    // --- YAML PARSING LOGIC ---
     function loadYAMLString(text) {
         try {
             const data = jsyaml.load(text);
-            if (!data || !data.hud_zones) throw new Error("Invalid YAML structure: missing 'hud_zones'");
-
+            if (!data || !data.hud_zones) throw new Error();
             clearAllZones();
-
             const transformer = getTransformer();
-            const centerX = currentImageW / 2 + OFFSET_MARGIN;
-            const centerY = currentImageH / 2 + OFFSET_MARGIN;
+            const cX = currentImageW / 2 + OFFSET_MARGIN;
+            const cY = currentImageH / 2 + OFFSET_MARGIN;
 
             data.hud_zones.forEach(z => {
-                const srcX = transformer.toCanvasCoord(z.source.x, centerX);
-                const srcY = transformer.toCanvasCoord(z.source.y, centerY);
-                const srcW = transformer.toCanvasSize(z.source.w);
-                const srcH = transformer.toCanvasSize(z.source.h);
-
-                const sourceRect = new fabric.Rect({
-                    left: srcX, top: srcY, width: srcW, height: srcH,
-                    fill: COLORS.SELECTION_SOURCE, stroke: COLORS.BLUR, strokeWidth: 2
+                const srcRect = new fabric.Rect({
+                    left: transformer.toCanvasCoord(z.source.x, cX), top: transformer.toCanvasCoord(z.source.y, cY),
+                    width: transformer.toCanvasSize(z.source.w), height: transformer.toCanvasSize(z.source.h),
+                    fill: COLORS.SELECTION_SOURCE, stroke: COLORS.BLUR, strokeWidth: 2,
+                    hasControls: ALLOW_SCALING, lockScalingX: !ALLOW_SCALING, lockScalingY: !ALLOW_SCALING, hasRotatingPoint: false
                 });
-                sourceRect.setControlsVisibility({ mtr: false });
-                canvasAnno.add(sourceRect);
+                srcRect.setControlsVisibility({ mtr: false });
+                canvasAnno.add(srcRect);
 
                 const anchorId = (z.mapping.anchor || "screen_center").toLowerCase();
                 const anchor = calibrationPoints.find(p => p.data.id === anchorId);
-                const refX = anchor ? anchor.left : centerX;
-                const refY = anchor ? anchor.top : centerY;
-
-                const dstX = transformer.toCanvasCoord(z.mapping.x, refX);
-                const dstY = transformer.toCanvasCoord(z.mapping.y, refY);
-                const dstW = transformer.toCanvasSize(z.mapping.w);
-                const dstH = transformer.toCanvasSize(z.mapping.h);
-
-                const destRect = new fabric.Rect({
-                    left: dstX, top: dstY, width: dstW, height: dstH,
-                    fill: 'rgba(51, 65, 85, 0.2)', stroke: COLORS.BLUR, strokeWidth: 2,
-                    selectable: true, lockUniScaling: true
+                const dstRect = new fabric.Rect({
+                    left: transformer.toCanvasCoord(z.mapping.x, anchor ? anchor.left : cX), top: transformer.toCanvasCoord(z.mapping.y, anchor ? anchor.top : cY),
+                    width: transformer.toCanvasSize(z.mapping.w), height: transformer.toCanvasSize(z.mapping.h),
+                    fill: 'rgba(51, 65, 85, 0.2)', stroke: COLORS.BLUR, strokeWidth: 2, selectable: true, lockUniScaling: true,
+                    hasControls: ALLOW_SCALING, lockScalingX: !ALLOW_SCALING, lockScalingY: !ALLOW_SCALING, hasRotatingPoint: false
                 });
-                destRect.setControlsVisibility({ mtr: false, ml: false, mr: false, mt: false, mb: false });
-                canvasCalib.add(destRect);
-
-                zones.set(sourceRect, { twin: destRect, originId: anchorId });
-                reverseZones.set(destRect, sourceRect);
+                dstRect.setControlsVisibility({ mtr: false });
+                canvasCalib.add(dstRect);
+                zones.set(srcRect, { twin: dstRect, originId: anchorId, zenMode: z.mapping.zen_mode || false });
+                reverseZones.set(dstRect, srcRect);
             });
-
-            updateTwinStyles();
-            updateDetailUI();
-
-            const st = document.getElementById('status-text');
-            if (st) st.innerText = "MAPPING RESTORED";
-        } catch (err) {
-            console.error(err);
-            alert("Error importing YAML. Make sure the file format is correct.");
-        }
+            updateTwinStyles(); updateDetailUI();
+        } catch (err) { alert("Import Error"); }
     }
 
-    // --- IMAGE LOADING LOGIC ---
-    function cancelImageLoad() {
-        document.getElementById('load-image-modal').classList.add('hidden');
-        pendingImageFile = null;
-        document.getElementById('imageLoader').value = '';
-    }
-
-    function confirmImageLoad(keepMapping) {
-        document.getElementById('load-image-modal').classList.add('hidden');
-        if (pendingImageFile) {
-            processImageFile(pendingImageFile, keepMapping);
-        }
-        pendingImageFile = null;
-        document.getElementById('imageLoader').value = '';
-    }
+    function cancelImageLoad() { document.getElementById('load-image-modal').classList.add('hidden'); pendingImageFile = null; document.getElementById('imageLoader').value = ''; }
+    function confirmImageLoad(keepMapping) { document.getElementById('load-image-modal').classList.add('hidden'); if (pendingImageFile) processImageFile(pendingImageFile, keepMapping); pendingImageFile = null; document.getElementById('imageLoader').value = ''; }
 
     function processImageFile(file, keepMapping) {
         let tempYaml = null;
-        if (keepMapping) {
-            const transformer = getTransformer();
-            tempYaml = transformer.exportYAML(zones);
-        }
-
+        if (keepMapping && zones.size > 0) tempYaml = getTransformer().exportYAML(zones);
         const reader = new FileReader();
         reader.onload = (ev) => {
             fabric.Image.fromURL(ev.target.result, (img) => {
-                const landingScreen = document.getElementById('landing-screen');
-                const mainWorkspace = document.getElementById('main-workspace');
-                if(landingScreen) landingScreen.style.display = 'none';
-                if(mainWorkspace) mainWorkspace.style.display = 'flex';
-
-                const targetRatio = PLATFORM.w / PLATFORM.h;
-                const ratioWarning = document.getElementById('ratio-warning');
-                if (ratioWarning) {
-                    if ((img.width / img.height) < targetRatio - 0.01) ratioWarning.classList.remove('hidden');
-                    else ratioWarning.classList.add('hidden');
-                }
-
-                // Clear everything for new image
-                canvasAnno.clear();
-                canvasCalib.clear();
-                zones.clear();
-                reverseZones.clear();
-                connectionLine = null;
-                currentActiveZone = null;
-
+                document.getElementById('landing-screen').style.display = 'none'; document.getElementById('main-workspace').style.display = 'flex';
+                canvasAnno.clear(); canvasCalib.clear(); zones.clear(); reverseZones.clear(); connectionLine = null; currentActiveZone = null;
                 const wrapper = document.getElementById('wrapper-anno');
                 const scale = Math.min((wrapper.clientWidth - 160) / img.width, (wrapper.clientHeight - 100) / img.height);
                 const w = img.width * scale, h = img.height * scale;
                 resizeCanvas(w, h);
-
-                const imgConfig = { scaleX: scale, scaleY: scale, selectable: false, evented: false, left: OFFSET_MARGIN, top: OFFSET_MARGIN };
-                canvasAnno.add(new fabric.Image(img.getElement(), imgConfig));
-                canvasCalib.add(new fabric.Image(img.getElement(), imgConfig));
-
-                const mireH = h - 2; const mireW = mireH * targetRatio; const leftOffset = (w - mireW) / 2;
-                canvasToPlatformScale = PLATFORM.h / mireH;
-                safeBounds = { left: leftOffset + OFFSET_MARGIN, top: 1 + OFFSET_MARGIN, right: leftOffset + mireW + OFFSET_MARGIN, bottom: mireH + 1 + OFFSET_MARGIN };
-
-                const mireConfig = { left: safeBounds.left, top: safeBounds.top, width: mireW, height: mireH, fill: 'transparent', stroke: COLORS.SAFE_ZONE, strokeWidth: 2, strokeDashArray: [10, 5], selectable: false, evented: false, excludeFromExport: true };
-                mireAnno = new fabric.Rect(mireConfig); mireCalib = new fabric.Rect(mireConfig);
+                const config = { scaleX: scale, scaleY: scale, selectable: false, evented: false, left: OFFSET_MARGIN, top: OFFSET_MARGIN };
+                canvasAnno.add(new fabric.Image(img.getElement(), config)); canvasCalib.add(new fabric.Image(img.getElement(), config));
+                canvasToPlatformScale = PLATFORM.h / (h - 2);
+                const mireW = (h - 2) * (PLATFORM.w / PLATFORM.h); const lOff = (w - mireW) / 2;
+                safeBounds = { left: lOff + OFFSET_MARGIN, top: 1 + OFFSET_MARGIN, right: lOff + mireW + OFFSET_MARGIN, bottom: h - 1 + OFFSET_MARGIN };
+                mireAnno = new fabric.Rect({ left: safeBounds.left, top: safeBounds.top, width: mireW, height: h - 2, fill: 'transparent', stroke: COLORS.SAFE_ZONE, strokeWidth: 2, strokeDashArray: [10, 5], selectable: false, evented: false });
+                mireCalib = new fabric.Rect({ left: safeBounds.left, top: safeBounds.top, width: mireW, height: h - 2, fill: 'transparent', stroke: COLORS.SAFE_ZONE, strokeWidth: 2, strokeDashArray: [10, 5], selectable: false, evented: false });
                 canvasAnno.add(mireAnno); canvasCalib.add(mireCalib);
-
-                createCalibrationPoints(h, w, { mireW, leftOffset });
-                document.querySelectorAll('#container-anno, #container-calib').forEach(el => el.classList.remove('opacity-0', 'scale-95'));
-
-                if (keepMapping && tempYaml) {
-                    loadYAMLString(tempYaml);
-                } else {
-                    updateDetailUI();
-                    const st = document.getElementById('status-text');
-                    if (st) st.innerText = "System Synchronized";
-                }
+                createCalibrationPoints(h, w, { mireW, leftOffset: lOff });
+                if (keepMapping && tempYaml) loadYAMLString(tempYaml); else { updateDetailUI(); checkValidation(); }
             });
         };
         reader.readAsDataURL(file);
     }
 
-    // --- EVENT HANDLERS ---
-
-    /** Safe check to determine if an event was triggered by clicking an anchor node */
     function isClickingCalibrationPoint(e) {
-        try {
-            const evt = (e && e.e) || window.event;
-            if (!evt || typeof evt.clientX === 'undefined') return false;
-            const target = canvasCalib.findTarget(evt);
-            return target && calibrationPoints.includes(target);
-        } catch (err) {
-            return false;
-        }
+        try { const evt = (e && e.e) || window.event; if (!evt) return false; const target = canvasCalib.findTarget(evt); return target && calibrationPoints.includes(target); } catch (err) { return false; }
     }
-
-    canvasAnno.on('selection:cleared', (e) => {
-        if (isSyncing) return;
-        if (!isClickingCalibrationPoint(e)) {
-            currentActiveZone = null; updateTwinStyles(); updatePointUI(null);
-            if (connectionLine) connectionLine.set({ visible: false });
-
-            isSyncing = true;
-            canvasCalib.discardActiveObject().renderAll();
-            isSyncing = false;
-            updateDetailUI();
-        }
-    });
-
-    canvasCalib.on('selection:cleared', (e) => {
-        if (isSyncing) return;
-        if (!isClickingCalibrationPoint(e)) {
-            currentActiveZone = null; updateTwinStyles(); updatePointUI(null);
-            if (connectionLine) connectionLine.set({ visible: false });
-
-            isSyncing = true;
-            canvasAnno.discardActiveObject().renderAll();
-            isSyncing = false;
-            updateDetailUI();
-        }
-    });
 
     function handleLeftSelection(e) {
         if (isSyncing) return;
         const selected = e.selected ? e.selected[0] : null;
         if (selected && zones.has(selected)) {
-            currentActiveZone = selected; isSyncing = true;
-            canvasCalib.setActiveObject(zones.get(selected).twin);
-            updateTwinStyles(); updatePointUI(zones.get(selected).originId); updateConnectionLine();
-            isSyncing = false; updateDetailUI();
+            currentActiveZone = selected; isSyncing = true; canvasCalib.setActiveObject(zones.get(selected).twin);
+            updateTwinStyles(); updatePointUI(zones.get(selected).originId); updateConnectionLine(); isSyncing = false; updateDetailUI();
         }
     }
 
@@ -800,195 +809,77 @@ Let <code>SAFE_X_OFFSET = (SCREEN_WIDTH - SAFE_WIDTH) / 2.0f</code>.</p>
         if (isSyncing) return;
         const selected = e.selected ? e.selected[0] : null;
         if (selected && reverseZones.has(selected)) {
-            currentActiveZone = reverseZones.get(selected); isSyncing = true;
-            canvasAnno.setActiveObject(currentActiveZone).renderAll();
-            updateTwinStyles(); updatePointUI(zones.get(currentActiveZone).originId); updateConnectionLine();
-            isSyncing = false; updateDetailUI();
+            currentActiveZone = reverseZones.get(selected); isSyncing = true; canvasAnno.setActiveObject(currentActiveZone).renderAll();
+            updateTwinStyles(); updatePointUI(zones.get(currentActiveZone).originId); updateConnectionLine(); isSyncing = false; updateDetailUI();
         }
     }
 
-    canvasAnno.on('selection:created', handleLeftSelection);
-    canvasAnno.on('selection:updated', handleLeftSelection);
-    canvasCalib.on('selection:created', handleRightSelection);
-    canvasCalib.on('selection:updated', handleRightSelection);
+    canvasAnno.on('selection:created', handleLeftSelection); canvasAnno.on('selection:updated', handleLeftSelection);
+    canvasCalib.on('selection:created', handleRightSelection); canvasCalib.on('selection:updated', handleRightSelection);
 
-    function clampObject(obj) {
-        if (!obj) return;
-        const w = obj.getScaledWidth(), h = obj.getScaledHeight();
-        if (obj.left < safeBounds.left) obj.left = safeBounds.left;
-        if (obj.left + w > safeBounds.right) obj.left = safeBounds.right - w;
-        if (obj.top < safeBounds.top) obj.top = safeBounds.top;
-        if (obj.top + h > safeBounds.bottom) obj.top = safeBounds.bottom - h;
-    }
-
-    function clampScaling(obj) {
-        if (!obj) return;
-        if (obj.left < safeBounds.left) obj.left = safeBounds.left;
-        if (obj.top < safeBounds.top) obj.top = safeBounds.top;
-        if (obj.left + obj.getScaledWidth() > safeBounds.right) obj.scaleX = (safeBounds.right - obj.left) / obj.width;
-        if (obj.top + obj.getScaledHeight() > safeBounds.bottom) obj.scaleY = (safeBounds.bottom - obj.top) / obj.height;
-    }
-
-    // --- INIT ---
-
-    document.addEventListener('DOMContentLoaded', () => {
-        const platformLabel = document.getElementById('platform-label');
-        const resLabel = document.getElementById('res-label');
-        const targetResDisplay = document.getElementById('target-res-display');
-        if(platformLabel) platformLabel.innerText = PLATFORM.name;
-        if(resLabel) resLabel.innerText = `${PLATFORM.w}x${PLATFORM.h}`;
-        if(targetResDisplay) targetResDisplay.innerText = `${PLATFORM.w}x${PLATFORM.h}`;
+    canvasAnno.on('selection:cleared', (e) => {
+        if (isSyncing) return;
+        if (!isClickingCalibrationPoint(e)) { currentActiveZone = null; updateTwinStyles(); updatePointUI(null); if (connectionLine) connectionLine.set({ visible: false }); isSyncing = true; canvasCalib.discardActiveObject().renderAll(); isSyncing = false; updateDetailUI(); }
     });
 
-    document.getElementById('imageLoader').addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    canvasCalib.on('selection:cleared', (e) => {
+        if (isSyncing) return;
+        if (!isClickingCalibrationPoint(e)) { currentActiveZone = null; updateTwinStyles(); updatePointUI(null); if (connectionLine) connectionLine.set({ visible: false }); isSyncing = true; canvasAnno.discardActiveObject().renderAll(); isSyncing = false; updateDetailUI(); }
+    });
 
-        // Trigger modal if zones already exist, else load directly
-        if (currentImageW > 0 && zones.size > 0) {
-            pendingImageFile = file;
-            document.getElementById('load-image-modal').classList.remove('hidden');
-        } else {
-            processImageFile(file, false);
-            e.target.value = '';
+    canvasAnno.on('object:moving', (e) => { clampObject(e.target, safeBounds); updateDetailUI(); });
+    canvasAnno.on('object:scaling', (e) => { clampScaling(e.target, safeBounds); updateDetailUI(); });
+    canvasCalib.on('object:moving', (e) => {
+        if (e.target) {
+            const fullBounds = { left: OFFSET_MARGIN, top: OFFSET_MARGIN, right: currentImageW + OFFSET_MARGIN, bottom: currentImageH + OFFSET_MARGIN };
+            clampObject(e.target, fullBounds);
+            updateConnectionLine(); updateDetailUI();
         }
+    });
+    canvasCalib.on('object:scaling', (e) => {
+        const fullBounds = { left: OFFSET_MARGIN, top: OFFSET_MARGIN, right: currentImageW + OFFSET_MARGIN, bottom: currentImageH + OFFSET_MARGIN };
+        updateConnectionLine(); updateDetailUI();
     });
 
     canvasAnno.on('mouse:down', function(o) {
         if (canvasAnno.findTarget(o.e) && canvasAnno.findTarget(o.e) !== mireAnno) return;
-        isCreating = true; const pointer = canvasAnno.getPointer(o.e);
-        startX = Math.max(safeBounds.left, Math.min(pointer.x, safeBounds.right));
-        startY = Math.max(safeBounds.top, Math.min(pointer.y, safeBounds.bottom));
+        isCreating = true; const p = canvasAnno.getPointer(o.e);
+        startX = Math.max(safeBounds.left, Math.min(p.x, safeBounds.right));
+        startY = Math.max(safeBounds.top, Math.min(p.y, safeBounds.bottom));
         activeRect = new fabric.Rect({ left: startX, top: startY, width: 0, height: 0, fill: COLORS.SELECTION_SOURCE, stroke: COLORS.FOCUS, strokeWidth: 2 });
-        activeRect.setControlsVisibility({ mtr: false }); canvasAnno.add(activeRect); canvasAnno.setActiveObject(activeRect);
+        canvasAnno.add(activeRect); canvasAnno.setActiveObject(activeRect);
     });
 
     canvasAnno.on('mouse:move', function(o) {
-        if (!isCreating) return; const pointer = canvasAnno.getPointer(o.e);
-        let currentX = Math.max(safeBounds.left, Math.min(pointer.x, safeBounds.right));
-        let currentY = Math.max(safeBounds.top, Math.min(pointer.y, safeBounds.bottom));
-        if (startX > currentX) activeRect.set({ left: currentX }); else activeRect.set({ left: startX });
-        if (startY > currentY) activeRect.set({ top: currentY }); else activeRect.set({ top: startY });
-        activeRect.set({ width: Math.abs(startX - currentX), height: Math.abs(startY - currentY) }); canvasAnno.renderAll();
+        if (!isCreating) return; const p = canvasAnno.getPointer(o.e);
+        let cX = Math.max(safeBounds.left, Math.min(p.x, safeBounds.right));
+        let cY = Math.max(safeBounds.top, Math.min(p.y, safeBounds.bottom));
+        if (startX > cX) activeRect.set({ left: cX }); else activeRect.set({ left: startX });
+        if (startY > cY) activeRect.set({ top: cY }); else activeRect.set({ top: startY });
+        activeRect.set({ width: Math.abs(startX - cX), height: Math.abs(startY - cY) }); canvasAnno.renderAll();
     });
 
     canvasAnno.on('mouse:up', () => {
         if (!isCreating) return; isCreating = false;
         if (activeRect.width < 5) { canvasAnno.remove(activeRect); }
         else {
-            const twin = new fabric.Rect({ left: activeRect.left, top: activeRect.top, width: activeRect.width, height: activeRect.height, fill: 'rgba(51, 65, 85, 0.2)', stroke: COLORS.BLUR, strokeWidth: 2, selectable: true, lockUniScaling: true });
-            twin.setControlsVisibility({ mtr: false, ml: false, mr: false, mt: false, mb: false });
-            canvasCalib.add(twin); zones.set(activeRect, { twin: twin, originId: 'screen_center' }); reverseZones.set(twin, activeRect);
+            const twin = new fabric.Rect({
+                left: activeRect.left, top: activeRect.top, width: activeRect.width, height: activeRect.height, fill: 'rgba(51, 65, 85, 0.2)', stroke: COLORS.BLUR, strokeWidth: 2, selectable: true, lockUniScaling: true,
+                hasControls: ALLOW_SCALING, lockScalingX: !ALLOW_SCALING, lockScalingY: !ALLOW_SCALING, hasRotatingPoint: false
+            });
+            twin.setControlsVisibility({ mtr: false });
+            canvasCalib.add(twin); zones.set(activeRect, { twin: twin, originId: 'screen_center', zenMode: false }); reverseZones.set(twin, activeRect);
             currentActiveZone = activeRect; isSyncing = true; canvasCalib.setActiveObject(twin); updateTwinStyles(); updatePointUI('screen_center'); updateConnectionLine(); isSyncing = false; updateDetailUI();
         }
         if(mireAnno) mireAnno.bringToFront();
     });
 
-    canvasAnno.on('object:moving', (e) => { clampObject(e.target); updateDetailUI(); });
-    canvasAnno.on('object:scaling', (e) => { clampScaling(e.target); updateDetailUI(); });
-    canvasCalib.on('object:moving', (e) => {
-        if (!e.target) return;
-        const w = e.target.getScaledWidth(), h = e.target.getScaledHeight();
-        if (e.target.left < OFFSET_MARGIN) e.target.left = OFFSET_MARGIN;
-        if (e.target.left + w > currentImageW + OFFSET_MARGIN) e.target.left = currentImageW + OFFSET_MARGIN - w;
-        if (e.target.top < OFFSET_MARGIN) e.target.top = OFFSET_MARGIN;
-        if (e.target.top + h > currentImageH + OFFSET_MARGIN) e.target.top = currentImageH + OFFSET_MARGIN - h;
-        updateConnectionLine(); updateDetailUI();
-    });
-    canvasCalib.on('object:scaling', (e) => { updateConnectionLine(); updateDetailUI(); });
-
-    document.getElementById('downloadBtnSide').addEventListener('click', () => {
-        const transformer = getTransformer();
-        const yaml = transformer.exportYAML(zones);
-        const blob = new Blob([yaml], {type : 'text/yaml'});
-        const url = URL.createObjectURL(blob);
-        const dl = document.createElement('a');
-        dl.href = url; dl.download = "hud_config.yaml"; dl.click();
-    });
-
+    document.getElementById('zen-mode-toggle').addEventListener('change', (e) => { if (currentActiveZone) { zones.get(currentActiveZone).zenMode = e.target.checked; } });
+    document.getElementById('imageLoader').addEventListener('change', (e) => { const f = e.target.files[0]; if (!f) return; if (currentImageW > 0 && zones.size > 0) { pendingImageFile = f; document.getElementById('load-image-modal').classList.remove('hidden'); } else processImageFile(f, false); });
+    document.getElementById('downloadBtnSide').addEventListener('click', () => { const dl = document.createElement('a'); dl.href = URL.createObjectURL(new Blob([getTransformer().exportYAML(zones)], {type : 'text/yaml'})); dl.download = "hud_config.yaml"; dl.click(); });
     document.getElementById('deleteZone').addEventListener('click', deleteSelectedZone);
     document.getElementById('importYamlBtn').addEventListener('click', () => document.getElementById('importYamlLoader').click());
-
-    document.getElementById('importYamlLoader').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        if (currentImageW === 0) {
-            alert("Please load a reference image before importing YAML data.");
-            e.target.value = '';
-            return;
-        }
-
-        try {
-            const text = await file.text();
-            const data = jsyaml.load(text);
-            if (!data || !data.hud_zones) throw new Error("Invalid YAML structure: missing 'hud_zones'");
-
-            // Clear existing zones
-            canvasAnno.discardActiveObject();
-            canvasCalib.discardActiveObject();
-            zones.forEach((v, k) => {
-                canvasAnno.remove(k);
-                canvasCalib.remove(v.twin);
-            });
-            zones.clear();
-            reverseZones.clear();
-            currentActiveZone = null;
-            if (connectionLine) connectionLine.set({ visible: false });
-            updatePointUI(null);
-
-            const transformer = getTransformer();
-            const centerX = currentImageW / 2 + OFFSET_MARGIN;
-            const centerY = currentImageH / 2 + OFFSET_MARGIN;
-
-            data.hud_zones.forEach(z => {
-                const srcX = transformer.toCanvasCoord(z.source.x, centerX);
-                const srcY = transformer.toCanvasCoord(z.source.y, centerY);
-                const srcW = transformer.toCanvasSize(z.source.w);
-                const srcH = transformer.toCanvasSize(z.source.h);
-
-                const sourceRect = new fabric.Rect({
-                    left: srcX, top: srcY, width: srcW, height: srcH,
-                    fill: COLORS.SELECTION_SOURCE, stroke: COLORS.BLUR, strokeWidth: 2
-                });
-                sourceRect.setControlsVisibility({ mtr: false });
-                canvasAnno.add(sourceRect);
-
-                const anchorId = (z.mapping.anchor || "screen_center").toLowerCase();
-                const anchor = calibrationPoints.find(p => p.data.id === anchorId);
-                const refX = anchor ? anchor.left : centerX;
-                const refY = anchor ? anchor.top : centerY;
-
-                const dstX = transformer.toCanvasCoord(z.mapping.x, refX);
-                const dstY = transformer.toCanvasCoord(z.mapping.y, refY);
-                const dstW = transformer.toCanvasSize(z.mapping.w);
-                const dstH = transformer.toCanvasSize(z.mapping.h);
-
-                const destRect = new fabric.Rect({
-                    left: dstX, top: dstY, width: dstW, height: dstH,
-                    fill: 'rgba(51, 65, 85, 0.2)', stroke: COLORS.BLUR, strokeWidth: 2,
-                    selectable: true, lockUniScaling: true
-                });
-                destRect.setControlsVisibility({ mtr: false, ml: false, mr: false, mt: false, mb: false });
-                canvasCalib.add(destRect);
-
-                zones.set(sourceRect, { twin: destRect, originId: anchorId });
-                reverseZones.set(destRect, sourceRect);
-            });
-
-            updateTwinStyles();
-            updateDetailUI();
-
-            const st = document.getElementById('status-text');
-            if (st) st.innerText = "YAML IMPORTED SUCCESSFULLY";
-        } catch (err) {
-            console.error(err);
-            alert("Error importing YAML. Make sure the file format is correct and an image is loaded.");
-        } finally {
-            e.target.value = '';
-        }
-    });
-
+    document.getElementById('importYamlLoader').addEventListener('change', async (e) => { if (e.target.files[0]) loadYAMLString(await e.target.files[0].text()); e.target.value = ''; });
     window.addEventListener('keydown', (e) => { if (e.key === "Delete" || e.key === "Backspace") deleteSelectedZone(); });
 </script>
 </body>
