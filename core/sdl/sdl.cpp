@@ -310,14 +310,14 @@ void resetShowMode() {
 
 
 bool handleGraphicsDebugShortcuts(SDL_Event event) {
-  // Graphics debug shortcuts: Alt+0, Alt+1, Alt+2, Alt+3, Alt+9
+  // Graphics debug shortcuts: Alt+0, Alt+1, Alt+2, Alt+3, Alt+A
   bool alt_pressed = (event.key.keysym.mod & KMOD_ALT) != 0;
   if (config::RendererType == RenderType::Vulkan_GBuffer) {
     if (alt_pressed) {
       DEBUG_LOG(RENDERER, "SDL: Alt pressed, symbol: %d, mod: 0x%X",
                 event.key.keysym.sym, event.key.keysym.mod);
-      if (event.key.keysym.sym == SDLK_9) {
-        DEBUG_LOG(RENDERER, "SDL: ALT+9 detected (ExportGBuffer)");
+      if (event.key.keysym.sym == SDLK_a) {
+        DEBUG_LOG(RENDERER, "SDL: ALT+A detected (ExportGBuffer)");
         if (renderer != nullptr)
           renderer->RequestExportGBuffer();
         else
