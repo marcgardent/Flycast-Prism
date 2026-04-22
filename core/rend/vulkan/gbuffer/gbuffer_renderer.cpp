@@ -1341,7 +1341,7 @@ public:
         hudOverlayPass.Draw(cmdBuf, imgIdx, viewMode);
     }
 
-    if (pendingExport) {
+    if (pendingExport && metadataEnabled) {
       ExportGBuffer();
       config::CaptureMetadataBuffers.set(originalMetadataState);
       pendingExport = false;
