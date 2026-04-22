@@ -1,35 +1,33 @@
+Tu es un développeur expert en C++ et Vulkan. Ton objectif est d'intégrer une nouvelle classe `VulkanHudCompositor` dans notre moteur de rendu. Tu as accès aux fichiers `VulkanHudCompositor.h` et `VulkanHudCompositor.cpp`.
 
-Tu es un développeur expert en C++ et Vulkan. Ton objectif est d'intégrer une nouvelle classe `VulkanHudCompositor` dans notre moteur de rendu.
+### Contexte Architectural & Pipeline
+Notre architecture de HUD fonctionne ainsi :
+1. **Source :** Notre fragment shader (`main.frag`) dessine le HUD complet dans une texture dédiée de notre GBuffer (`srcGbufferHud`).
+2. **Composition (BitBlt) :** La classe `VulkanHudCompositor` prend cette texture source, extrait les rectangles des fenêtres/éléments demandés, et les copie vers une texture HUD finale (`dstHudCompositionImage`).
+3. **Blending Final :** Une passe de rendu ultérieure (Full Screen Quad) prend cette `dstHudCompositionImage` et la mélange (Alpha Blending) par-dessus notre scène 3D finale.
 
-Tu as accès aux fichiers `VulkanHudCompositor.h` et `VulkanHudCompositor.cpp`.
+### Tâches d'intégration à accomplir :
 
-### Contexte Architectural
-Nous passons d'un ancien système de HUD à un système de composition par transfert de blocs (BitBlt) optimisé.
-Le HUD est d'abord dessiné par notre fragment shader (`main.frag`) dans un attachement de notre GBuffer. La classe `VulkanHudCompositor` prend cette texture en entrée, extrait les zones définies, et les copie vers l'image finale de la swapchain.
+1. **Instanciation & Cycle de vie :**
+   - Ajoute une instance `m_hudCompositor` dans notre classe de rendu.
+   - Initialise-la via `m_hudCompositor.Init(renderViewportExtent, swapchainImageCount)`. Utilise bien la résolution interne du GBuffer (`renderViewportExtent`).
+   - Gère sa destruction via `Term()` et le redimensionnement via `UpdateViewport(newRenderExtent)`.
 
-### Tâches à accomplir :
+2. **Intégration dans le Command Buffer :**
+   - Place l'appel au compositeur **après** la passe du GBuffer, mais **avant** la passe de Blending final.
+   - **Transitions requises avant l'appel :** - `srcGbufferHud` -> `VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL`.
+      - `dstHudCompositionImage` -> `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL`.
+   - Appelle `m_hudCompositor.Recompose(cmd, currentImageIndex, hudElements, srcGbufferHud, dstHudCompositionImage)`.
+   - **Transitions requises après l'appel :**
+      - `dstHudCompositionImage` -> `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` (pour qu'elle puisse être lue par le fragment shader de la passe de blending final).
 
-1. **Instanciation :**
-    - Ajoute une instance de `VulkanHudCompositor` (par exemple `m_hudCompositor`) dans notre classe principale gérant le rendu (ex: `VulkanRenderer` ou `VulkanContext`).
+### 🚨 CONTRAINTES STRICTES ET PIÈGES À ÉVITER 🚨
 
-2. **Initialisation et Destruction :**
-    - Trouve l'endroit où la Swapchain est créée/initialisée. Ajoute un appel à `m_hudCompositor.Init(renderViewportExtent, swapchainImageCount)`.
-    - **Attention :** Utilise bien la résolution de rendu interne (GBuffer), pas la taille de la fenêtre si elles sont différentes.
-    - Appelle `m_hudCompositor.Term()` dans la fonction de nettoyage/shutdown du moteur.
+1. **Le Piège de l'Alpha Blending (Destination cible) :**
+   - La méthode `Recompose` effectue une copie mémoire brute (DMA BitBlt), **elle ne gère pas la transparence**.
+   - Par conséquent, tu ne dois **JAMAIS** passer l'image finale de la Swapchain comme `dstImage` à `Recompose`. Si tu le fais, les zones transparentes du HUD écraseront la scène 3D avec des pixels noirs. La cible de `Recompose` DOIT être une texture intermédiaire (`dstHudCompositionImage`).
 
-3. **Gestion du Redimensionnement (Resize) :**
-    - Dans le callback de redimensionnement (lorsque le GBuffer ou la Swapchain est recréé), ajoute un appel à `m_hudCompositor.UpdateViewport(newRenderViewportExtent)`.
+2. **L'initialisation Alpha (Transparence de base) :**
+   - La classe `VulkanHudCompositor` s'occupe déjà de nettoyer son buffer interne à chaque frame (`vkCmdFillBuffer` avec des zéros). Cela garantit que les zones où aucun élément HUD n'est copié auront un Alpha = 0. Ne rajoute pas de `vkCmdClearColorImage` superflu sur l'image cible, le BitBlt final écrasera tout de toute façon.
 
-4. **Intégration dans la Boucle de Rendu (Command Buffer) :**
-    - Localise l'enregistrement de notre Command Buffer, juste après la passe de rendu qui écrit dans le GBuffer.
-    - Avant d'appeler le compositeur, tu DOIS ajouter des barrières (pipeline barriers) pour préparer les layouts :
-        - La texture source du HUD (attachement du GBuffer) doit passer en `VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL`.
-        - L'image de destination (Swapchain) doit passer en `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL`.
-    - Appelle ensuite `m_hudCompositor.Recompose(cmd, currentImageIndex, hudElements, srcGbufferHudImage, dstSwapchainImage)`.
-    - Enfin, ajoute une transition pour passer l'image de la Swapchain de `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL` vers `VK_IMAGE_LAYOUT_PRESENT_SRC_KHR` (prête pour l'affichage).
-
-### Contraintes strictes :
-- Ne modifie pas le code interne de `VulkanHudCompositor`. La classe gère déjà ses propres barrières de synchronisation mémoire et le clipping interne.
-- Assure-toi que la liste `hudElements` fournie à la méthode `Recompose` ne contienne que les éléments qui nécessitent d'être copiés à cette frame.
-
-Analyse mon code actuel et propose-moi les modifications à apporter dans mes fichiers principaux pour réaliser cette intégration.
+Analyse mon code actuel et propose-moi les modifications pour créer `dstHudCompositionImage` si elle n'existe pas, configurer la passe de blending correctement, et intégrer les appels au compositeur.
