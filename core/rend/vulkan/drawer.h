@@ -33,7 +33,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "gbuffer/PolyRoutingManager.h"
+#include "gbuffer/GbufferContext.h"
 
 class BaseDrawer {
 public:
@@ -243,7 +243,7 @@ public:
   bool Draw(const Texture *fogTexture, const Texture *paletteTexture);
   virtual void EndRenderPass() {
     renderPassStarted = false;
-    polyRoutingManager.NewFrame();
+    gbufferContext.NewFrame();
   }
 
   vk::CommandBuffer GetCurrentCommandBuffer() const {
@@ -251,8 +251,11 @@ public:
   }
 
   void NewFrame() {
-    polyRoutingManager.NewFrame();
+    gbufferContext.NewFrame();
   }
+
+  rend::GbufferContext& GetGbufferContext() { return gbufferContext; }
+
 
 protected:
   virtual u32 GetSwapChainSize() { return GetContext()->GetSwapChainSize(); }
@@ -270,7 +273,7 @@ protected:
     this->pipelineManager = pipelineManager;
     this->samplerManager = samplerManager;
 
-    polyRoutingManager.LoadDefautConfig();
+    gbufferContext.LoadDefaultConfig();
 
     descriptorSets.init(samplerManager, pipelineManager->GetPipelineLayout(),
                         pipelineManager->GetPerFrameDSLayout(),
@@ -282,6 +285,9 @@ protected:
   vk::CommandBuffer currentCommandBuffer;
   SamplerManager *samplerManager = nullptr;
   bool renderPassStarted = false;
+
+protected:
+  rend::GbufferContext gbufferContext;
 
 private:
   void SortTriangles();
@@ -297,8 +303,6 @@ private:
   void DrawModVols(const vk::CommandBuffer &cmdBuffer, int first, int count);
   void UploadMainBuffer(const VertexShaderUniforms &vertexUniforms,
                         const FragmentShaderUniforms &fragmentUniforms);
-
-  rend::PolyRoutingManager polyRoutingManager;
 
   int imageIndex = 0;
   struct {

@@ -215,7 +215,7 @@ void Drawer::DrawPoly(const vk::CommandBuffer &cmdBuffer, u32 listType,
 
   const Vertex &v = rendContext->verts[rendContext->idx[first]];
   u32 texHash = poly.texture ? poly.texture->texture_hash : 0;
-  u32 polyRoutingActions = polyRoutingManager.GetActions({v.x, v.y, v.z, (int)poly.count, texHash});
+  u32 polyRoutingActions = gbufferContext.GetRoutingManager().GetActions({v.x, v.y, v.z, (int)poly.count, texHash});
 
 
   // Velocity for motion buffer: delta centroid N-1 -> N (TCW hash lookup)
@@ -917,6 +917,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager,
     screenPipelineManager = std::make_unique<PipelineManager>();
   screenPipelineManager->Init(shaderManager, *renderPassLoad);
   Drawer::Init(samplerManager, screenPipelineManager.get());
+  gbufferContext.UpdateViewport(viewport.width, viewport.height);
   DEBUG_LOG(RENDERER, "ScreenDrawer::Init end");
 }
 

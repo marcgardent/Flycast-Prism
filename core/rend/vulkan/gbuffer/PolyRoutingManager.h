@@ -2,6 +2,7 @@
 #include "types.h"
 #include <vector>
 #include <string>
+#include "json.hpp"
 
 namespace rend {
 
@@ -39,13 +40,19 @@ public:
 
     PolyRoutingManager();
 
-    void LoadDefautConfig();
-
+    void LoadFromJson(const nlohmann::json& config);
     void LoadConfig(const std::string& filename);
     void NewFrame();
 
     u32 GetActions(const PolyMatchParams& params);
 
+    static bool IsToHud(u32 actions) { return (actions & Action_ToHud) != 0; }
+    static bool IsStartHudPass(u32 actions) { return (actions & Action_StartHudPass) != 0; }
+    static bool IsAvoidAlbedo(u32 actions) { return (actions & Action_AvoidAlbedo) != 0; }
+    static bool IsAvoidNormal(u32 actions) { return (actions & Action_AvoidNormal) != 0; }
+    static bool IsAvoidMaterial(u32 actions) { return (actions & Action_AvoidMaterial) != 0; }
+    static bool IsAvoidMotion(u32 actions) { return (actions & Action_AvoidMotion) != 0; }
+    static bool IsAvoidDepth(u32 actions) { return (actions & Action_AvoidDepth) != 0; }
 
 private:
     std::vector<Rule> rules;

@@ -25,17 +25,8 @@ PolyRoutingManager::PolyRoutingManager() {
 
 }
 
-void PolyRoutingManager::LoadDefautConfig() {
-    std::string game_id = library::getGameId();
-    if (!game_id.empty()) {
-        auto filename = hostfs::getHudConfigurationPath();
-        LoadConfig(filename + game_id + "/poly_routing.json");
-    }
-}
 
 void PolyRoutingManager::LoadConfig(const std::string& filename) {
-    DEBUG_LOG(RENDERER, "Loading default poly routing configuration for game ID: %s", filename.c_str());
-    rules.clear();
     std::ifstream i(filename);
     if (!i.is_open()) {
         NOTICE_LOG(RENDERER, "poly_routing configuration not found: %s", filename.c_str());
@@ -45,52 +36,57 @@ void PolyRoutingManager::LoadConfig(const std::string& filename) {
     try {
         nlohmann::json config;
         i >> config;
-        if (config.contains("routing") && config["routing"].is_array()) {
-            for (const auto& node : config["routing"]) {
-                Rule rule;
-                if (node.contains("match")) {
-                    auto& match = node["match"];
-                    if (match.contains("x")) rule.criteria.x = match["x"].get<float>();
-                    if (match.contains("y")) rule.criteria.y = match["y"].get<float>();
-                    if (match.contains("z")) rule.criteria.z = match["z"].get<float>();
-                    if (match.contains("count")) rule.criteria.count = match["count"].get<int>();
-                    if (match.contains("texHash")) {
-                        if (match["texHash"].is_string()) {
-                            std::string s = match["texHash"].get<std::string>();
-                            if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
-                                std::from_chars(s.data() + 2, s.data() + s.size(), rule.criteria.texHash, 16);
-                            else
-                                std::from_chars(s.data(), s.data() + s.size(), rule.criteria.texHash, 16);
-                        } else {
-                            rule.criteria.texHash = match["texHash"].get<u32>();
-                        }
-                    }
-                }
-                
-                auto parseAction = [](const std::string& s) -> u32 {
-                    if (s == "toHud") return Action_ToHud;
-                    if (s == "startHudPass") return Action_StartHudPass;
-                    if (s == "avoidAlbedo") return Action_AvoidAlbedo;
-                    if (s == "avoidNormal") return Action_AvoidNormal;
-                    if (s == "avoidMaterial") return Action_AvoidMaterial;
-                    if (s == "avoidMotion") return Action_AvoidMotion;
-                    if (s == "avoidDepth") return Action_AvoidDepth;
-                    return Action_None;
-                };
-
-                if (node.contains("actions") && node["actions"].is_array()) {
-                    for (const auto& a : node["actions"])
-                        rule.actions |= parseAction(a.get<std::string>());
-                } else if (node.contains("action")) {
-                    rule.actions |= parseAction(node["action"].get<std::string>());
-                }
-                rules.push_back(rule);
-            }
-        }
-        NOTICE_LOG(RENDERER, "Loaded %zu polyrouting rules from %s", rules.size(), filename.c_str());
+        LoadFromJson(config);
     } catch (const std::exception& e) {
         ERROR_LOG(RENDERER, "Failed to parse %s: %s", filename.c_str(), e.what());
     }
+}
+
+void PolyRoutingManager::LoadFromJson(const nlohmann::json& config) {
+    rules.clear();
+    if (config.contains("routing") && config["routing"].is_array()) {
+        for (const auto& node : config["routing"]) {
+            Rule rule;
+            if (node.contains("match")) {
+                auto& match = node["match"];
+                if (match.contains("x")) rule.criteria.x = match["x"].get<float>();
+                if (match.contains("y")) rule.criteria.y = match["y"].get<float>();
+                if (match.contains("z")) rule.criteria.z = match["z"].get<float>();
+                if (match.contains("count")) rule.criteria.count = match["count"].get<int>();
+                if (match.contains("texHash")) {
+                    if (match["texHash"].is_string()) {
+                        std::string s = match["texHash"].get<std::string>();
+                        if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))
+                            std::from_chars(s.data() + 2, s.data() + s.size(), rule.criteria.texHash, 16);
+                        else
+                            std::from_chars(s.data(), s.data() + s.size(), rule.criteria.texHash, 16);
+                    } else {
+                        rule.criteria.texHash = match["texHash"].get<u32>();
+                    }
+                }
+            }
+
+            auto parseAction = [](const std::string& s) -> u32 {
+                if (s == "toHud") return Action_ToHud;
+                if (s == "startHudPass") return Action_StartHudPass;
+                if (s == "avoidAlbedo") return Action_AvoidAlbedo;
+                if (s == "avoidNormal") return Action_AvoidNormal;
+                if (s == "avoidMaterial") return Action_AvoidMaterial;
+                if (s == "avoidMotion") return Action_AvoidMotion;
+                if (s == "avoidDepth") return Action_AvoidDepth;
+                return Action_None;
+            };
+
+            if (node.contains("actions") && node["actions"].is_array()) {
+                for (const auto& a : node["actions"])
+                    rule.actions |= parseAction(a.get<std::string>());
+            } else if (node.contains("action")) {
+                rule.actions |= parseAction(node["action"].get<std::string>());
+            }
+            rules.push_back(rule);
+        }
+    }
+    NOTICE_LOG(RENDERER, "Loaded %zu polyrouting rules", rules.size());
 }
 
 void PolyRoutingManager::NewFrame() {

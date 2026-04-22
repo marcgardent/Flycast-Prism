@@ -35,4 +35,6 @@ target_sources(${PROJECT_NAME} PRIVATE
         src/oslib/I18nTest.cpp
         src/util/PeriodicThreadTest.cpp
         src/util/TsQueueTest.cpp
-        src/util/WorkerThreadTest.cpp)
+        src/util/WorkerThreadTest.cpp
+        src/HudCompositorTest.cpp
+        src/GbufferContextTest.cpp)
