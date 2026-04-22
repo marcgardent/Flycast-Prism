@@ -3,6 +3,7 @@
 #include "../texture.h"
 #include "../vulkan_renderer.h"
 #include "gbuffer_constants.h"
+#include "VulkanHudCompositor.h"
 
 #define TINYEXR_IMPLEMENTATION
 #define TINYEXR_USE_MINIZ 0
@@ -1236,6 +1237,7 @@ public:
       screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
       screenDrawer.SetCommandPool(&texCommandPool);
       BaseInit(screenDrawer.GetRenderPass());
+      m_hudCompositor.Init(viewport, (int)screenDrawer.GetSwapChainCount());
 
       initSSAO();
       init3DResolve();
@@ -1256,6 +1258,9 @@ public:
     hudOverlayPass.Term();
     dofPass.Term();
     resolve3DPass.Term();
+    m_hudCompositor.Term();
+    m_hudCompositionImages.clear();
+    m_hudCompositionViews.clear();
     texCommandPool.Term();
     screenDrawer.Term();
     shaderManager.term();
@@ -1337,8 +1342,35 @@ public:
                      resolve3DPass.GetAccumulationImageView(imgIdx),
                      depthAtt->GetImageView());
 
-      if (viewMode == 0 || viewMode == 7)
+      if (viewMode == 0 || viewMode == 7) {
+        // HUD Recomposition via BitBlt
+        auto hudAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_HUD_INDEX);
+        if (hudAtt) {
+          vk::Image srcGbufferHud = hudAtt->GetImage();
+          vk::Image dstHudCompositionImage = m_hudCompositionImages[imgIdx]->GetImage();
+
+          // Transitions before recompose
+          setImageLayout(cmdBuf, srcGbufferHud, vk::Format::eR8G8B8A8Unorm, 1,
+                         vk::ImageLayout::eShaderReadOnlyOptimal,
+                         vk::ImageLayout::eTransferSrcOptimal);
+          setImageLayout(cmdBuf, dstHudCompositionImage, vk::Format::eR8G8B8A8Unorm, 1,
+                         vk::ImageLayout::eUndefined,
+                         vk::ImageLayout::eTransferDstOptimal);
+
+          m_hudCompositor.Recompose(cmdBuf, imgIdx,
+                                   screenDrawer.GetGbufferContext().GetHudCompositor().getTransforms(),
+                                   srcGbufferHud, dstHudCompositionImage);
+
+          // Transitions after recompose
+          setImageLayout(cmdBuf, dstHudCompositionImage, vk::Format::eR8G8B8A8Unorm, 1,
+                         vk::ImageLayout::eTransferDstOptimal,
+                         vk::ImageLayout::eShaderReadOnlyOptimal);
+          setImageLayout(cmdBuf, srcGbufferHud, vk::Format::eR8G8B8A8Unorm, 1,
+                         vk::ImageLayout::eTransferSrcOptimal,
+                         vk::ImageLayout::eShaderReadOnlyOptimal);
+        }
         hudOverlayPass.Draw(cmdBuf, imgIdx, viewMode);
+      }
     }
 
     if (pendingExport && metadataEnabled) {
@@ -1382,6 +1414,7 @@ protected:
       formats.push_back(vk::Format::eR32G32B32A32Sfloat); // PolyData (6)
     }
     screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
+    m_hudCompositor.UpdateViewport(viewport);
     initSSAO();
     init3DResolve();
     initDoF();
@@ -1498,17 +1531,26 @@ private:
 
   void initHUDOverlay() {
     DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initHUDOverlay start");
+    VulkanContext *ctx = GetContext();
     int swapSize = (int)screenDrawer.GetSwapChainCount();
+
+    m_hudCompositionImages.clear();
+    m_hudCompositionViews.clear();
+    for (int i = 0; i < swapSize; i++) {
+      auto att = std::make_unique<FramebufferAttachment>(ctx->GetPhysicalDevice(), ctx->GetDevice());
+      att->Init(viewport.width, viewport.height, vk::Format::eR8G8B8A8Unorm,
+                vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+                "HUD COMPOSITION IMAGE " + std::to_string(i));
+      m_hudCompositionViews.push_back(att->GetImageView());
+      m_hudCompositionImages.push_back(std::move(att));
+    }
+
     std::vector<vk::ImageView> accumulationViews;
-    std::vector<vk::ImageView> hudViews;
     accumulationViews.reserve(swapSize);
-    hudViews.reserve(swapSize);
     for (int i = 0; i < swapSize; ++i) {
       accumulationViews.push_back(resolve3DPass.GetAccumulationImageView(i));
-      hudViews.push_back(screenDrawer.GetColorAttachment(i, GBUFFER_HUD_INDEX)
-                             ->GetImageView());
     }
-    hudOverlayPass.Init(&shaderManager, viewport, accumulationViews, hudViews);
+    hudOverlayPass.Init(&shaderManager, viewport, accumulationViews, m_hudCompositionViews);
     DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initHUDOverlay end");
   }
 
@@ -1518,6 +1560,9 @@ private:
   DoFPass dofPass;
   GBuffer3DResolvePass resolve3DPass;
   GBufferHUDOverlayPass hudOverlayPass;
+  VulkanHudCompositor m_hudCompositor;
+  std::vector<std::unique_ptr<FramebufferAttachment>> m_hudCompositionImages;
+  std::vector<vk::ImageView> m_hudCompositionViews;
 };
 
 void GBufferVulkanRenderer::ExportGBuffer() {
