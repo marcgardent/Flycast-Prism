@@ -33,7 +33,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "rend/PolyRoutingManager.h"
+#include "gbuffer/PolyRoutingManager.h"
 
 class BaseDrawer {
 public:

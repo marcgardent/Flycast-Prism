@@ -1,13 +1,13 @@
 #include "PolyRoutingManager.h"
 #include "hw/pvr/ta_ctx.h"
-#include "TexCache.h"
+#include "../../TexCache.h"
 #include "log/LogManager.h"
 #include "json.hpp"
 #include <fstream>
 #include <charconv>
 #include <cmath>
 
-#include "library.h"
+#include "../../library.h"
 
 namespace rend {
 

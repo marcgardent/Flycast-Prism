@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "rend/PolyRoutingManager.h"
+#include "../../core/rend/vulkan/gbuffer/PolyRoutingManager.h"
 #include <fstream>
 
 using namespace rend;

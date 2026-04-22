@@ -264,7 +264,9 @@ elseif(WIN32)
 elseif(APPLE)
 	add_executable(${PROJECT_NAME} MACOSX_BUNDLE core/emulator.cpp)
 else()
-	add_executable(${PROJECT_NAME} core/emulator.cpp)
+	add_executable(${PROJECT_NAME} core/emulator.cpp
+			core/rend/vulkan/gbuffer/HudCompositor.cpp
+			core/rend/vulkan/gbuffer/HudCompositor.h)
 endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -1096,7 +1098,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/rend/texconv.cpp
 		core/rend/texconv.h
 		core/rend/norend/norend.cpp
-		core/rend/PolyRoutingManager.cpp
+        core/rend/vulkan/gbuffer/PolyRoutingManager.cpp
 		core/rend/library.cpp
 		core/rend/library.h
 	)
