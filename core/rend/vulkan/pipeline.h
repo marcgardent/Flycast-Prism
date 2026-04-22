@@ -255,9 +255,9 @@ public:
       // offset 32 : float trilinearAlpha (4 bytes)
       // offset 36 : float palette_index  (4 bytes)
       // offset 40 : vec2  velocity        (8 bytes)
-      // total = 48 bytes — fragment only
+      // total = 52 bytes — fragment only
       vk::PushConstantRange pushConstant(vk::ShaderStageFlagBits::eFragment, 0,
-                                         48);
+                                         52);
       pipelineLayout = GetContext()->GetDevice().createPipelineLayoutUnique(
           vk::PipelineLayoutCreateInfo(vk::PipelineLayoutCreateFlags(), layouts,
                                        pushConstant));
@@ -271,14 +271,14 @@ public:
 
   vk::Pipeline GetPipeline(u32 listType, bool sortTriangles,
                            const PolyParam &pp, int gpuPalette, bool dithering,
-                           u32 polyRoutingActions) {
+                           u32 polyRoutingActions, bool metadata) {
     u64 pipehash =
-        hash(listType, sortTriangles, &pp, gpuPalette, dithering, polyRoutingActions);
+        hash(listType, sortTriangles, &pp, gpuPalette, dithering, polyRoutingActions, metadata);
     const auto &pipeline = pipelines.find(pipehash);
     if (pipeline != pipelines.end())
       return pipeline->second.get();
 
-    CreatePipeline(listType, sortTriangles, pp, gpuPalette, dithering, polyRoutingActions);
+    CreatePipeline(listType, sortTriangles, pp, gpuPalette, dithering, polyRoutingActions, metadata);
     return *pipelines[pipehash];
   }
 
@@ -320,7 +320,7 @@ private:
   void CreateDepthPassPipeline(int cullMode, bool naomi2);
 
   u64 hash(u32 listType, bool sortTriangles, const PolyParam *pp,
-           int gpuPalette, bool dithering, u32 actions) const {
+           int gpuPalette, bool dithering, u32 actions, bool metadata) const {
     u64 hash = pp->pcw.Gouraud | (pp->pcw.Offset << 1) |
                (pp->pcw.Texture << 2) | (pp->pcw.Shadow << 3) |
                (((pp->tileclip >> 28) == 3) << 4);
@@ -348,6 +348,7 @@ private:
     if (actions & rend::Action_AvoidMaterial) hash |= (u64)1 << 36;
     if (actions & rend::Action_AvoidMotion)   hash |= (u64)1 << 37;
     if (actions & rend::Action_AvoidDepth)    hash |= (u64)1 << 38;
+    if (metadata)                             hash |= (u64)1 << 39;
 
     return hash;
   }
@@ -412,7 +413,7 @@ private:
   }
 
   void CreatePipeline(u32 listType, bool sortTriangles, const PolyParam &pp,
-                      int gpuPalette, bool dithering, u32 polyRoutingAction);
+                      int gpuPalette, bool dithering, u32 polyRoutingAction, bool metadata);
 
   std::map<u64, vk::UniquePipeline> pipelines;
   std::map<u32, vk::UniquePipeline> modVolPipelines;

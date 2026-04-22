@@ -78,7 +78,10 @@ ShaderManager::compileShader(const FragmentShaderParams &params) {
       .addConstant("GBUFFER_MATERIAL_INDEX", (int)GBUFFER_MATERIAL_INDEX)
       .addConstant("GBUFFER_MOTION_INDEX", (int)GBUFFER_MOTION_INDEX)
       .addConstant("GBUFFER_HUD_INDEX", (int)GBUFFER_HUD_INDEX)
+      .addConstant("GBUFFER_TEXHASH_INDEX", (int)GBUFFER_TEXHASH_INDEX)
+      .addConstant("GBUFFER_POLYDATA_INDEX", (int)GBUFFER_POLYDATA_INDEX)
       .addConstant("IS_HUD", (int)params.isHud)
+      .addConstant("METADATA", (int)params.metadata)
 
       .addSource(GouraudSource)
       .addSource(loadShaderSource("shaders/vulkan_top.frag"))

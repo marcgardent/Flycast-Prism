@@ -486,6 +486,7 @@ extern Option<float> DoFFocus;
 extern Option<float> DoFBokehIntensity;
 extern Option<bool> NativeDepthInterpolation;
 extern Option<bool> EmulateFramebuffer;
+extern Option<bool> CaptureMetadataBuffers;
 extern Option<bool> FixUpscaleBleedingEdge;
 extern Option<bool> CustomGpuDriver;
 #ifdef VIDEO_ROUTING

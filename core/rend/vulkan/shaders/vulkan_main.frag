@@ -145,6 +145,11 @@ discard;
 
 	// Motion buffer : velocite per-poly encodee [0,1]
 	MotionColor = pushConstants.velocity * 0.5 + 0.5;
+	
+	#if METADATA == 1
+	TexHashColor = floatBitsToUint(pushConstants.texHash);
+	PolyDataColor = vec4(pushConstants.firstVtxPos, pushConstants.polyCount);
+	#endif
 
 
 

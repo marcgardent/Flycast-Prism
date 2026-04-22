@@ -319,7 +319,7 @@ void PipelineManager::CreateDepthPassPipeline(int cullMode, bool naomi2) {
 
 void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
                                      const PolyParam &pp, int gpuPalette,
-                                     bool dithering, u32 polyRoutingAction) {
+                                     bool dithering, u32 polyRoutingAction, bool metadata) {
   bool isHUD = polyRoutingAction & rend::Action_ToHud;
   vk::PipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo =
       GetMainVertexInputStateCreateInfo(true, pp.isNaomi2());
@@ -475,6 +475,20 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
         vk::BlendOp::eAdd, vk::BlendFactor::eOne,
         vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
         colorComponentFlags));
+
+    if (metadata) {
+      // Sixth attachment (TextureHash) no blending, write R only
+      colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
+          false, vk::BlendFactor::eOne, vk::BlendFactor::eZero,
+          vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero,
+          vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR));
+
+      // Seventh attachment (PolyData) no blending, write RGBA
+      colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
+          false, vk::BlendFactor::eOne, vk::BlendFactor::eZero,
+          vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero,
+          vk::BlendOp::eAdd, colorComponentFlags));
+    }
   } else {
     colorBlendAttachments.push_back(pipelineColorBlendAttachmentState);
   }
@@ -518,6 +532,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
   params.isTranslucent = listType == ListType_Translucent;
   params.gbuffer = config::RendererType == RenderType::Vulkan_GBuffer;
   params.isHud = isHUD;
+  params.metadata = metadata;
   vk::ShaderModule fragment_module = shaderManager->GetFragmentShader(params);
 
   std::array<vk::PipelineShaderStageCreateInfo, 2> stages = {
@@ -544,7 +559,8 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
       renderPass                             // renderPass
   );
 
-  pipelines[hash(listType, sortTriangles, &pp, gpuPalette, dithering, polyRoutingAction)] =
+  pipelines[hash(listType, sortTriangles, &pp, gpuPalette, dithering,
+                 polyRoutingAction, metadata)] =
       GetContext()
           ->GetDevice()
           .createGraphicsPipelineUnique(GetContext()->GetPipelineCache(),

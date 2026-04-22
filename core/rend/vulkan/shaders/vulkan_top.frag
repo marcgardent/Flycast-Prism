@@ -4,6 +4,10 @@ layout (location = GBUFFER_NORMAL_INDEX) out vec4 NormalColor;
 layout (location = GBUFFER_MATERIAL_INDEX) out uint MaterialColor;
 layout (location = GBUFFER_MOTION_INDEX) out vec2 MotionColor;
 layout (location = GBUFFER_HUD_INDEX) out vec4 HUDColor;
+#if METADATA == 1
+layout (location = GBUFFER_TEXHASH_INDEX) out uint TexHashColor;
+layout (location = GBUFFER_POLYDATA_INDEX) out vec4 PolyDataColor;
+#endif
 #else
 layout (location = 0) out vec4 FragColor;
 #define gl_FragColor FragColor
@@ -20,13 +24,14 @@ layout (std140, set = 0, binding = 1) uniform FragmentShaderUniforms
 	float sp_FOG_DENSITY;
 } uniformBuffer;
 
-layout (push_constant) uniform pushBlock
-{
-	float _pad0, _pad1, _pad2;  // std430: vec4 must be at offset 16 (12 bytes padding after float)
+layout (push_constant) uniform pushBlock {
+	vec3 firstVtxPos;
+	float texHash;
 	vec4 clipTest;
 	float trilinearAlpha;
 	float palette_index;
 	vec2 velocity;
+	float polyCount;
 } pushConstants;
 
 #if pp_Texture == 1

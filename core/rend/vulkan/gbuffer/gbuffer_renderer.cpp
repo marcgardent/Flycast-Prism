@@ -1223,12 +1223,16 @@ public:
     NOTICE_LOG(RENDERER, "GBufferVulkanRenderer::Init");
     try {
       std::vector<vk::Format> formats;
-      formats.resize(5);
+      formats.resize(metadataEnabled ? 7 : 5);
       formats[GBUFFER_ALBEDO_INDEX] = vk::Format::eR8G8B8A8Unorm;
       formats[GBUFFER_NORMAL_INDEX] = vk::Format::eR16G16B16A16Sfloat;
       formats[GBUFFER_MATERIAL_INDEX] = vk::Format::eR8Uint;
       formats[GBUFFER_MOTION_INDEX] = vk::Format::eR16G16Sfloat;
       formats[GBUFFER_HUD_INDEX] = vk::Format::eR8G8B8A8Unorm;
+      if (metadataEnabled) {
+        formats[GBUFFER_TEXHASH_INDEX] = vk::Format::eR32Uint;
+        formats[GBUFFER_POLYDATA_INDEX] = vk::Format::eR32G32B32A32Sfloat;
+      }
       screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
       screenDrawer.SetCommandPool(&texCommandPool);
       BaseInit(screenDrawer.GetRenderPass());
@@ -1262,6 +1266,7 @@ public:
   void Process(TA_context *ctx) override { BaseVulkanRenderer::Process(ctx); }
 
   bool Render() override {
+    CheckMetadataChange();
     resize(rendContext->framebufferWidth, rendContext->framebufferHeight);
 
     DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::Render screenDrawer.Draw");
@@ -1336,6 +1341,12 @@ public:
         hudOverlayPass.Draw(cmdBuf, imgIdx, viewMode);
     }
 
+    if (pendingExport) {
+      ExportGBuffer();
+      config::CaptureMetadataBuffers.set(originalMetadataState);
+      pendingExport = false;
+    }
+
     bool ret = screenDrawer.PresentFrame(
         viewMode == 0 || viewMode == 7
             ? hudOverlayPass.GetFinalAttachment(imgIdx)
@@ -1346,6 +1357,11 @@ public:
   }
 
   void ExportGBuffer() override;
+  void RequestExportGBuffer() override {
+    originalMetadataState = config::CaptureMetadataBuffers;
+    config::CaptureMetadataBuffers.set(true);
+    pendingExport = true;
+  }
 
 protected:
   void resize(int w, int h) override {
@@ -1361,6 +1377,10 @@ protected:
         vk::Format::eR16G16Sfloat,       // Motion (velocity) (3)
         vk::Format::eR8G8B8A8Unorm       // HUD (4)
     };
+    if (metadataEnabled) {
+      formats.push_back(vk::Format::eR32Uint);             // TextureHash (5)
+      formats.push_back(vk::Format::eR32G32B32A32Sfloat); // PolyData (6)
+    }
     screenDrawer.Init(&samplerManager, &shaderManager, viewport, formats);
     initSSAO();
     init3DResolve();
@@ -1369,6 +1389,21 @@ protected:
   }
 
 private:
+  bool metadataEnabled = false;
+  bool pendingExport = false;
+  bool originalMetadataState = false;
+
+  void CheckMetadataChange() {
+    if (metadataEnabled != config::CaptureMetadataBuffers) {
+      NOTICE_LOG(RENDERER,
+                 "GBufferVulkanRenderer: Metadata capture changed to %d. "
+                 "Re-initializing.",
+                 (int)config::CaptureMetadataBuffers);
+      metadataEnabled = config::CaptureMetadataBuffers;
+      Init();
+    }
+  }
+
   void initSSAO() {
     DEBUG_LOG(RENDERER, "GBufferVulkanRenderer::initSSAO start");
     if (!config::EnableSSAO && !config::ShowSSAO) {
@@ -1514,6 +1549,14 @@ void GBufferVulkanRenderer::ExportGBuffer() {
   auto motionAtt =
       screenDrawer.GetColorAttachment(imgIdx, GBUFFER_MOTION_INDEX);
   auto hudAtt = screenDrawer.GetColorAttachment(imgIdx, GBUFFER_HUD_INDEX);
+  auto texHashAtt = metadataEnabled
+                        ? screenDrawer.GetColorAttachment(imgIdx,
+                                                          GBUFFER_TEXHASH_INDEX)
+                        : nullptr;
+  auto polyDataAtt =
+      metadataEnabled
+          ? screenDrawer.GetColorAttachment(imgIdx, GBUFFER_POLYDATA_INDEX)
+          : nullptr;
   auto depthAtt = screenDrawer.GetDepthAttachment();
   vk::Image ssaoImage =
       ssaoPass.IsInitialized() ? ssaoPass.GetSSAOImage(imgIdx) : vk::Image{};
@@ -1548,6 +1591,15 @@ void GBufferVulkanRenderer::ExportGBuffer() {
       hudAtt ? std::make_unique<BufferData>(
                    width * height * 4, vk::BufferUsageFlagBits::eTransferDst)
              : nullptr;
+  std::unique_ptr<BufferData> stageTexHash =
+      texHashAtt ? std::make_unique<BufferData>(
+                       width * height * 4, vk::BufferUsageFlagBits::eTransferDst)
+                 : nullptr;
+  std::unique_ptr<BufferData> stagePolyData =
+      polyDataAtt ? std::make_unique<BufferData>(
+                        width * height * 16,
+                        vk::BufferUsageFlagBits::eTransferDst)
+                  : nullptr;
 
   try {
     texCommandPool.BeginFrame();
@@ -1591,6 +1643,12 @@ void GBufferVulkanRenderer::ExportGBuffer() {
     if (hudAtt)
       addBarrier(hudAtt->GetImage(), vk::ImageAspectFlagBits::eColor,
                  vk::ImageLayout::eShaderReadOnlyOptimal);
+    if (texHashAtt)
+      addBarrier(texHashAtt->GetImage(), vk::ImageAspectFlagBits::eColor,
+                 vk::ImageLayout::eShaderReadOnlyOptimal);
+    if (polyDataAtt)
+      addBarrier(polyDataAtt->GetImage(), vk::ImageAspectFlagBits::eColor,
+                 vk::ImageLayout::eShaderReadOnlyOptimal);
 
     cmd.pipelineBarrier(vk::PipelineStageFlagBits::eAllGraphics,
                         vk::PipelineStageFlagBits::eTransfer, {}, nullptr,
@@ -1622,6 +1680,14 @@ void GBufferVulkanRenderer::ExportGBuffer() {
       cmd.copyImageToBuffer(hudAtt->GetImage(),
                             vk::ImageLayout::eTransferSrcOptimal,
                             stageHUD->buffer.get(), region);
+    if (stageTexHash)
+      cmd.copyImageToBuffer(texHashAtt->GetImage(),
+                            vk::ImageLayout::eTransferSrcOptimal,
+                            stageTexHash->buffer.get(), region);
+    if (stagePolyData)
+      cmd.copyImageToBuffer(polyDataAtt->GetImage(),
+                            vk::ImageLayout::eTransferSrcOptimal,
+                            stagePolyData->buffer.get(), region);
 
     vk::BufferImageCopy dRegion(
         0, 0, 0,
@@ -1821,6 +1887,54 @@ void GBufferVulkanRenderer::ExportGBuffer() {
           channels[channels.size() - 1].dataFloat[i] = ptrH[i * 4 + 3] / 255.f;
         }
         stageHUD->UnmapMemory();
+      }
+    }
+
+    // --- Extraction Metadata: TextureHash (UINT32) ---
+    if (stageTexHash) {
+      u32 *ptrTH = (u32 *)stageTexHash->MapMemory();
+      if (ptrTH) {
+        channels.push_back({"Metadata.TextureHash",
+                            {},
+                            std::vector<u32>(width * height),
+                            {},
+                            TINYEXR_PIXELTYPE_UINT});
+        memcpy(channels.back().dataUint.data(), ptrTH, width * height * 4);
+        stageTexHash->UnmapMemory();
+      }
+    }
+
+    // --- Extraction Metadata: PolyData (WorldPos + PolyCount) ---
+    if (stagePolyData) {
+      float *ptrPD = (float *)stagePolyData->MapMemory();
+      if (ptrPD) {
+        channels.push_back({"Metadata.WorldPos.X",
+                            std::vector<float>(width * height),
+                            {},
+                            {},
+                            TINYEXR_PIXELTYPE_FLOAT});
+        channels.push_back({"Metadata.WorldPos.Y",
+                            std::vector<float>(width * height),
+                            {},
+                            {},
+                            TINYEXR_PIXELTYPE_FLOAT});
+        channels.push_back({"Metadata.WorldPos.Z",
+                            std::vector<float>(width * height),
+                            {},
+                            {},
+                            TINYEXR_PIXELTYPE_FLOAT});
+        channels.push_back({"Metadata.PolyCount",
+                            std::vector<float>(width * height),
+                            {},
+                            {},
+                            TINYEXR_PIXELTYPE_FLOAT});
+        for (u32 i = 0; i < width * height; ++i) {
+          channels[channels.size() - 4].dataFloat[i] = ptrPD[i * 4 + 0];
+          channels[channels.size() - 3].dataFloat[i] = ptrPD[i * 4 + 1];
+          channels[channels.size() - 2].dataFloat[i] = ptrPD[i * 4 + 2];
+          channels[channels.size() - 1].dataFloat[i] = ptrPD[i * 4 + 3];
+        }
+        stagePolyData->UnmapMemory();
       }
     }
 

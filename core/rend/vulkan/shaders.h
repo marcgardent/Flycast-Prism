@@ -65,8 +65,10 @@ struct FragmentShaderParams
 			| ((u32)palette << 14) | ((u32)divPosZ << 16) | ((u32)dithering << 17)
 			| ((u32)isTranslucent << 18)
 			| ((u32)gbuffer << 19)
-			| ((u32)isHud << 20);
+			| ((u32)isHud << 20)
+			| ((u32)metadata << 21);
 	}
+	bool metadata;
 };
 
 struct ModVolShaderParams

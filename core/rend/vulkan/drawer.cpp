@@ -229,15 +229,15 @@ void Drawer::DrawPoly(const vk::CommandBuffer &cmdBuffer, u32 listType,
   }
 
   if (tileClip == TileClipping::Inside || trilinearAlpha != 1.f ||
-      gpuPalette != 0 || config::ShowMotion) {
-    // Push constant layout must match vulkan_top.frag pushBlock (std430, 48
-    // bytes): [0]=isHUD, [1-3]=padding, [4-7]=clipTest, [8]=trilinear,
-    // [9]=palette, [10-11]=velocity
-    const std::array<float, 12> pushConstants = {
-        0.f, // padding (was isHUD)
-        0.f,
-        0.f,
-        0.f, // padding
+      gpuPalette != 0 || config::ShowMotion || config::CaptureMetadataBuffers) {
+    // Push constant layout must match vulkan_top.frag pushBlock (std430, 52
+    // bytes): [0-2]=padding, [3]=texHash, [4-7]=clipTest, [8]=trilinear,
+    // [9]=palette, [10-11]=velocity, [12]=polyCount
+    const std::array<float, 13> pushConstants = {
+        v.x,
+        v.y,
+        v.z,
+        *(float *)&texHash,
         (float)scissorRect.offset.x,
         (float)scissorRect.offset.y,
         (float)scissorRect.offset.x + (float)scissorRect.extent.width,
@@ -246,6 +246,7 @@ void Drawer::DrawPoly(const vk::CommandBuffer &cmdBuffer, u32 listType,
         palette_index,
         velocity.x,
         velocity.y,
+        (float)poly.count,
     };
     cmdBuffer.pushConstants<float>(pipelineManager->GetPipelineLayout(),
                                    vk::ShaderStageFlagBits::eFragment, 0,
@@ -253,7 +254,8 @@ void Drawer::DrawPoly(const vk::CommandBuffer &cmdBuffer, u32 listType,
   }
 
   vk::Pipeline pipeline = pipelineManager->GetPipeline(
-      listType, sortTriangles, poly, gpuPalette, dithering, polyRoutingActions);
+      listType, sortTriangles, poly, gpuPalette, dithering, polyRoutingActions,
+      config::CaptureMetadataBuffers);
   cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
   if (poly.pcw.Texture || poly.isNaomi2()) {
     vk::DeviceSize offset = 0;

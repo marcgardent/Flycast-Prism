@@ -319,7 +319,7 @@ bool handleGraphicsDebugShortcuts(SDL_Event event) {
       if (event.key.keysym.sym == SDLK_9) {
         DEBUG_LOG(RENDERER, "SDL: ALT+9 detected (ExportGBuffer)");
         if (renderer != nullptr)
-          renderer->ExportGBuffer();
+          renderer->RequestExportGBuffer();
         else
           DEBUG_LOG(RENDERER, "SDL: renderer is null");
         return true;

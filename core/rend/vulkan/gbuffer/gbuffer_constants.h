@@ -5,6 +5,8 @@
 #define GBUFFER_MATERIAL_INDEX 2
 #define GBUFFER_MOTION_INDEX   3
 #define GBUFFER_HUD_INDEX      4
+#define GBUFFER_TEXHASH_INDEX  5
+#define GBUFFER_POLYDATA_INDEX 6
 
 // G-Buffer formats used in GBufferVulkanRenderer::Init
 // Albedo (0)       : eR8G8B8A8Unorm
@@ -12,3 +14,5 @@
 // Material ID (2)  : eR8Uint
 // Motion (3)       : eR16G16Sfloat
 // HUD (4)          : eR8G8B8A8Unorm
+// TextureHash (5)  : eR32Uint
+// PolyData (6)     : eR32G32B32A32Sfloat
