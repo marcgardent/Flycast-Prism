@@ -765,6 +765,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager,
                         ShaderManager *shaderManager,
                         const vk::Extent2D &viewport,
                         const std::vector<vk::Format> &colorFormats) {
+  NOTICE_LOG(RENDERER, "ScreenDrawer::Init: viewport=%dx%d, formats=%zu", viewport.width, viewport.height, colorFormats.size());
   DEBUG_LOG(RENDERER, "ScreenDrawer::Init start");
   emulateFramebuffer = config::EmulateFramebuffer;
   this->shaderManager = shaderManager;
@@ -896,6 +897,7 @@ void ScreenDrawer::Init(SamplerManager *samplerManager,
                   vk::ImageUsageFlagBits::eTransferDst,
               "COLOR ATTACHMENT " + std::to_string(colorAttachments.size()) +
                   "_" + std::to_string(i));
+          NOTICE_LOG(RENDERER, "  - Created G-Buffer attachment %zu_%zu: %dx%d, format=%u", colorAttachments.size(), i, viewport.width, viewport.height, (u32)this->colorFormats[i]);
           views.push_back(attachments.back()->GetImageView());
         }
       }

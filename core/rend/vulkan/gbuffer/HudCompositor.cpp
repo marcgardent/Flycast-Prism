@@ -103,6 +103,7 @@ bool HudCompositor::loadFromJson(const std::string& jsonStr, float vW, float vH)
 }
 
 void HudCompositor::updateViewport(float vW, float vH) {
+    NOTICE_LOG(RENDERER, "HudCompositor::updateViewport: screenW=%.2f, screenH=%.2f, scale=%.4f", vW, vH, vH / VIRT_H);
     screenW = vW; screenH = vH;
     refreshAnchorTable();
     recalculate();

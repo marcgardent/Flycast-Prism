@@ -1,44 +1,58 @@
 #pragma once
 
-#include "../vulkan.h"
-#include "../buffer.h"
-#include "HudCompositor.h"
+#include <vulkan/vulkan.hpp>
 #include <vector>
 #include <memory>
 
+#include "HudCompositor.h"
+
+// Forward declaration de BufferData (selon ton architecture interne)
+struct BufferData;
+
 /**
- * @brief Handles high-performance HUD recomposition using DMA transfers.
+ * @class VulkanHudCompositor
+ * @brief Moteur de composition HUD optimisé pour un workflow GBuffer.
+ * * * ARCHITECTURE (GBuffer) :
+ * 1. Ton fragment shader (main.frag) dessine le HUD dans une texture de ton GBuffer (srcGbufferHud).
+ * 2. Le compositeur prend cette texture source en entrée.
+ * 3. Il extrait et place précisément les rectangles demandés dans un buffer de composition.
+ * 4. Il copie le résultat final vers l'image de la swapchain.
  */
 class VulkanHudCompositor {
 public:
     VulkanHudCompositor() = default;
-    ~VulkanHudCompositor() { Term(); }
-
-    void Init(vk::Extent2D viewport, int swapchainSize);
-    void Term();
-
-    void UpdateViewport(vk::Extent2D viewport);
+    ~VulkanHudCompositor() = default;
 
     /**
-     * @brief Recomposes the HUD from a source image to a destination image.
-     * 
-     * @param cmd Command buffer to record transfers.
-     * @param imgIdx Index of the current swapchain image (for multi-buffering).
-     * @param elements List of transformed HUD elements from HudCompositor.
-     * @param srcImage Source HUD image (640x480).
-     * @param dstImage Destination HUD image (viewport size).
+     * @brief Initialise les buffers de composition.
+     * @param renderViewport La résolution de rendu INTERNE (taille du GBuffer).
+     * @param swapchainSize  Le nombre d'images dans la swapchain.
      */
-    void Recompose(vk::CommandBuffer cmd, 
-                  int imgIdx,
-                  const std::vector<TransformedHudElement>& elements,
-                  vk::Image srcImage, 
-                  vk::Image dstImage);
+    void Init(vk::Extent2D renderViewport, int swapchainSize);
+
+    void Term();
+    void UpdateViewport(vk::Extent2D renderViewport);
+
+    /**
+     * @brief Assemble le HUD depuis le GBuffer vers l'image finale.
+     * * * PRÉREQUIS AVANT APPEL :
+     * 1. `srcGbufferHud` DOIT être transitionnée en `vk::ImageLayout::eTransferSrcOptimal`.
+     * 2. `dstSwapchainImage` DOIT être transitionnée en `vk::ImageLayout::eTransferDstOptimal`.
+     * * @param cmd               Command Buffer en cours.
+     * @param imgIdx            Index de la frame (swapchain).
+     * @param elements          Liste des zones à déplacer.
+     * @param srcGbufferHud     L'attachement image de ton GBuffer (HUD).
+     * @param dstSwapchainImage L'image finale (Swapchain).
+     */
+    void Recompose(vk::CommandBuffer cmd,
+                   int imgIdx,
+                   const std::vector<TransformedHudElement>& elements,
+                   vk::Image srcGbufferHud,
+                   vk::Image dstSwapchainImage);
 
 private:
-    vk::Extent2D m_viewport {0, 0};
-    std::vector<std::unique_ptr<BufferData>> m_sourceBuffers;
-    std::vector<std::unique_ptr<BufferData>> m_compositionBuffers;
+    vk::Extent2D m_renderViewport;
 
-    static constexpr uint32_t VIRT_W = 640;
-    static constexpr uint32_t VIRT_H = 480;
+    // Seuls les buffers de composition sont conservés. La source est le Gbuffer externe.
+    std::vector<std::unique_ptr<BufferData>> m_compositionBuffers;
 };
