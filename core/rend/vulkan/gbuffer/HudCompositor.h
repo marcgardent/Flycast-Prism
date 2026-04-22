@@ -44,8 +44,8 @@ struct TransformedHudElement {
     bool zenMode;
 };
 
-class HudTransformer {
-    
+class HudCompositor {
+
     float screenW = 0, screenH = 0;
     const float VIRT_W = 640.0f, VIRT_H = 480.0f;
 
