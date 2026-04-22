@@ -1,85 +1,35 @@
-# Recomposition HUD : Performance Maximale (No-Scaling)
 
-Lorsque le redimensionnement (scaling) est interdit, la méthode la plus performante dans Vulkan consiste à utiliser les unités de transfert matériel (DMA) plutôt que les unités de calcul (Shaders).
+Tu es un développeur expert en C++ et Vulkan. Ton objectif est d'intégrer une nouvelle classe `VulkanHudCompositor` dans notre moteur de rendu.
 
-## 1. Pourquoi abandonner le Compute Shader ?
+Tu as accès aux fichiers `VulkanHudCompositor.h` et `VulkanHudCompositor.cpp`.
 
-Sans scaling, le Compute Shader devient un "overhead" inutile :
-- **Pas de calcul ALU :** Nous n'avons plus besoin de calculer des ratios de pixels ou de faire des `mix()`.
-- **Zéro latence de pipeline :** Les commandes de transfert (`Transfer Queue`) sont souvent plus légères que les commandes de calcul (`Compute Queue`).
-- **Bande passante pure :** Le transfert se fait en 1 lecture / 1 écriture directe.
+### Contexte Architectural
+Nous passons d'un ancien système de HUD à un système de composition par transfert de blocs (BitBlt) optimisé.
+Le HUD est d'abord dessiné par notre fragment shader (`main.frag`) dans un attachement de notre GBuffer. La classe `VulkanHudCompositor` prend cette texture en entrée, extrait les zones définies, et les copie vers l'image finale de la swapchain.
 
-## 2. Implémentation par Batching de Régions
+### Tâches à accomplir :
 
-Puisque le buffer est linéaire mais que le HUD est 2D, nous devons copier chaque ligne séparément. L'astuce de performance est d'accumuler toutes les lignes de tous les déplacements dans une seule commande `vkCmdCopyBuffer`.
+1. **Instanciation :**
+    - Ajoute une instance de `VulkanHudCompositor` (par exemple `m_hudCompositor`) dans notre classe principale gérant le rendu (ex: `VulkanRenderer` ou `VulkanContext`).
 
-```cpp
-// Structure des données de déplacement
-struct HUDMove {
-    uint32_t srcX, srcY;
-    uint32_t dstX, dstY;
-    uint32_t width, height;
-};
+2. **Initialisation et Destruction :**
+    - Trouve l'endroit où la Swapchain est créée/initialisée. Ajoute un appel à `m_hudCompositor.Init(renderViewportExtent, swapchainImageCount)`.
+    - **Attention :** Utilise bien la résolution de rendu interne (GBuffer), pas la taille de la fenêtre si elles sont différentes.
+    - Appelle `m_hudCompositor.Term()` dans la fonction de nettoyage/shutdown du moteur.
 
-void recomposeHUD(VkCommandBuffer cmd, VkBuffer oldBuf, VkBuffer newBuf, const std::vector<HUDMove>& moves) {
-    std::vector<VkBufferCopy> regions;
-    const uint32_t pitch = 1920 * 4; // Exemple : Largeur 1920 en RGBA8
+3. **Gestion du Redimensionnement (Resize) :**
+    - Dans le callback de redimensionnement (lorsque le GBuffer ou la Swapchain est recréé), ajoute un appel à `m_hudCompositor.UpdateViewport(newRenderViewportExtent)`.
 
-    for (const auto& move : moves) {
-        for (uint32_t row = 0; row < move.height; ++row) {
-            VkBufferCopy region{};
-            region.srcOffset = ((move.srcY + row) * 1920 + move.srcX) * 4;
-            region.dstOffset = ((move.dstY + row) * 1920 + move.dstX) * 4;
-            region.size = move.width * 4;
-            regions.push_back(region);
-        }
-    }
+4. **Intégration dans la Boucle de Rendu (Command Buffer) :**
+    - Localise l'enregistrement de notre Command Buffer, juste après la passe de rendu qui écrit dans le GBuffer.
+    - Avant d'appeler le compositeur, tu DOIS ajouter des barrières (pipeline barriers) pour préparer les layouts :
+        - La texture source du HUD (attachement du GBuffer) doit passer en `VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL`.
+        - L'image de destination (Swapchain) doit passer en `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL`.
+    - Appelle ensuite `m_hudCompositor.Recompose(cmd, currentImageIndex, hudElements, srcGbufferHudImage, dstSwapchainImage)`.
+    - Enfin, ajoute une transition pour passer l'image de la Swapchain de `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL` vers `VK_IMAGE_LAYOUT_PRESENT_SRC_KHR` (prête pour l'affichage).
 
-    // Un seul appel DMA pour l'ensemble du HUD
-    vkCmdCopyBuffer(cmd, oldBuf, newBuf, static_cast<uint32_t>(regions.size()), regions.data());
-}
-```
+### Contraintes strictes :
+- Ne modifie pas le code interne de `VulkanHudCompositor`. La classe gère déjà ses propres barrières de synchronisation mémoire et le clipping interne.
+- Assure-toi que la liste `hudElements` fournie à la méthode `Recompose` ne contienne que les éléments qui nécessitent d'être copiés à cette frame.
 
-## 3. Analyse de l'Overhead Performance
-
-Dans cette version "No-Scaling", l'overhead est réduit au strict minimum matériel.
-
-<div class="perf-box">
-    <strong>Mesure d'impact :</strong> Pour un HUD complexe composé de 50 éléments rectangulaires représentant 1 million de pixels au total, le temps de transfert GPU est généralement inférieur à <strong>0.005ms</strong> sur une carte graphique de milieu de gamme.
-</div>
-
-### Comparaison des ressources consommées :
-
-| Ressource | Mode Bilinéaire (Compute) | Mode Performance (DMA) | Gain |
-| :--- | :--- | :--- | :--- |
-| **ALU (Calcul)** | Moyenne (Interpolation) | **Nulle** | 100% |
-| **Bande Passante** | 20 octets / pixel | **8 octets / pixel** | 60% |
-| **Latence Pipeline** | Flush de cache Compute | **Simple Transfer Barrier** | Élevé |
-
-## 4. Contraintes & Garanties
-
-1.  **Pas d'Overlap en Destination :** Indispensable. Cela permet au moteur de transfert de copier les blocs en parallèle sans risque de corruption.
-2.  **Alignement Mémoire :** Pour une performance optimale, essayez de garder vos `srcX` et `dstX` alignés sur 4 pixels (16 octets), ce qui correspond souvent à la taille d'une ligne de cache mémoire GPU.
-3.  **Double Buffering :** Toujours requis pour lire la frame "Old" pendant qu'on écrit la "Composition".
-
-## 5. Synchronisation ultra-légère
-
-La barrière nécessaire après cette opération est la plus rapide possible :
-
-```cpp
-VkBufferMemoryBarrier barrier{};
-barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // Pour le rendu final
-barrier.buffer = compositionBuffer;
-barrier.size = VK_WHOLE_SIZE;
-
-vkCmdPipelineBarrier(cmd, 
-    VK_PIPELINE_STAGE_TRANSFER_BIT, 
-    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
-    0, 0, nullptr, 1, &barrier, 0, nullptr);
-```
-
----
-### Conclusion
-Cette version est **3 à 4 fois plus rapide** que la version bilinéaire car elle élimine les calculs de voisinage et réduit drastiquement la pression sur la bande passante mémoire. C'est le choix idéal pour un HUD riche mais dont les éléments conservent leur taille d'origine.
+Analyse mon code actuel et propose-moi les modifications à apporter dans mes fichiers principaux pour réaliser cette intégration.
