@@ -469,12 +469,15 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
               : (vk::ColorComponentFlagBits::eR |
                  vk::ColorComponentFlagBits::eG)));
 
-    // Fifth attachment (HUD Color) RGBA, always writable (shader-side routing)
-    colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
+    // Fifth attachment (HUD Color) RGBA
+    vk::PipelineColorBlendAttachmentState hudAttachment(
         true, getBlendFactor(src, true), getBlendFactor(dst, false),
         vk::BlendOp::eAdd, vk::BlendFactor::eOne,
         vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
-        colorComponentFlags));
+        colorComponentFlags);
+    if (!isHUD)
+      hudAttachment.colorWriteMask = (vk::ColorComponentFlags)0;
+    colorBlendAttachments.push_back(hudAttachment);
 
     if (metadata) {
       // Sixth attachment (TextureHash) no blending, write R only

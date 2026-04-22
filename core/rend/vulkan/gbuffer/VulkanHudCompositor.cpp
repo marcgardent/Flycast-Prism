@@ -1,5 +1,7 @@
 #include "VulkanHudCompositor.h"
 #include "../vulkan_context.h"
+#include "../texture.h"
+#include "log/Log.h"
 #include <algorithm>
 
 void VulkanHudCompositor::Init(vk::Extent2D renderViewport, int swapchainSize) {
@@ -44,8 +46,12 @@ void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
                                    vk::Image srcGbufferHud,
                                    vk::Image dstSwapchainImage) {
 
-    if (imgIdx < 0 || imgIdx >= (int)m_compositionBuffers.size() || elements.empty())
+    if (imgIdx < 0 || imgIdx >= (int)m_compositionBuffers.size())
         return;
+
+    if (elements.empty()) {
+        NOTICE_LOG(RENDERER, "VulkanHudCompositor::Recompose: No elements to recompose.");
+    }
 
     auto& compositionBuffer = m_compositionBuffers[imgIdx];
 
@@ -71,7 +77,16 @@ void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
     std::vector<vk::BufferImageCopy> regions;
     regions.reserve(elements.size()); // Only one region per element, no more "row" loop!
 
-    for (const auto& el : elements) {
+    // --- STUB: 1:1 Mapping (Diagnostic) ---
+    std::vector<TransformedHudElement> debugElements = elements;
+    TransformedHudElement stub;
+    stub.name = "STUB_1_TO_1";
+    stub.sourceRect = {0.f, 0.f, (float)m_renderViewport.width, (float)m_renderViewport.height};
+    stub.viewportRect = {0.f, 0.f, (float)m_renderViewport.width, (float)m_renderViewport.height};
+    stub.zenMode = false;
+    debugElements.push_back(stub);
+
+    for (const auto& el : debugElements) {
         uint32_t srcX = static_cast<uint32_t>(std::max(0.0f, el.sourceRect.x));
         uint32_t srcY = static_cast<uint32_t>(std::max(0.0f, el.sourceRect.y));
         uint32_t dstX = static_cast<uint32_t>(std::max(0.0f, el.viewportRect.x));
@@ -107,7 +122,16 @@ void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
     }
 
     if (!regions.empty()) {
-        // A single call to extract all areas from the image to the buffer!
+        // --- DEBUG PART 1: LOG ALL TRANSFORMS ---
+        NOTICE_LOG(RENDERER, "VulkanHudCompositor::Recompose: Processing %zu elements", debugElements.size());
+        for (size_t i = 0; i < debugElements.size(); ++i) {
+            const auto& el = debugElements[i];
+            NOTICE_LOG(RENDERER, "  Transform[%zu]: src={%.1f, %.1f, %.1f, %.1f} -> dst={%.1f, %.1f, %.1f, %.1f}",
+                       i, el.sourceRect.x, el.sourceRect.y, el.sourceRect.w, el.sourceRect.h,
+                       el.viewportRect.x, el.viewportRect.y, el.viewportRect.w, el.viewportRect.h);
+        }
+
+        // --- REAL READ: Copy HUD data to buffer ---
         cmd.copyImageToBuffer(srcGbufferHud, vk::ImageLayout::eTransferSrcOptimal, compositionBuffer->buffer.get(), regions);
     }
 

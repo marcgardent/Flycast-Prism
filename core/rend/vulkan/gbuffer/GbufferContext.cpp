@@ -50,6 +50,7 @@ void GbufferContext::UpdateViewport(float vW, float vH) {
     NOTICE_LOG(RENDERER, "GbufferContext::UpdateViewport: vW=%.2f, vH=%.2f", vW, vH);
     lastVW = vW; lastVH = vH;
     m_hudCompositor.updateViewport(vW, vH);
+    NOTICE_LOG(RENDERER, "HudCompositor transforms count: %zu", m_hudCompositor.getTransforms().size());
 }
 
 } // namespace rend

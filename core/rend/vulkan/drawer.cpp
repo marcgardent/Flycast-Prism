@@ -894,7 +894,8 @@ void ScreenDrawer::Init(SamplerManager *samplerManager,
               viewport.width, viewport.height, this->colorFormats[i],
               vk::ImageUsageFlagBits::eColorAttachment |
                   vk::ImageUsageFlagBits::eSampled |
-                  vk::ImageUsageFlagBits::eTransferDst,
+                  vk::ImageUsageFlagBits::eTransferDst |
+                  vk::ImageUsageFlagBits::eTransferSrc,
               "COLOR ATTACHMENT " + std::to_string(colorAttachments.size()) +
                   "_" + std::to_string(i));
           NOTICE_LOG(RENDERER, "  - Created G-Buffer attachment %zu_%zu: %dx%d, format=%u", colorAttachments.size(), i, viewport.width, viewport.height, (u32)this->colorFormats[i]);
@@ -926,7 +927,14 @@ void ScreenDrawer::Init(SamplerManager *samplerManager,
 vk::CommandBuffer ScreenDrawer::BeginRenderPass() {
   if (!renderPassStarted) {
     NewImage();
+    int imgIdx = GetCurrentImage();
     frameRendered = false;
+
+    if (!colorAttachments.empty() && GBUFFER_HUD_INDEX < (int)colorAttachments[imgIdx].size()) {
+        DEBUG_LOG(RENDERER, "BeginRenderPass [imgIdx=%d]: hudImage=%p", 
+                  imgIdx, (void*)colorAttachments[imgIdx][GBUFFER_HUD_INDEX]->GetImage());
+    }
+
     vk::CommandBuffer commandBuffer = commandPool->Allocate(true);
     commandBuffer.begin(vk::CommandBufferBeginInfo(
         vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
@@ -963,7 +971,7 @@ vk::CommandBuffer ScreenDrawer::BeginRenderPass() {
       for (size_t i = 0; i < colorFormats.size(); i++) {
         // L'attachment HUD (index 4) doit etre transparent (alpha=0) pour que
         // le blend composite ne couvre pas l'albedo sur les pixels sans HUD
-        bool isHUDAttachment = (i == 4);
+        bool isHUDAttachment = (i == GBUFFER_HUD_INDEX);
         float alpha = isHUDAttachment ? 0.f : 1.f;
         clear_colors.push_back(
             vk::ClearColorValue(std::array<float, 4>{0.f, 0.f, 0.f, alpha}));

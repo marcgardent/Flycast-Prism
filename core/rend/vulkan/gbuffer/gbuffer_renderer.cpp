@@ -1167,6 +1167,7 @@ private:
     rasterization.lineWidth = 1.0f;
     vk::PipelineMultisampleStateCreateInfo multisample;
     vk::PipelineDepthStencilStateCreateInfo depthStencil;
+    
     vk::PipelineColorBlendAttachmentState blendAttachment(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
@@ -1348,6 +1349,9 @@ public:
         if (hudAtt) {
           vk::Image srcGbufferHud = hudAtt->GetImage();
           vk::Image dstHudCompositionImage = m_hudCompositionImages[imgIdx]->GetImage();
+
+          DEBUG_LOG(RENDERER, "Present [imgIdx=%d]: srcHud=%p, dstComp=%p", 
+                    imgIdx, (void*)srcGbufferHud, (void*)dstHudCompositionImage);
 
           // Transitions before recompose
           setImageLayout(cmdBuf, srcGbufferHud, vk::Format::eR8G8B8A8Unorm, 1,
@@ -1631,7 +1635,7 @@ void GBufferVulkanRenderer::ExportGBuffer() {
   std::unique_ptr<BufferData> stageMotion =
       motionAtt ? std::make_unique<BufferData>(
                       width * height * 4, vk::BufferUsageFlagBits::eTransferDst)
-                : nullptr;
+             : nullptr;
   std::unique_ptr<BufferData> stageHUD =
       hudAtt ? std::make_unique<BufferData>(
                    width * height * 4, vk::BufferUsageFlagBits::eTransferDst)
