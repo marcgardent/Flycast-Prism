@@ -1,5 +1,5 @@
 ---
-trigger: always_on
+trigger: manual
 ---
 
 j'utilise le serveur MCP clionstio pour faire des renomages

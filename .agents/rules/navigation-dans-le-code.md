@@ -1,5 +1,5 @@
 ---
-trigger: always_on
+trigger: manual
 ---
 
 Avant de faire des lectures direct du fichiers, je pense à utiliser les capacité du serveur MCP clionstio

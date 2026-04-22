@@ -319,8 +319,8 @@ void PipelineManager::CreateDepthPassPipeline(int cullMode, bool naomi2) {
 
 void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
                                      const PolyParam &pp, int gpuPalette,
-                                     bool dithering, u32 actions) {
-  bool isHUD = actions & rend::Action_ToHud;
+                                     bool dithering, u32 polyRoutingAction) {
+  bool isHUD = polyRoutingAction & rend::Action_ToHud;
   vk::PipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo =
       GetMainVertexInputStateCreateInfo(true, pp.isNaomi2());
 
@@ -405,7 +405,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
     stencilOpState =
         vk::StencilOpState(vk::StencilOp::eKeep, vk::StencilOp::eKeep,
                            vk::StencilOp::eKeep, vk::CompareOp::eNever);
-  if (actions & rend::Action_AvoidDepth)
+  if (polyRoutingAction & rend::Action_AvoidDepth || polyRoutingAction & rend::Action_ToHud)
     depthWriteEnable = false;
 
   vk::PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo(
@@ -445,7 +445,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
   if (config::RendererType == RenderType::Vulkan_GBuffer) {
     // First attachment (Albedo) uses standard blending, write RGBA (unless HUD or AvoidAlbedo)
     vk::PipelineColorBlendAttachmentState albedoAttachment = pipelineColorBlendAttachmentState;
-    if (isHUD || (actions & rend::Action_AvoidAlbedo))
+    if (isHUD || (polyRoutingAction & rend::Action_AvoidAlbedo))
         albedoAttachment.colorWriteMask = (vk::ColorComponentFlags)0;
     colorBlendAttachments.push_back(albedoAttachment);
 
@@ -453,26 +453,25 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        (isHUD || (actions & rend::Action_AvoidNormal)) ? (vk::ColorComponentFlags)0 : colorComponentFlags));
+        (isHUD || (polyRoutingAction & rend::Action_AvoidNormal)) ? (vk::ColorComponentFlags)0 : colorComponentFlags));
 
     // Third attachment (Material ID) uses no blending, write R only
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        (isHUD || (actions & rend::Action_AvoidMaterial)) ? (vk::ColorComponentFlags)0 : vk::ColorComponentFlagBits::eR));
+        (isHUD || (polyRoutingAction & rend::Action_AvoidMaterial)) ? (vk::ColorComponentFlags)0 : vk::ColorComponentFlagBits::eR));
 
     // Fourth attachment (Motion/Velocity) RG only, no blending
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        (isHUD || (actions & rend::Action_AvoidMotion)) ? (vk::ColorComponentFlags)0
+        (isHUD || (polyRoutingAction & rend::Action_AvoidMotion)) ? (vk::ColorComponentFlags)0
               : (vk::ColorComponentFlagBits::eR |
                  vk::ColorComponentFlagBits::eG)));
 
     // Fifth attachment (HUD Color) RGBA, always writable (shader-side routing)
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
-        !(config::ShowDepth || config::ShowNormals || config::ShowSSAO),
-        getBlendFactor(src, true), getBlendFactor(dst, false),
+        true, getBlendFactor(src, true), getBlendFactor(dst, false),
         vk::BlendOp::eAdd, vk::BlendFactor::eOne,
         vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
         colorComponentFlags));
@@ -515,17 +514,9 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
   params.useAlpha = pp.tsp.UseAlpha;
   params.palette = gpuPalette;
   params.divPosZ = divPosZ;
-  params.dithering = dithering && !(config::ShowDepth || config::ShowNormals ||
-                                    config::ShowSSAO);
-  params.showDepth = config::ShowDepth;
-  params.isTranslucent =
-      listType == ListType_Translucent &&
-      (config::ShowDepthOpaqueOnly || config::ShowNormals || config::ShowSSAO);
-  params.showNormals = config::ShowNormals;
-  params.showMaterial = config::ShowMaterial;
+  params.dithering = dithering;
+  params.isTranslucent = listType == ListType_Translucent;
   params.gbuffer = config::RendererType == RenderType::Vulkan_GBuffer;
-  params.enableSSAO = config::EnableSSAO;
-  params.showSSAO = config::ShowSSAO;
   params.isHud = isHUD;
   vk::ShaderModule fragment_module = shaderManager->GetFragmentShader(params);
 
@@ -553,7 +544,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
       renderPass                             // renderPass
   );
 
-  pipelines[hash(listType, sortTriangles, &pp, gpuPalette, dithering, actions)] =
+  pipelines[hash(listType, sortTriangles, &pp, gpuPalette, dithering, polyRoutingAction)] =
       GetContext()
           ->GetDevice()
           .createGraphicsPipelineUnique(GetContext()->GetPipelineCache(),

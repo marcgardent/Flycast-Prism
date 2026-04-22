@@ -271,14 +271,14 @@ public:
 
   vk::Pipeline GetPipeline(u32 listType, bool sortTriangles,
                            const PolyParam &pp, int gpuPalette, bool dithering,
-                           u32 actions) {
+                           u32 polyRoutingActions) {
     u64 pipehash =
-        hash(listType, sortTriangles, &pp, gpuPalette, dithering, actions);
+        hash(listType, sortTriangles, &pp, gpuPalette, dithering, polyRoutingActions);
     const auto &pipeline = pipelines.find(pipehash);
     if (pipeline != pipelines.end())
       return pipeline->second.get();
 
-    CreatePipeline(listType, sortTriangles, pp, gpuPalette, dithering, actions);
+    CreatePipeline(listType, sortTriangles, pp, gpuPalette, dithering, polyRoutingActions);
     return *pipelines[pipehash];
   }
 
@@ -339,25 +339,15 @@ private:
         << 30;
     hash |= (u64)(pp->tcw.PixelFmt == PixelBumpMap) << 31;
     hash |= (u64)dithering << 32;
-    hash |= (u64)config::ShowDepth << 33;
-    hash |= (u64)(listType == ListType_Translucent &&
-                  (config::ShowDepthOpaqueOnly || config::ShowNormals ||
-                   config::ShowSSAO))
-            << 34;
-    hash |= (u64)config::ShowNormals << 35;
-    hash |= (u64)config::ShowSSAO << 36;
-    hash |= (u64)config::EnableSSAO << 37;
-    hash |= (u64)config::ShowMaterial << 38;
     
     // PolyRoutingManager actions
-    // Action_ToHud is bit 0, mapped to bit 39 in hash (legacy isHud)
-    if (actions & rend::Action_ToHud) hash |= (u64)1 << 39;
-    // Avoid bits (40-44)
-    if (actions & rend::Action_AvoidAlbedo)   hash |= (u64)1 << 40;
-    if (actions & rend::Action_AvoidNormal)   hash |= (u64)1 << 41;
-    if (actions & rend::Action_AvoidMaterial) hash |= (u64)1 << 42;
-    if (actions & rend::Action_AvoidMotion)   hash |= (u64)1 << 43;
-    if (actions & rend::Action_AvoidDepth)    hash |= (u64)1 << 44;
+    // Action_ToHud is bit 0, mapped to bit 33 in hash (legacy isHud)
+    if (actions & rend::Action_ToHud) hash |= (u64)1 << 33;
+    if (actions & rend::Action_AvoidAlbedo)   hash |= (u64)1 << 34;
+    if (actions & rend::Action_AvoidNormal)   hash |= (u64)1 << 35;
+    if (actions & rend::Action_AvoidMaterial) hash |= (u64)1 << 36;
+    if (actions & rend::Action_AvoidMotion)   hash |= (u64)1 << 37;
+    if (actions & rend::Action_AvoidDepth)    hash |= (u64)1 << 38;
 
     return hash;
   }
@@ -422,7 +412,7 @@ private:
   }
 
   void CreatePipeline(u32 listType, bool sortTriangles, const PolyParam &pp,
-                      int gpuPalette, bool dithering, u32 actions);
+                      int gpuPalette, bool dithering, u32 polyRoutingAction);
 
   std::map<u64, vk::UniquePipeline> pipelines;
   std::map<u32, vk::UniquePipeline> modVolPipelines;

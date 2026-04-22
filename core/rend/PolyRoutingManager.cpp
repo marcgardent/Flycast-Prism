@@ -106,7 +106,7 @@ u32 PolyRoutingManager::GetActions(const PolyMatchParams& params) {
         }
     }
 
-    if (IsStartHudPass(actions))
+    if (actions & rend::Action_StartHudPass)
         hudPassStarted = true;
     
     if (hudPassStarted)
