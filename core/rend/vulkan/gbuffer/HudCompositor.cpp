@@ -107,24 +107,16 @@ bool HudCompositor::loadFromJson(const std::string& jsonStr, float vW, float vH)
             auto& m = j["mapping"];
             std::string zoneName = j.value("name", "unnamed");
 
-            float sW = s.value("w", 0.0f);
-            float sH = s.value("h", 0.0f);
-            float mW = m.value("w", 0.0f);
-            float mH = m.value("h", 0.0f);
-
-            // Source and destination must have the same dimensions
-            if (std::abs(sW - mW) > 0.001f || std::abs(sH - mH) > 0.001f) {
-                ERROR_LOG(RENDERER, "Dimension mismatch between source and mapping for zone '%s'. Pruning.", zoneName.c_str());
-                continue;
-            }
+            float commonW = j.value("w", 0.0f);
+            float commonH = j.value("h", 0.0f);
 
             m_definitions.push_back({
                 zoneName,
-                { s.value("x", 0.0f), s.value("y", 0.0f), sW, sH },
+                { s.value("x", 0.0f), s.value("y", 0.0f), commonW, commonH },
                 strToAnchor(s.value("anchor", "SCREEN_TOP_LEFT")),
-                { m.value("x", 0.0f), m.value("y", 0.0f), mW, mH },
+                { m.value("x", 0.0f), m.value("y", 0.0f), commonW, commonH },
                 strToAnchor(m.value("anchor", "SCREEN_TOP_LEFT")),
-                m.value("zen_mode", false)
+                j.value("zen_mode", false)
             });
         }
         updateViewport(vW, vH);

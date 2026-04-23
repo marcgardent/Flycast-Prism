@@ -26,9 +26,10 @@ TEST_F(HudCompositorTest, ValidJsonAndScaling) {
     std::string json = wrapZones(R"(
         {
             "name": "zone1",
-            "source": { "x": 10, "y": 20, "w": 50, "h": 50, "anchor": "SCREEN_TOP_LEFT" },
-            "mapping": { "x": 100, "y": 200, "w": 50, "h": 50, "anchor": "SCREEN_TOP_LEFT", "zen_mode" : true  }
-
+            "w": 50, "h": 50,
+            "zen_mode": true,
+            "source": { "x": 10, "y": 20, "anchor": "SCREEN_TOP_LEFT" },
+            "mapping": { "x": 100, "y": 200, "anchor": "SCREEN_TOP_LEFT" }
         }
     )");
 
@@ -55,8 +56,9 @@ TEST_F(HudCompositorTest, AnchorCalculations) {
     std::string json = wrapZones(R"(
         {
             "name": "center_zone",
-            "source": { "x": 0, "y": 0, "w": 10, "h": 10, "anchor": "SCREEN_CENTER" },
-            "mapping": { "x": 0, "y": 0, "w": 10, "h": 10, "anchor": "SCREEN_CENTER" }
+            "w": 10, "h": 10,
+            "source": { "x": 0, "y": 0, "anchor": "SCREEN_CENTER" },
+            "mapping": { "x": 0, "y": 0, "anchor": "SCREEN_CENTER" }
         }
     )");
 
@@ -82,34 +84,23 @@ TEST_F(HudCompositorTest, WrongSafeZoneReturnsFalse) {
     EXPECT_FALSE(compositor.loadFromJson(json, 1280.0f, 960.0f));
 }
 
-// 5. EDGE CASE: Dimension mismatch between Source and Mapping (Should prune)
-TEST_F(HudCompositorTest, DimensionMismatchIsPruned) {
-    std::string json = wrapZones(R"(
-        {
-            "name": "mismatch_zone",
-            "source": { "x": 0, "y": 0, "w": 100, "h": 50 },
-            "mapping": { "x": 0, "y": 0, "w": 100, "h": 60 }
-        }
-    )");
+// 5. EDGE CASE: Dimension mismatch check is removed as dimensions are now shared
+// (Test removed)
 
-    EXPECT_TRUE(compositor.loadFromJson(json, 1280.0f, 960.0f));
-
-    // Zone should be ignored because source height (50) != mapping height (60)
-    const auto& transforms = compositor.getCachedTransforms();
-    EXPECT_TRUE(transforms.empty());
-}
 
 // 6. EDGE CASE: Missing fields
 TEST_F(HudCompositorTest, MissingFieldsAreSkipped) {
     std::string json = wrapZones(R"(
         {
             "name": "no_mapping",
-            "source": { "x": 0, "y": 0, "w": 10, "h": 10 }
+            "w": 10, "h": 10,
+            "source": { "x": 0, "y": 0 }
         },
         {
             "name": "valid",
-            "source": { "x": 0, "y": 0, "w": 10, "h": 10 },
-            "mapping": { "x": 50, "y": 50, "w": 10, "h": 10 }
+            "w": 10, "h": 10,
+            "source": { "x": 0, "y": 0 },
+            "mapping": { "x": 50, "y": 50 }
         }
     )");
 
@@ -125,13 +116,15 @@ TEST_F(HudCompositorTest, OverlappingDestinationsArePruned) {
     std::string json = wrapZones(R"(
         {
             "name": "first_zone",
-            "source": { "x": 0, "y": 0, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" },
-            "mapping": { "x": 0, "y": 0, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" }
+            "w": 100, "h": 100,
+            "source": { "x": 0, "y": 0, "anchor": "SCREEN_TOP_LEFT" },
+            "mapping": { "x": 0, "y": 0, "anchor": "SCREEN_TOP_LEFT" }
         },
         {
             "name": "second_zone_overlapping",
-            "source": { "x": 500, "y": 500, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" },
-            "mapping": { "x": 50, "y": 50, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" }
+            "w": 100, "h": 100,
+            "source": { "x": 500, "y": 500, "anchor": "SCREEN_TOP_LEFT" },
+            "mapping": { "x": 50, "y": 50, "anchor": "SCREEN_TOP_LEFT" }
         }
     )");
 
@@ -150,8 +143,9 @@ TEST_F(HudCompositorTest, ViewportUpdateRecalculatesTransforms) {
     std::string json = wrapZones(R"(
         {
             "name": "resize_zone",
-            "source": { "x": 10, "y": 10, "w": 50, "h": 50 },
-            "mapping": { "x": 10, "y": 10, "w": 50, "h": 50 }
+            "w": 50, "h": 50,
+            "source": { "x": 10, "y": 10 },
+            "mapping": { "x": 10, "y": 10 }
         }
     )");
 

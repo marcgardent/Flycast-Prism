@@ -122,10 +122,10 @@ void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
 
     if (!regions.empty()) {
         // --- DEBUG PART 1: LOG ALL TRANSFORMS ---
-        NOTICE_LOG(RENDERER, "VulkanHudCompositor::Recompose: Processing %zu elements", elements.size());
+        DEBUG_LOG(RENDERER, "VulkanHudCompositor::Recompose: Processing %zu elements", elements.size());
         for (size_t i = 0; i < elements.size(); ++i) {
             const auto& el = elements[i];
-            NOTICE_LOG(RENDERER, "  Transform[%zu]: src={%.1f, %.1f, %.1f, %.1f} -> dst={%.1f, %.1f, %.1f, %.1f}",
+            DEBUG_LOG(RENDERER, "  Transform[%zu]: src={%.1f, %.1f, %.1f, %.1f} -> dst={%.1f, %.1f, %.1f, %.1f}",
                        i, el.source.x, el.source.y, el.source.w, el.source.h,
                        el.destination.x, el.destination.y, el.destination.w, el.destination.h);
         }
