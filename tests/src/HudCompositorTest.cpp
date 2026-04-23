@@ -1,171 +1,171 @@
 #include <gtest/gtest.h>
 #include "../../core/rend/vulkan/gbuffer/HudCompositor.h"
 
+// Helper macro for testing float equality in our Rect struct
+#define EXPECT_RECT_EQ(rect, _x, _y, _w, _h) \
+    EXPECT_FLOAT_EQ((rect).x, (_x)); \
+    EXPECT_FLOAT_EQ((rect).y, (_y)); \
+    EXPECT_FLOAT_EQ((rect).w, (_w)); \
+    EXPECT_FLOAT_EQ((rect).h, (_h))
+
 class HudCompositorTest : public ::testing::Test {
 protected:
     HudCompositor compositor;
+
+    // Helper to generate a valid base JSON envelope
+    std::string wrapZones(const std::string& zonesJson, float safeW = 640.0f, float safeH = 480.0f) {
+        return R"({
+            "safe_zone": { "w": )" + std::to_string(safeW) + R"(, "h": )" + std::to_string(safeH) + R"( },
+            "hud_zones": [)" + zonesJson + R"(]
+        })";
+    }
 };
 
-TEST_F(HudCompositorTest, LoadValidJson) {
-    std::string json = R"({
-      "safe_zone": { "w": 640, "h": 480 },
-      "hud_zones": [
+// 1. Test basic JSON loading and coordinate scaling
+TEST_F(HudCompositorTest, ValidJsonAndScaling) {
+    std::string json = wrapZones(R"(
         {
-          "name": "zone_1",
-          "mapping": { "x": 10, "y": 10, "w": 100, "h": 50, "anchor": "SCREEN_TOP_LEFT", "scale": 1.0, "zen_mode": false }
+            "name": "zone1",
+            "source": { "x": 10, "y": 20, "w": 50, "h": 50, "anchor": "SCREEN_TOP_LEFT" },
+            "mapping": { "x": 100, "y": 200, "w": 50, "h": 50, "anchor": "SCREEN_TOP_LEFT", "zen_mode" : true  }
+
         }
-      ]
-    })";
-    EXPECT_TRUE(compositor.loadFromJson(json, 1280, 720));
-    auto transforms = compositor.getTransforms();
+    )");
+
+    // Test with a 1280x960 resolution (scale factor = 2.0 compared to 640x480 VIRT)
+    EXPECT_TRUE(compositor.loadFromJson(json, 1280.0f, 960.0f)) << json;
+
+    const auto& transforms = compositor.getCachedTransforms();
     ASSERT_EQ(transforms.size(), 1);
-    EXPECT_EQ(transforms[0].name, "zone_1");
-    EXPECT_FALSE(transforms[0].zenMode);
+
+    const auto& t = transforms[0];
+    EXPECT_EQ(t.name, "zone1");
+    EXPECT_TRUE(t.zenMode);
+
+    // Scale is 2.0, SCREEN_TOP_LEFT is (0,0)
+    // Source should be scaled: x=20, y=40, w=100, h=100
+    EXPECT_RECT_EQ(t.realSource, 20.0f, 40.0f, 100.0f, 100.0f);
+
+    // Mapping should be scaled: x=200, y=400, w=100, h=100
+    EXPECT_RECT_EQ(t.realMapping, 200.0f, 400.0f, 100.0f, 100.0f);
 }
 
-TEST_F(HudCompositorTest, MismatchedSafeZone) {
-    std::string json = R"({
-      "safe_zone": { "w": 800, "h": 600 },
-      "hud_zones": []
-    })";
-    EXPECT_FALSE(compositor.loadFromJson(json, 1280, 720));
-}
-
-TEST_F(HudCompositorTest, OverlappingZones) {
-    std::string json = R"({
-      "safe_zone": { "w": 640, "h": 480 },
-      "hud_zones": [
+// 2. Test center anchoring
+TEST_F(HudCompositorTest, AnchorCalculations) {
+    std::string json = wrapZones(R"(
         {
-          "name": "zone_1",
-          "mapping": { "x": 0, "y": 0, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" }
+            "name": "center_zone",
+            "source": { "x": 0, "y": 0, "w": 10, "h": 10, "anchor": "SCREEN_CENTER" },
+            "mapping": { "x": 0, "y": 0, "w": 10, "h": 10, "anchor": "SCREEN_CENTER" }
+        }
+    )");
+
+    // Resolution 1920x1080 (Scale factor = 1080 / 480 = 2.25)
+    EXPECT_TRUE(compositor.loadFromJson(json, 1920.0f, 1080.0f));
+
+    const auto& transforms = compositor.getCachedTransforms();
+    ASSERT_EQ(transforms.size(), 1);
+
+    // Center of 1920x1080 is (960, 540)
+    // Size is 10 * 2.25 = 22.5
+    EXPECT_RECT_EQ(transforms[0].realSource, 960.0f, 540.0f, 22.5f, 22.5f);
+}
+
+// 3. EDGE CASE: Malformed JSON
+TEST_F(HudCompositorTest, MalformedJsonReturnsFalse) {
+    EXPECT_FALSE(compositor.loadFromJson("{ bad json ]", 800.0f, 600.0f));
+}
+
+// 4. EDGE CASE: Wrong Safe Zone dimensions
+TEST_F(HudCompositorTest, WrongSafeZoneReturnsFalse) {
+    std::string json = wrapZones("", 800.0f, 600.0f); // Expected is 640x480
+    EXPECT_FALSE(compositor.loadFromJson(json, 1280.0f, 960.0f));
+}
+
+// 5. EDGE CASE: Dimension mismatch between Source and Mapping (Should prune)
+TEST_F(HudCompositorTest, DimensionMismatchIsPruned) {
+    std::string json = wrapZones(R"(
+        {
+            "name": "mismatch_zone",
+            "source": { "x": 0, "y": 0, "w": 100, "h": 50 },
+            "mapping": { "x": 0, "y": 0, "w": 100, "h": 60 }
+        }
+    )");
+
+    EXPECT_TRUE(compositor.loadFromJson(json, 1280.0f, 960.0f));
+
+    // Zone should be ignored because source height (50) != mapping height (60)
+    const auto& transforms = compositor.getCachedTransforms();
+    EXPECT_TRUE(transforms.empty());
+}
+
+// 6. EDGE CASE: Missing fields
+TEST_F(HudCompositorTest, MissingFieldsAreSkipped) {
+    std::string json = wrapZones(R"(
+        {
+            "name": "no_mapping",
+            "source": { "x": 0, "y": 0, "w": 10, "h": 10 }
         },
         {
-          "name": "zone_2",
-          "mapping": { "x": 50, "y": 50, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" }
+            "name": "valid",
+            "source": { "x": 0, "y": 0, "w": 10, "h": 10 },
+            "mapping": { "x": 50, "y": 50, "w": 10, "h": 10 }
         }
-      ]
-    })";
-    EXPECT_TRUE(compositor.loadFromJson(json, 640, 480));
-    auto transforms = compositor.getTransforms();
-    // zone_2 should be pruned because it overlaps with zone_1
-    EXPECT_EQ(transforms.size(), 1);
-    EXPECT_EQ(transforms[0].name, "zone_1");
+    )");
+
+    EXPECT_TRUE(compositor.loadFromJson(json, 1280.0f, 960.0f));
+
+    const auto& transforms = compositor.getCachedTransforms();
+    ASSERT_EQ(transforms.size(), 1); // Only the valid one should remain
+    EXPECT_EQ(transforms[0].name, "valid");
 }
 
-TEST_F(HudCompositorTest, AnchorPositioning) {
-    std::string json = R"({
-      "safe_zone": { "w": 640, "h": 480 },
-      "hud_zones": [
+// 7. EDGE CASE: Collision/Overlap on Mapping destination
+TEST_F(HudCompositorTest, OverlappingDestinationsArePruned) {
+    std::string json = wrapZones(R"(
         {
-          "name": "top_left",
-          "mapping": { "x": 0, "y": 0, "w": 10, "h": 10, "anchor": "SCREEN_TOP_LEFT" }
+            "name": "first_zone",
+            "source": { "x": 0, "y": 0, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" },
+            "mapping": { "x": 0, "y": 0, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" }
         },
         {
-          "name": "bottom_right",
-          "mapping": { "x": -10, "y": -10, "w": 10, "h": 10, "anchor": "SCREEN_BOTTOM_RIGHT" }
+            "name": "second_zone_overlapping",
+            "source": { "x": 500, "y": 500, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" },
+            "mapping": { "x": 50, "y": 50, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT" }
         }
-      ]
-    })";
-    // 640x480 -> scale 1.0
-    EXPECT_TRUE(compositor.loadFromJson(json, 640, 480));
-    auto transforms = compositor.getTransforms();
-    ASSERT_EQ(transforms.size(), 2);
+    )");
 
-    // top_left at (0,0)
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.x, 0.0f);
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.y, 0.0f);
+    EXPECT_TRUE(compositor.loadFromJson(json, 1280.0f, 960.0f));
 
-    // bottom_right at (640-10, 480-10) = (630, 470)
-    EXPECT_FLOAT_EQ(transforms[1].viewportRect.x, 630.0f);
-    EXPECT_FLOAT_EQ(transforms[1].viewportRect.y, 470.0f);
-}
-
-TEST_F(HudCompositorTest, Scaling) {
-    std::string json = R"({
-      "safe_zone": { "w": 640, "h": 480 },
-      "hud_zones": [
-        {
-          "name": "zone",
-          "mapping": { "x": 10, "y": 10, "w": 100, "h": 100, "anchor": "SCREEN_TOP_LEFT", "scale": 2.0 }
-        }
-      ]
-    })";
-    // 1280x960 -> scale 2.0 (since 960/480 = 2.0)
-    EXPECT_TRUE(compositor.loadFromJson(json, 1280, 960));
-    auto transforms = compositor.getTransforms();
+    const auto& transforms = compositor.getCachedTransforms();
     ASSERT_EQ(transforms.size(), 1);
 
-    // Rect = aPos + (mapping.x * scale), aPos + (mapping.y * scale), mapping.w * (scale * mapping.scale)
-    // x = 0 + 10 * 2.0 = 20
-    // y = 0 + 10 * 2.0 = 20
-    // w = 100 * (2.0 * 2.0) = 400
-    // h = 100 * (2.0 * 2.0) = 400
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.x, 20.0f);
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.y, 20.0f);
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.w, 400.0f);
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.h, 400.0f);
+    // The second zone mapping (x:50, y:50, w:100, h:100) intersects
+    // the first one (x:0, y:0, w:100, h:100). It must be pruned.
+    EXPECT_EQ(transforms[0].name, "first_zone");
 }
 
-TEST_F(HudCompositorTest, ZenMode) {
-    std::string json = R"({
-      "safe_zone": { "w": 640, "h": 480 },
-      "hud_zones": [
+// 8. Test Viewport Updates
+TEST_F(HudCompositorTest, ViewportUpdateRecalculatesTransforms) {
+    std::string json = wrapZones(R"(
         {
-          "name": "zen",
-          "mapping": { "x": 0, "y": 0, "w": 10, "h": 10, "zen_mode": true }
-        },
-        {
-          "name": "normal",
-          "mapping": { "x": 20, "y": 20, "w": 10, "h": 10, "zen_mode": false }
+            "name": "resize_zone",
+            "source": { "x": 10, "y": 10, "w": 50, "h": 50 },
+            "mapping": { "x": 10, "y": 10, "w": 50, "h": 50 }
         }
-      ]
-    })";
-    EXPECT_TRUE(compositor.loadFromJson(json, 640, 480));
-    auto transforms = compositor.getTransforms();
-    ASSERT_EQ(transforms.size(), 2);
-    EXPECT_TRUE(transforms[0].zenMode);
-    EXPECT_FALSE(transforms[1].zenMode);
-}
+    )");
 
-TEST_F(HudCompositorTest, InvalidJson) {
-    EXPECT_FALSE(compositor.loadFromJson("{ invalid }", 640, 480));
-}
+    EXPECT_TRUE(compositor.loadFromJson(json, 640.0f, 480.0f));
 
-TEST_F(HudCompositorTest, SafeZonePositioning) {
-    std::string json = R"({
-      "safe_zone": { "w": 640, "h": 480 },
-      "hud_zones": [
-        {
-          "name": "safe_top_left",
-          "mapping": { "x": 0, "y": 0, "w": 10, "h": 10, "anchor": "SAFE_ZONE_TOP_LEFT" }
-        }
-      ]
-    })";
-    // 1280x480 (Ultrawide-ish)
-    // scale = 480/480 = 1.0
-    // safeW = 640 * 1.0 = 640
-    // safeX = (1280 - 640) / 2 = 320
-    EXPECT_TRUE(compositor.loadFromJson(json, 1280, 480));
-    auto transforms = compositor.getTransforms();
+    auto transforms = compositor.getCachedTransforms();
     ASSERT_EQ(transforms.size(), 1);
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.x, 320.0f);
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.y, 0.0f);
-}
+    EXPECT_RECT_EQ(transforms[0].realMapping, 10.0f, 10.0f, 50.0f, 50.0f);
 
-TEST_F(HudCompositorTest, UnknownAnchor) {
-    std::string json = R"({
-      "safe_zone": { "w": 640, "h": 480 },
-      "hud_zones": [
-        {
-          "name": "unknown",
-          "mapping": { "x": 50, "y": 50, "w": 10, "h": 10, "anchor": "GARBAGE" }
-        }
-      ]
-    })";
-    EXPECT_TRUE(compositor.loadFromJson(json, 640, 480));
-    auto transforms = compositor.getTransforms();
+    // Simulate window resize
+    compositor.updateViewport(1280.0f, 960.0f);
+
+    transforms = compositor.getCachedTransforms();
     ASSERT_EQ(transforms.size(), 1);
-    // Should fallback to SCREEN_TOP_LEFT (0,0)
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.x, 50.0f);
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.y, 50.0f);
+    // Everything should be multiplied by 2
+    EXPECT_RECT_EQ(transforms[0].realMapping, 20.0f, 20.0f, 100.0f, 100.0f);
 }

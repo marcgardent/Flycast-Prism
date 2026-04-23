@@ -42,7 +42,7 @@ void VulkanHudCompositor::UpdateViewport(vk::Extent2D renderViewport) {
 
 void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
                                    int imgIdx,
-                                   const std::vector<TransformedHudElement>& elements,
+                                   const std::vector<CachedTransform>& elements,
                                    vk::Image srcGbufferHud,
                                    vk::Image dstSwapchainImage) {
 
@@ -77,22 +77,13 @@ void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
     std::vector<vk::BufferImageCopy> regions;
     regions.reserve(elements.size()); // Only one region per element, no more "row" loop!
 
-    // --- STUB: 1:1 Mapping (Diagnostic) ---
-    std::vector<TransformedHudElement> debugElements = elements;
-    TransformedHudElement stub;
-    stub.name = "STUB_1_TO_1";
-    stub.sourceRect = {0.f, 0.f, (float)m_renderViewport.width, (float)m_renderViewport.height};
-    stub.viewportRect = {0.f, 0.f, (float)m_renderViewport.width, (float)m_renderViewport.height};
-    stub.zenMode = false;
-    debugElements.push_back(stub);
-
-    for (const auto& el : debugElements) {
-        uint32_t srcX = static_cast<uint32_t>(std::max(0.0f, el.sourceRect.x));
-        uint32_t srcY = static_cast<uint32_t>(std::max(0.0f, el.sourceRect.y));
-        uint32_t dstX = static_cast<uint32_t>(std::max(0.0f, el.viewportRect.x));
-        uint32_t dstY = static_cast<uint32_t>(std::max(0.0f, el.viewportRect.y));
-        uint32_t w = static_cast<uint32_t>(el.sourceRect.w);
-        uint32_t h = static_cast<uint32_t>(el.sourceRect.h);
+    for (const auto& el : elements) {
+        uint32_t srcX = static_cast<uint32_t>(std::max(0.0f, el.realSource.x));
+        uint32_t srcY = static_cast<uint32_t>(std::max(0.0f, el.realSource.y));
+        uint32_t dstX = static_cast<uint32_t>(std::max(0.0f, el.realMapping.x));
+        uint32_t dstY = static_cast<uint32_t>(std::max(0.0f, el.realMapping.y));
+        uint32_t w = static_cast<uint32_t>(el.realSource.w);
+        uint32_t h = static_cast<uint32_t>(el.realSource.h);
 
         // STRICT CLIPPING to the renderViewport
         if (srcX + w > m_renderViewport.width) w = (m_renderViewport.width > srcX) ? m_renderViewport.width - srcX : 0;
@@ -123,12 +114,12 @@ void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
 
     if (!regions.empty()) {
         // --- DEBUG PART 1: LOG ALL TRANSFORMS ---
-        NOTICE_LOG(RENDERER, "VulkanHudCompositor::Recompose: Processing %zu elements", debugElements.size());
-        for (size_t i = 0; i < debugElements.size(); ++i) {
-            const auto& el = debugElements[i];
+        NOTICE_LOG(RENDERER, "VulkanHudCompositor::Recompose: Processing %zu elements", elements.size());
+        for (size_t i = 0; i < elements.size(); ++i) {
+            const auto& el = elements[i];
             NOTICE_LOG(RENDERER, "  Transform[%zu]: src={%.1f, %.1f, %.1f, %.1f} -> dst={%.1f, %.1f, %.1f, %.1f}",
-                       i, el.sourceRect.x, el.sourceRect.y, el.sourceRect.w, el.sourceRect.h,
-                       el.viewportRect.x, el.viewportRect.y, el.viewportRect.w, el.viewportRect.h);
+                       i, el.realSource.x, el.realSource.y, el.realSource.w, el.realSource.h,
+                       el.realMapping.x, el.realMapping.y, el.realMapping.w, el.realMapping.h);
         }
 
         // --- REAL READ: Copy HUD data to buffer ---

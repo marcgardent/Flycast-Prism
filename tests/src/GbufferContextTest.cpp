@@ -33,7 +33,7 @@ TEST_F(GbufferContextTest, UnifiedLoad) {
     context.LoadConfig("gbuffer_configuration.json");
 
     // Verify HudCompositor
-    auto transforms = context.GetHudCompositor().getTransforms();
+    auto transforms = context.GetHudCompositor().getCachedTransforms();
     EXPECT_EQ(transforms.size(), 1);
     EXPECT_EQ(transforms[0].name, "zone_1");
 
@@ -62,13 +62,13 @@ TEST_F(GbufferContextTest, ViewportUpdate) {
     
     // Test 640x480
     context.UpdateViewport(640, 480);
-    auto transforms = context.GetHudCompositor().getTransforms();
+    auto transforms = context.GetHudCompositor().getCachedTransforms();
     ASSERT_EQ(transforms.size(), 1);
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.w, 640.0f);
+    EXPECT_FLOAT_EQ(transforms[0].realMapping.w, 640.0f);
 
     // Test 1280x960
     context.UpdateViewport(1280, 960);
-    transforms = context.GetHudCompositor().getTransforms();
+    transforms = context.GetHudCompositor().getCachedTransforms();
     ASSERT_EQ(transforms.size(), 1);
-    EXPECT_FLOAT_EQ(transforms[0].viewportRect.w, 1280.0f);
+    EXPECT_FLOAT_EQ(transforms[0].realMapping.w, 1280.0f);
 }

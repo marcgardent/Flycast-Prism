@@ -1362,7 +1362,7 @@ public:
                          vk::ImageLayout::eTransferDstOptimal);
 
           m_hudCompositor.Recompose(cmdBuf, imgIdx,
-                                   screenDrawer.GetGbufferContext().GetHudCompositor().getTransforms(),
+                                   screenDrawer.GetGbufferContext().GetHudCompositor().getCachedTransforms(),
                                    srcGbufferHud, dstHudCompositionImage);
 
           // Transitions after recompose

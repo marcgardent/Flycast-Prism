@@ -46,7 +46,7 @@ public:
      */
     void Recompose(vk::CommandBuffer cmd,
                    int imgIdx,
-                   const std::vector<TransformedHudElement>& elements,
+                   const std::vector<CachedTransform>& elements,
                    vk::Image srcGbufferHud,
                    vk::Image dstSwapchainImage);
 
