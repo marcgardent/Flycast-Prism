@@ -52,10 +52,10 @@ void HudCompositor::recalculate() {
         // 2. Calculate real coordinates for the MAPPING (destination)
         Vector2 mapAnchorPos = m_anchorTable.count(def.mappingAnchor) ? m_anchorTable[def.mappingAnchor] : Vector2{0,0};
         Rect realMapping = {
-            mapAnchorPos.x + (def.mappingRect.x * scale),
-            mapAnchorPos.y + (def.mappingRect.y * scale),
-            def.mappingRect.w * scale,
-            def.mappingRect.h * scale
+            mapAnchorPos.x + (def.destRect.x * scale),
+            mapAnchorPos.y + (def.destRect.y * scale),
+            def.destRect.w * scale,
+            def.destRect.h * scale
         };
 
         // 3. Check for collisions on the destination

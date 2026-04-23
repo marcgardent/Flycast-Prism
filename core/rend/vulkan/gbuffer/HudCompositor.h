@@ -31,16 +31,16 @@ struct HudZoneDef {
     Rect sourceRect;
     Anchor sourceAnchor;
 
-    Rect mappingRect;
+    Rect destRect;
     Anchor mappingAnchor;
 
     bool zenMode;
 };
 
-struct CachedTransform {
+struct ViewportTransform {
     std::string name;
-    Rect realSource;   // Coordonnées réelles du RenderViewPort pour la capture
-    Rect realMapping;  // Coordonnées réelles du RenderViewPort pour l'affichage
+    Rect source;
+    Rect destination;
     bool zenMode;
 };
 
@@ -49,7 +49,7 @@ public:
     bool loadFromJson(const std::string& jsonStr, float vW, float vH);
     void updateViewport(float vW, float vH);
 
-    const std::vector<CachedTransform>& getCachedTransforms() const { return m_cachedTransforms; }
+    const std::vector<ViewportTransform>& getCachedTransforms() const { return m_cachedTransforms; }
 
 private:
     void refreshAnchorTable();
@@ -61,5 +61,5 @@ private:
 
     std::map<Anchor, Vector2> m_anchorTable;
     std::vector<HudZoneDef> m_definitions;
-    std::vector<CachedTransform> m_cachedTransforms;
+    std::vector<ViewportTransform> m_cachedTransforms;
 };

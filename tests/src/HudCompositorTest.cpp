@@ -44,10 +44,10 @@ TEST_F(HudCompositorTest, ValidJsonAndScaling) {
 
     // Scale is 2.0, SCREEN_TOP_LEFT is (0,0)
     // Source should be scaled: x=20, y=40, w=100, h=100
-    EXPECT_RECT_EQ(t.realSource, 20.0f, 40.0f, 100.0f, 100.0f);
+    EXPECT_RECT_EQ(t.source, 20.0f, 40.0f, 100.0f, 100.0f);
 
     // Mapping should be scaled: x=200, y=400, w=100, h=100
-    EXPECT_RECT_EQ(t.realMapping, 200.0f, 400.0f, 100.0f, 100.0f);
+    EXPECT_RECT_EQ(t.destination, 200.0f, 400.0f, 100.0f, 100.0f);
 }
 
 // 2. Test center anchoring
@@ -68,7 +68,7 @@ TEST_F(HudCompositorTest, AnchorCalculations) {
 
     // Center of 1920x1080 is (960, 540)
     // Size is 10 * 2.25 = 22.5
-    EXPECT_RECT_EQ(transforms[0].realSource, 960.0f, 540.0f, 22.5f, 22.5f);
+    EXPECT_RECT_EQ(transforms[0].source, 960.0f, 540.0f, 22.5f, 22.5f);
 }
 
 // 3. EDGE CASE: Malformed JSON
@@ -159,7 +159,7 @@ TEST_F(HudCompositorTest, ViewportUpdateRecalculatesTransforms) {
 
     auto transforms = compositor.getCachedTransforms();
     ASSERT_EQ(transforms.size(), 1);
-    EXPECT_RECT_EQ(transforms[0].realMapping, 10.0f, 10.0f, 50.0f, 50.0f);
+    EXPECT_RECT_EQ(transforms[0].destination, 10.0f, 10.0f, 50.0f, 50.0f);
 
     // Simulate window resize
     compositor.updateViewport(1280.0f, 960.0f);
@@ -167,5 +167,5 @@ TEST_F(HudCompositorTest, ViewportUpdateRecalculatesTransforms) {
     transforms = compositor.getCachedTransforms();
     ASSERT_EQ(transforms.size(), 1);
     // Everything should be multiplied by 2
-    EXPECT_RECT_EQ(transforms[0].realMapping, 20.0f, 20.0f, 100.0f, 100.0f);
+    EXPECT_RECT_EQ(transforms[0].destination, 20.0f, 20.0f, 100.0f, 100.0f);
 }

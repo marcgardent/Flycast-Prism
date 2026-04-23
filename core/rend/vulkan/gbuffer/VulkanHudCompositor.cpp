@@ -42,7 +42,7 @@ void VulkanHudCompositor::UpdateViewport(vk::Extent2D renderViewport) {
 
 void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
                                    int imgIdx,
-                                   const std::vector<CachedTransform>& elements,
+                                   const std::vector<ViewportTransform>& elements,
                                    vk::Image srcGbufferHud,
                                    vk::Image dstSwapchainImage) {
 
@@ -78,12 +78,12 @@ void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
     regions.reserve(elements.size()); // Only one region per element, no more "row" loop!
 
     for (const auto& el : elements) {
-        uint32_t srcX = static_cast<uint32_t>(std::max(0.0f, el.realSource.x));
-        uint32_t srcY = static_cast<uint32_t>(std::max(0.0f, el.realSource.y));
-        uint32_t dstX = static_cast<uint32_t>(std::max(0.0f, el.realMapping.x));
-        uint32_t dstY = static_cast<uint32_t>(std::max(0.0f, el.realMapping.y));
-        uint32_t w = static_cast<uint32_t>(el.realSource.w);
-        uint32_t h = static_cast<uint32_t>(el.realSource.h);
+        uint32_t srcX = static_cast<uint32_t>(std::max(0.0f, el.source.x));
+        uint32_t srcY = static_cast<uint32_t>(std::max(0.0f, el.source.y));
+        uint32_t dstX = static_cast<uint32_t>(std::max(0.0f, el.destination.x));
+        uint32_t dstY = static_cast<uint32_t>(std::max(0.0f, el.destination.y));
+        uint32_t w = static_cast<uint32_t>(el.source.w);
+        uint32_t h = static_cast<uint32_t>(el.source.h);
 
         // STRICT CLIPPING to the renderViewport
         if (srcX + w > m_renderViewport.width) w = (m_renderViewport.width > srcX) ? m_renderViewport.width - srcX : 0;
@@ -118,8 +118,8 @@ void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
         for (size_t i = 0; i < elements.size(); ++i) {
             const auto& el = elements[i];
             NOTICE_LOG(RENDERER, "  Transform[%zu]: src={%.1f, %.1f, %.1f, %.1f} -> dst={%.1f, %.1f, %.1f, %.1f}",
-                       i, el.realSource.x, el.realSource.y, el.realSource.w, el.realSource.h,
-                       el.realMapping.x, el.realMapping.y, el.realMapping.w, el.realMapping.h);
+                       i, el.source.x, el.source.y, el.source.w, el.source.h,
+                       el.destination.x, el.destination.y, el.destination.w, el.destination.h);
         }
 
         // --- REAL READ: Copy HUD data to buffer ---
