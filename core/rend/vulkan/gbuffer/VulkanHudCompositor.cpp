@@ -50,7 +50,15 @@ void VulkanHudCompositor::Recompose(vk::CommandBuffer cmd,
         return;
 
     if (elements.empty()) {
-        NOTICE_LOG(RENDERER, "VulkanHudCompositor::Recompose: No elements to recompose.");
+        std::vector<ViewportTransform> fallback = elements;
+        ViewportTransform stub;
+        stub.name = "FALLBACK_1_TO_1";
+        stub.source = {0.f, 0.f, (float)m_renderViewport.width, (float)m_renderViewport.height};
+        stub.destination = {0.f, 0.f, (float)m_renderViewport.width, (float)m_renderViewport.height};
+        stub.zenMode = false;
+        fallback.push_back(stub);
+        Recompose(cmd, imgIdx,fallback, srcGbufferHud, dstSwapchainImage);
+        return;
     }
 
     auto& compositionBuffer = m_compositionBuffers[imgIdx];
