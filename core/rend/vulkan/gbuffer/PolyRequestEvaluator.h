@@ -23,7 +23,6 @@ struct IsClose : public exprtk::igeneric_function<T>
     typedef typename exprtk::type_store<T>::scalar_view scalar_view_t;
 
     // Utiliser une chaîne vide "" permet d'accepter un nombre variable d'arguments (variadic)
-    // Nous validerons le nombre d'arguments manuellement dans l'operator()
     IsClose() : exprtk::igeneric_function<T>("") {}
 
     inline T operator()(parameter_list_t parameters)
@@ -31,7 +30,6 @@ struct IsClose : public exprtk::igeneric_function<T>
         // Validation minimale : il faut au moins a et b
         if (parameters.size() < 2) return T(0);
 
-        // On utilise la scalar_view interne pour accéder aux données scalaires
         const T a = scalar_view_t(parameters[0])();
         const T b = scalar_view_t(parameters[1])();
 
@@ -39,13 +37,11 @@ struct IsClose : public exprtk::igeneric_function<T>
         const T rel_tol = (parameters.size() > 2) ? scalar_view_t(parameters[2])() : T(1e-09);
         const T abs_tol = (parameters.size() > 3) ? scalar_view_t(parameters[3])() : T(0.0);
 
-        // Gestion des cas infinis (comportement math.isclose de Python)
         if (std::isinf(a) || std::isinf(b)) {
             return (a == b) ? T(1) : T(0);
         }
 
         const T diff = std::abs(a - b);
-        // Formule PEP 485 : abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)
         const T threshold = std::max(rel_tol * std::max(std::abs(a), std::abs(b)), abs_tol);
 
         return (diff <= threshold) ? T(1) : T(0);
@@ -57,7 +53,6 @@ class PolyRequestEvaluator
 public:
     PolyRequestEvaluator();
 
-    // Protection contre la copie (crucial pour ExprTk et les pointeurs de symbol_table)
     PolyRequestEvaluator(const PolyRequestEvaluator&) = delete;
     PolyRequestEvaluator& operator=(const PolyRequestEvaluator&) = delete;
 
@@ -65,6 +60,9 @@ public:
     double evaluate(const PolyData& data);
 
 private:
+    // Méthode de transpilation pour gérer les arguments nommés
+    std::string transpileIsClose(std::string expr);
+
     // Variables liées à la symbol_table
     double wp_x = 0, wp_y = 0, wp_z = 0;
     double z = 0, th = 0, pc = 0, mid = 0;

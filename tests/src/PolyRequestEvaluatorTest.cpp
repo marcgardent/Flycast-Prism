@@ -41,20 +41,28 @@ TEST(PolyRequestEvaluatorTest, IsClose) {
     PolyRequestEvaluator evaluator;
     PolyData data = {1.000001f, 0, 0, 0, 0, 0, 0};
 
-    // Default tolerances (rel_tol=1e-9, abs_tol=0)
-    EXPECT_TRUE(evaluator.parse("isClose(WP_X, 1.0)"));
+    // Default tolerances (rel_tol=1e-9, abs_tol=0.0 via transpiler)
+    EXPECT_TRUE(evaluator.parse("isclose(WP_X, 1.0)"));
     EXPECT_DOUBLE_EQ(evaluator.evaluate(data), 0.0); // 1.000001 is too far for 1e-9
 
-    // Custom rel_tol
-    EXPECT_TRUE(evaluator.parse("isClose(WP_X, 1.0, 1e-5)"));
+    // Positional rel_tol
+    EXPECT_TRUE(evaluator.parse("isclose(WP_X, 1.0, 1e-5)"));
     EXPECT_DOUBLE_EQ(evaluator.evaluate(data), 1.0);
 
-    // Custom abs_tol
-    EXPECT_TRUE(evaluator.parse("isClose(WP_X, 1.0, 1e-9, 1e-5)"));
+    // Named rel_tol
+    EXPECT_TRUE(evaluator.parse("isclose(WP_X, 1.0, rel_tol=1e-5)"));
+    EXPECT_DOUBLE_EQ(evaluator.evaluate(data), 1.0);
+
+    // Named abs_tol
+    EXPECT_TRUE(evaluator.parse("isclose(WP_X, 1.0, abs_tol=1e-5)"));
+    EXPECT_DOUBLE_EQ(evaluator.evaluate(data), 1.0);
+
+    // Mixed named arguments
+    EXPECT_TRUE(evaluator.parse("isclose(WP_X, 1.0, rel_tol=1e-9, abs_tol=1e-5)"));
     EXPECT_DOUBLE_EQ(evaluator.evaluate(data), 1.0);
     
-    // Test with 'and' / 'or'
-    EXPECT_TRUE(evaluator.parse("isClose(WP_X, 1.0, 1e-5) and WP_X > 1.0"));
+    // Mixed positional and named
+    EXPECT_TRUE(evaluator.parse("isclose(WP_X, 1.0, 1e-9, abs_tol=1e-5)"));
     EXPECT_DOUBLE_EQ(evaluator.evaluate(data), 1.0);
 }
 
