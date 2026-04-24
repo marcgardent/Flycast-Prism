@@ -216,9 +216,17 @@ void Drawer::DrawPoly(const vk::CommandBuffer &cmdBuffer, u32 listType,
   const Vertex &v = rendContext->verts[rendContext->idx[first]];
   u32 texHash = poly.texture ? poly.texture->texture_hash : 0;
 
-  rend::PolyData polyData = { (double)v.x, (double)v.y, (double)v.z, texHash, (u32)poly.count, poly.tcw.full };
-  bool isHud = gbufferContext.GetRoutingManager().IsHud(polyData);
+  //TODO MGT Remove?
+  u32 packedMid = (listType << 4) | (poly.pcw.Texture << 3) |
+                   (poly.pcw.Gouraud << 2) | (poly.pcw.Shadow << 1) |
+                   (poly.tsp.FogCtrl != 0);
 
+  rend::PolyData polyData = {(double)v.x, (double)v.y, (double)v.z, texHash,
+                             (u32)poly.count, packedMid};
+  bool isHud = gbufferContext.GetRoutingManager().IsHud(polyData);
+  bool isSky = gbufferContext.GetRoutingManager().IsSky(polyData);
+  bool isScene = gbufferContext.GetRoutingManager().IsScene(polyData);
+  //TODO MGT END
   vk::Pipeline pipeline = pipelineManager->GetPipeline(
       listType, sortTriangles, poly, gpuPalette, dithering, isHud,
       config::CaptureMetadataBuffers);

@@ -20,6 +20,7 @@
 */
 #include "pipeline.h"
 #include "hw/pvr/Renderer_if.h"
+#include "gbuffer/gbuffer_constants.h"
 
 void PipelineManager::CreateModVolPipeline(ModVolMode mode, int cullMode,
                                            bool naomi2) {
@@ -390,16 +391,17 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
 
   bool shadowed =
       listType == ListType_Opaque || listType == ListType_Punch_Through;
+  
   vk::StencilOpState stencilOpState;
   if (shadowed) {
     if (pp.pcw.Shadow != 0)
       stencilOpState = vk::StencilOpState(
           vk::StencilOp::eKeep, vk::StencilOp::eReplace, vk::StencilOp::eKeep,
-          vk::CompareOp::eAlways, 0, 0x80, 0x80);
+          vk::CompareOp::eAlways, 0, STENCIL_MASK_SHADOW, STENCIL_MASK_SHADOW);
     else
       stencilOpState = vk::StencilOpState(
           vk::StencilOp::eKeep, vk::StencilOp::eReplace, vk::StencilOp::eKeep,
-          vk::CompareOp::eAlways, 0, 0x80, 0);
+          vk::CompareOp::eAlways, 0, STENCIL_MASK_SHADOW, 0);
   } else
     stencilOpState =
         vk::StencilOpState(vk::StencilOp::eKeep, vk::StencilOp::eKeep,

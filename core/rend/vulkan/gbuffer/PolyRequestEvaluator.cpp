@@ -13,6 +13,10 @@ PolyRequestEvaluator::PolyRequestEvaluator()
     symbol_table.add_function("isCloseInternal", is_close_obj);
     symbol_table.add_constants();
 
+    parser.settings().enable_all_logic_ops();
+    parser.settings().enable_all_arithmetic_ops();
+    parser.settings().enable_all_inequality_ops();
+
     symbol_table.add_variable("WP_X", wp_x);
     symbol_table.add_variable("WP_Y", wp_y);
     symbol_table.add_variable("WP_Z", wp_z);
