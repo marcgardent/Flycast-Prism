@@ -405,7 +405,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
     stencilOpState =
         vk::StencilOpState(vk::StencilOp::eKeep, vk::StencilOp::eKeep,
                            vk::StencilOp::eKeep, vk::CompareOp::eNever);
-  if (polyRoutingAction & rend::Action_AvoidDepth || polyRoutingAction & rend::Action_ToHud)
+  if (polyRoutingAction & rend::Action_ToHud)
     depthWriteEnable = false;
 
   vk::PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo(
@@ -445,7 +445,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
   if (config::RendererType == RenderType::Vulkan_GBuffer) {
     // First attachment (Albedo) uses standard blending, write RGBA (unless HUD or AvoidAlbedo)
     vk::PipelineColorBlendAttachmentState albedoAttachment = pipelineColorBlendAttachmentState;
-    if (isHUD || (polyRoutingAction & rend::Action_AvoidAlbedo))
+    if (isHUD)
         albedoAttachment.colorWriteMask = (vk::ColorComponentFlags)0;
     colorBlendAttachments.push_back(albedoAttachment);
 
@@ -453,19 +453,19 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        (isHUD || (polyRoutingAction & rend::Action_AvoidNormal)) ? (vk::ColorComponentFlags)0 : colorComponentFlags));
+        (isHUD) ? (vk::ColorComponentFlags)0 : colorComponentFlags));
 
     // Third attachment (Material ID) uses no blending, write R only
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        (isHUD || (polyRoutingAction & rend::Action_AvoidMaterial)) ? (vk::ColorComponentFlags)0 : vk::ColorComponentFlagBits::eR));
+        (isHUD) ? (vk::ColorComponentFlags)0 : vk::ColorComponentFlagBits::eR));
 
     // Fourth attachment (Motion/Velocity) RG only, no blending
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        (isHUD || (polyRoutingAction & rend::Action_AvoidMotion)) ? (vk::ColorComponentFlags)0
+        (isHUD) ? (vk::ColorComponentFlags)0
               : (vk::ColorComponentFlagBits::eR |
                  vk::ColorComponentFlagBits::eG)));
 
