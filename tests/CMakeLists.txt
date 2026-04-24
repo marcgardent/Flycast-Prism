@@ -37,4 +37,5 @@ target_sources(${PROJECT_NAME} PRIVATE
         src/util/TsQueueTest.cpp
         src/util/WorkerThreadTest.cpp
         src/HudCompositorTest.cpp
-        src/GbufferContextTest.cpp)
+        src/GbufferContextTest.cpp
+        src/PolyRequestEvaluatorTest.cpp)

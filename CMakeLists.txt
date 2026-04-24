@@ -1143,6 +1143,7 @@ if(USE_VULKAN)
 			core/rend/vulkan/oit/oit_pipeline.h
  		core/rend/vulkan/oit/oit_renderer.cpp
  		core/rend/vulkan/gbuffer/gbuffer_renderer.cpp
+ 		core/rend/vulkan/gbuffer/PolyRequestEvaluator.cpp
 			core/rend/vulkan/oit/oit_renderpass.cpp
 			core/rend/vulkan/oit/oit_renderpass.h
 			core/rend/vulkan/oit/oit_shaders.cpp

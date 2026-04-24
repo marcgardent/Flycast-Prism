@@ -65,3 +65,53 @@ struct is_close_func : public exprtk::igeneric_function<T>
     }
 };
 ```
+
+
+## La Logique de Transpilation (C++)
+
+L'idée est de capturer ce qu'il y a dans les parenthèses de isclose(), de détecter les clés rel_tol ou abs_tol, et de reconstruire l'appel positionnel que votre igeneric_function (vue précédemment) peut comprendre.
+
+C++
+#include <string>
+#include <regex>
+#include <map>
+
+std::string transpileIsClose(std::string expr) {
+// Regex pour capturer le contenu de isclose(...)
+// Note : Ne gère pas les appels imbriqués complexes, mais parfait pour du script simple.
+std::regex re("isclose\\s*\\(([^\\)]+)\\)");
+std::smatch match;
+
+    while (std::regex_search(expr, match, re)) {
+        std::string content = match[1];
+        std::vector<std::string> args;
+        
+        // Split basique par virgule
+        std::stringstream ss(content);
+        std::string segment;
+        while (std::getline(ss, segment, ',')) {
+            args.push_back(segment);
+        }
+
+        // Valeurs par défaut
+        std::string a = args[0];
+        std::string b = args[1];
+        std::string rtol = "1e-9";
+        std::string atol = "0.0";
+
+        // Analyse des arguments nommés restants
+        for (size_t i = 2; i < args.size(); ++i) {
+            if (args[i].find("rel_tol=") != std::string::npos) 
+                rtol = args[i].substr(args[i].find('=') + 1);
+            else if (args[i].find("abs_tol=") != std::string::npos) 
+                atol = args[i].substr(args[i].find('=') + 1);
+            else if (i == 2) rtol = args[i]; // Positionnel
+            else if (i == 3) atol = args[i]; // Positionnel
+        }
+
+        // Reconstruction de l'appel positionnel pur
+        std::string replacement = "isclose(" + a + "," + b + "," + rtol + "," + atol + ")";
+        expr = std::regex_replace(expr, re, replacement, std::regex_constants::format_first_only);
+    }
+    return expr;
+}
