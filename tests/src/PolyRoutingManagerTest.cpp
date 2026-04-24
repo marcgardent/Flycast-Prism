@@ -20,7 +20,7 @@ TEST_F(PolyRoutingManagerTest, BasicStencils) {
     CreateJson(R"raw({
 "stencils": {
     "HUD": "texture_hash == 11259375",
-    "SKY": "z > 1000",
+    "SKY": "wp_z > 1000",
     "SCENE": "1"
 }
 })raw");
@@ -31,7 +31,7 @@ TEST_F(PolyRoutingManagerTest, BasicStencils) {
     EXPECT_FALSE(manager.IsSky(data));
 
     data = {};
-    data.z = 1001;
+    data.wp_z = 1001;
     EXPECT_FALSE(manager.IsHud(data));
     EXPECT_TRUE(manager.IsSky(data));
     EXPECT_TRUE(manager.IsScene(data));

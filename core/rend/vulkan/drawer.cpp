@@ -216,7 +216,7 @@ void Drawer::DrawPoly(const vk::CommandBuffer &cmdBuffer, u32 listType,
   const Vertex &v = rendContext->verts[rendContext->idx[first]];
   u32 texHash = poly.texture ? poly.texture->texture_hash : 0;
 
-  PolyData polyData = { (double)v.x, (double)v.y, (double)v.z, (double)v.z, texHash, (u32)poly.count, poly.tcw.full };
+  rend::PolyData polyData = { (double)v.x, (double)v.y, (double)v.z, texHash, (u32)poly.count, poly.tcw.full };
   bool isHud = gbufferContext.GetRoutingManager().IsHud(polyData);
 
   vk::Pipeline pipeline = pipelineManager->GetPipeline(

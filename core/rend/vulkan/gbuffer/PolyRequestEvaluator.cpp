@@ -6,30 +6,26 @@
 #include <regex>
 #include <sstream>
 
+namespace rend {
+
 PolyRequestEvaluator::PolyRequestEvaluator()
 {
-    // On utilise un nom sans underscores initiaux pour plaire au lexer par défaut d'ExprTk
-    if (!symbol_table.add_function("isCloseInternal", is_close_obj)) {
-        fprintf(stderr, "CRITICAL: Registration of 'isCloseInternal' FAILED!\n");
-    }
-
-    parser.settings().enable_all_logic_ops();
-    parser.settings().enable_all_arithmetic_ops();
-    parser.settings().enable_all_inequality_ops();
-
+    symbol_table.add_function("isCloseInternal", is_close_obj);
     symbol_table.add_constants();
 
     symbol_table.add_variable("WP_X", wp_x);
     symbol_table.add_variable("WP_Y", wp_y);
     symbol_table.add_variable("WP_Z", wp_z);
-    symbol_table.add_variable("Z", z);
     symbol_table.add_variable("TH", th);
     symbol_table.add_variable("PC", pc);
     symbol_table.add_variable("MID", mid);
 
-    symbol_table.add_variable("TEXTURE_HASH", th);
-    symbol_table.add_variable("POLY_COUNT", pc);
-    symbol_table.add_variable("MATERIAL", mid);
+    symbol_table.add_variable("wp_x", wp_x);
+    symbol_table.add_variable("wp_y", wp_y);
+    symbol_table.add_variable("wp_z", wp_z);
+    symbol_table.add_variable("texture_hash", th);
+    symbol_table.add_variable("poly_count", pc);
+    symbol_table.add_variable("material_id", mid);
 
     symbol_table.add_variable("MID_OPAQUE", mid_opaque);
     symbol_table.add_variable("MID_OPAQUE_MOD", mid_opaque_mod);
@@ -48,16 +44,12 @@ PolyRequestEvaluator::PolyRequestEvaluator()
 std::string PolyRequestEvaluator::transpileIsClose(std::string expr) {
     std::regex re("is[Cc]lose\\s*\\(([^\\)]+)\\)");
     std::smatch match;
-
     std::string result_expr = expr;
     std::string processed_expr;
-
     while (std::regex_search(result_expr, match, re)) {
         processed_expr += match.prefix().str();
-
         std::string content = match[1];
         std::vector<std::string> args;
-
         std::stringstream ss(content);
         std::string segment;
         while (std::getline(ss, segment, ',')) {
@@ -65,31 +57,20 @@ std::string PolyRequestEvaluator::transpileIsClose(std::string expr) {
             segment.erase(segment.find_last_not_of(" \t\n\r") + 1);
             args.push_back(segment);
         }
-
         if (args.size() < 2) {
             processed_expr += match[0].str();
         } else {
-            std::string a = args[0];
-            std::string b = args[1];
-            std::string rtol = "1e-9";
-            std::string atol = "0.0";
-
+            std::string a = args[0], b = args[1], rtol = "1e-9", atol = "0.0";
             for (size_t i = 2; i < args.size(); ++i) {
-                if (args[i].find("rel_tol=") != std::string::npos)
-                    rtol = args[i].substr(args[i].find('=') + 1);
-                else if (args[i].find("abs_tol=") != std::string::npos)
-                    atol = args[i].substr(args[i].find('=') + 1);
+                if (args[i].find("rel_tol=") != std::string::npos) rtol = args[i].substr(args[i].find('=') + 1);
+                else if (args[i].find("abs_tol=") != std::string::npos) atol = args[i].substr(args[i].find('=') + 1);
                 else if (i == 2) rtol = args[i];
                 else if (i == 3) atol = args[i];
             }
-
-            // On pointe vers le nouveau nom interne
             processed_expr += "isCloseInternal(" + a + "," + b + "," + rtol + "," + atol + ")";
         }
-
         result_expr = match.suffix().str();
     }
-
     processed_expr += result_expr;
     return processed_expr;
 }
@@ -97,12 +78,8 @@ std::string PolyRequestEvaluator::transpileIsClose(std::string expr) {
 bool PolyRequestEvaluator::parse(const std::string& expression_string)
 {
     std::string transpiled = transpileIsClose(expression_string);
-    expression.register_symbol_table(symbol_table);
-
     if (!parser.compile(transpiled, expression))
     {
-        fprintf(stderr, "ExprTK Error: %s | Original: %s | Transpiled: %s\n",
-                parser.error().c_str(), expression_string.c_str(), transpiled.c_str());
         return false;
     }
     return true;
@@ -113,10 +90,9 @@ double PolyRequestEvaluator::evaluate(const PolyData& data)
     wp_x = data.wp_x;
     wp_y = data.wp_y;
     wp_z = data.wp_z;
-    z = data.z;
-    th = static_cast<double>(data.texture_hash);
-    pc = static_cast<double>(data.poly_count);
-    mid = static_cast<double>(data.material_id);
+    th = (double)data.texture_hash;
+    pc = (double)data.poly_count;
+    mid = (double)data.material_id;
 
     uint32_t m = data.material_id;
     uint32_t list_type = (m >> 4) & 0x7;
@@ -134,3 +110,5 @@ double PolyRequestEvaluator::evaluate(const PolyData& data)
 
     return expression.value();
 }
+
+} // namespace rend

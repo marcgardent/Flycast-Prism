@@ -17,10 +17,11 @@
 #undef RESTORE_VERIFY
 #endif
 
+namespace rend {
+
 // Structure de données en entrée
 struct PolyData {
     double wp_x, wp_y, wp_z;
-    double z;
     unsigned int texture_hash;
     unsigned int poly_count;
     unsigned int material_id;
@@ -76,7 +77,7 @@ private:
 
     // Variables liées à la symbol_table
     double wp_x = 0, wp_y = 0, wp_z = 0;
-    double z = 0, th = 0, pc = 0, mid = 0;
+    double th = 0, pc = 0, mid = 0;
     double mid_opaque = 0, mid_opaque_mod = 0, mid_translucent = 0;
     double mid_translucent_mod = 0, mid_punch_through = 0;
     double mid_has_tex = 0, mid_gouraud = 0, mid_has_bump = 0, mid_fog = 0;
@@ -87,3 +88,5 @@ private:
     exprtk::expression<double> expression;
     exprtk::parser<double> parser;
 };
+
+} // namespace rend

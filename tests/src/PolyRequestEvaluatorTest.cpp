@@ -1,14 +1,22 @@
 #include <gtest/gtest.h>
 #include "rend/vulkan/gbuffer/PolyRequestEvaluator.h"
 
+using namespace rend;
+
 TEST(PolyRequestEvaluatorTest, BasicEvaluation) {
     PolyRequestEvaluator evaluator;
-    PolyData data = {10.0f, 20.0f, 30.0f, 5.0f, 0x12345678, 100, 0x40}; // MID 0x40 -> (0x40 >> 4) & 0x7 = 4 (PUNCH_THROUGH)
+    PolyData data = {};
+    data.wp_x = 10.0;
+    data.wp_y = 20.0;
+    data.wp_z = 30.0;
+    data.texture_hash = 0x12345678;
+    data.poly_count = 100;
+    data.material_id = 0x40; // MID 0x40 -> (0x40 >> 4) & 0x7 = 4 (PUNCH_THROUGH)
 
-    EXPECT_TRUE(evaluator.parse("WP_X == 10 && WP_Y == 20 && WP_Z == 30"));
+    EXPECT_TRUE(evaluator.parse("WP_X == 10 and WP_Y == 20 and WP_Z == 30"));
     EXPECT_DOUBLE_EQ(evaluator.evaluate(data), 1.0);
 
-    EXPECT_TRUE(evaluator.parse("Z < 10"));
+    EXPECT_TRUE(evaluator.parse("WP_Z < 100"));
     EXPECT_DOUBLE_EQ(evaluator.evaluate(data), 1.0);
 
     EXPECT_TRUE(evaluator.parse("TH == 305419896")); // 0x12345678 in decimal
@@ -25,21 +33,24 @@ TEST(PolyRequestEvaluatorTest, MIDFlags) {
     PolyRequestEvaluator evaluator;
     
     // MID = 0x40 (0100 0000) -> ListType=4 (MID_PUNCH_THROUGH), flags=0
-    PolyData data1 = {0, 0, 0, 0, 0, 0, 0x40};
+    PolyData data1 = {};
+    data1.material_id = 0x40;
     EXPECT_TRUE(evaluator.parse("MID_PUNCH_THROUGH"));
     EXPECT_DOUBLE_EQ(evaluator.evaluate(data1), 1.0);
-    EXPECT_TRUE(evaluator.parse("MID_OPAQUE || MID_TRANSLUCENT"));
+    EXPECT_TRUE(evaluator.parse("MID_OPAQUE or MID_TRANSLUCENT"));
     EXPECT_DOUBLE_EQ(evaluator.evaluate(data1), 0.0);
 
     // MID = 0x2B (0010 1011) -> ListType=2 (MID_TRANSLUCENT), HasTex=1, Gouraud=0, HasBump=1, Fog=1
-    PolyData data2 = {0, 0, 0, 0, 0, 0, 0x2B};
-    EXPECT_TRUE(evaluator.parse("MID_TRANSLUCENT && MID_HAS_TEX && !MID_GOURAUD && MID_HAS_BUMP && MID_FOG"));
+    PolyData data2 = {};
+    data2.material_id = 0x2B;
+    EXPECT_TRUE(evaluator.parse("MID_TRANSLUCENT and MID_HAS_TEX and not(MID_GOURAUD) and MID_HAS_BUMP and MID_FOG"));
     EXPECT_DOUBLE_EQ(evaluator.evaluate(data2), 1.0);
 }
 
 TEST(PolyRequestEvaluatorTest, IsClose) {
     PolyRequestEvaluator evaluator;
-    PolyData data = {1.000001f, 0, 0, 0, 0, 0, 0};
+    PolyData data = {};
+    data.wp_x = 1.000001f;
 
     // Default tolerances (rel_tol=1e-9, abs_tol=0.0 via transpiler)
     EXPECT_TRUE(evaluator.parse("isclose(WP_X, 1.0)"));
