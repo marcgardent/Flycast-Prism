@@ -448,6 +448,10 @@ option(BUILD_SHARED_LIBS "Build shared library" OFF)
 add_subdirectory(core/deps/glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
 
+add_subdirectory(core/deps/exprtk)
+target_link_libraries(${PROJECT_NAME} PRIVATE exprtk::exprtk)
+
+
 if(USE_VULKAN)
 	if(USE_HOST_GLSLANG)
 		find_package(glslang REQUIRED)
@@ -1095,7 +1099,16 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/rend/TexCache.h
 		core/rend/texconv.cpp
 		core/rend/texconv.h
-		core/rend/norend/norend.cpp)
+		core/rend/norend/norend.cpp
+        core/rend/vulkan/gbuffer/PolyRoutingManager.cpp
+        core/rend/vulkan/gbuffer/HudCompositor.cpp
+        core/rend/vulkan/gbuffer/GbufferContext.cpp
+        core/rend/vulkan/gbuffer/VulkanHudCompositor.cpp
+
+
+		core/rend/library.cpp
+		core/rend/library.h
+	)
 
 if(USE_VULKAN)
 	target_compile_definitions(${PROJECT_NAME} PUBLIC VK_ENABLE_BETA_EXTENSIONS VK_NO_PROTOTYPES)
@@ -1128,7 +1141,9 @@ if(USE_VULKAN)
 			core/rend/vulkan/oit/oit_drawer.h
 			core/rend/vulkan/oit/oit_pipeline.cpp
 			core/rend/vulkan/oit/oit_pipeline.h
-			core/rend/vulkan/oit/oit_renderer.cpp
+ 		core/rend/vulkan/oit/oit_renderer.cpp
+ 		core/rend/vulkan/gbuffer/gbuffer_renderer.cpp
+ 		core/rend/vulkan/gbuffer/PolyRequestEvaluator.cpp
 			core/rend/vulkan/oit/oit_renderpass.cpp
 			core/rend/vulkan/oit/oit_renderpass.h
 			core/rend/vulkan/oit/oit_shaders.cpp
@@ -1157,7 +1172,8 @@ if(USE_VULKAN)
 			core/rend/vulkan/overlay.h
 			core/rend/vulkan/vulkan_context.h
 			core/rend/vulkan/vulkan.h
-			core/rend/vulkan/vulkan_renderer.cpp)
+			core/rend/vulkan/vulkan_renderer.cpp
+			core/rend/vulkan/pipeline.cpp)
 	if(LIBRETRO)
 		target_sources(${PROJECT_NAME} PRIVATE
 				core/rend/vulkan/vk_context_lr.cpp

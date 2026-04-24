@@ -47,6 +47,7 @@ void gui_settings_video()
 		perPixel = false;
 		break;
 	case RenderType::Vulkan_OIT:
+	case RenderType::Vulkan_GBuffer:
 		renderApi = Vulkan;
 		perPixel = true;
 		break;
@@ -85,6 +86,7 @@ void gui_settings_video()
 		header(T("Graphics API"));
 		{
 			ImGui::Columns(apiCount, "renderApi", false);
+			int oldRenderApi = renderApi;
 #ifdef USE_OPENGL
 			ImGui::RadioButton("OpenGL", &renderApi, OpenGL);
 			ImGui::NextColumn();
@@ -111,6 +113,25 @@ void gui_settings_video()
 			ImGui::NextColumn();
 #endif
 			ImGui::Columns(1, nullptr, false);
+
+			if (renderApi != oldRenderApi)
+			{
+				switch (renderApi)
+				{
+				case OpenGL:
+					config::RendererType = perPixel ? RenderType::OpenGL_OIT : RenderType::OpenGL;
+					break;
+				case Vulkan:
+					config::RendererType = perPixel ? RenderType::Vulkan_OIT : RenderType::Vulkan;
+					break;
+				case DirectX9:
+					config::RendererType = RenderType::DirectX9;
+					break;
+				case DirectX11:
+					config::RendererType = perPixel ? RenderType::DirectX11_OIT : RenderType::DirectX11;
+					break;
+				}
+			}
     	}
     }
     header(T("Transparent Sorting"));
@@ -138,16 +159,72 @@ void gui_settings_video()
     	case 0:
     		perPixel = false;
     		config::PerStripSorting.set(false);
+    		if (renderApi == Vulkan)
+    			config::RendererType = config::RendererType == RenderType::Vulkan_GBuffer ? RenderType::Vulkan_GBuffer : RenderType::Vulkan;
+    		else if (renderApi == OpenGL)
+    			config::RendererType = RenderType::OpenGL;
+    		else if (renderApi == DirectX11)
+    			config::RendererType = RenderType::DirectX11;
     		break;
     	case 1:
     		perPixel = false;
     		config::PerStripSorting.set(true);
+    		if (renderApi == Vulkan)
+    			config::RendererType = config::RendererType == RenderType::Vulkan_GBuffer ? RenderType::Vulkan_GBuffer : RenderType::Vulkan;
+    		else if (renderApi == OpenGL)
+    			config::RendererType = RenderType::OpenGL;
+    		else if (renderApi == DirectX11)
+    			config::RendererType = RenderType::DirectX11;
     		break;
     	case 2:
     		perPixel = true;
+    		if (renderApi == Vulkan)
+    			config::RendererType = config::RendererType == RenderType::Vulkan_GBuffer ? RenderType::Vulkan_GBuffer : RenderType::Vulkan_OIT;
+    		else if (renderApi == OpenGL)
+    			config::RendererType = RenderType::OpenGL_OIT;
+    		else if (renderApi == DirectX11)
+    			config::RendererType = RenderType::DirectX11_OIT;
     		break;
     	}
     }
+	if (renderApi == Vulkan)
+	{
+		ImGui::Spacing();
+		bool gbuffer = config::RendererType == RenderType::Vulkan_GBuffer;
+		if (ImGui::Checkbox("G-Buffer", &gbuffer))
+		{
+			if (gbuffer)
+				config::RendererType = RenderType::Vulkan_GBuffer;
+			else
+				config::RendererType = perPixel ? RenderType::Vulkan_OIT : RenderType::Vulkan;
+		}
+		ImGui::SameLine();
+		ShowHelpMarker(T("Use Deferred Rendering (G-Buffer) for advanced effects. Experimental."));
+		if (gbuffer)
+		{
+			ImGui::Indent();
+			{
+				header(T("G-Buffer & Post-Process"));
+				OptionCheckbox(T("Enable SSAO"), config::EnableSSAO);
+				ImGui::Indent();
+				{
+					DisabledScope scope(!config::EnableSSAO);
+					OptionSliderFloat(T("SSAO Bias"), config::SSAOBias, 0.0001f, 0.01f, nullptr, "%.4f");
+					OptionSliderFloat(T("SSAO Radius"), config::SSAORadius, 0.01f, 0.5f);
+				}
+				ImGui::Unindent();
+				OptionCheckbox(T("Enable Depth of Field"), config::EnableDoF);
+				ImGui::Indent();
+				{
+					DisabledScope scope(!config::EnableDoF);
+					OptionSliderFloat(T("Focus Distance"), config::DoFFocus, 0.0f, 1.0f);
+					OptionSliderFloat(T("Bokeh Intensity"), config::DoFBokehIntensity, 0.0f, 1.0f);
+				}
+				ImGui::Unindent();
+			}
+			ImGui::Unindent();
+		}
+	}
 	ImGui::Spacing();
 
     header(T("Rendering Options"));
@@ -418,6 +495,8 @@ void gui_settings_video()
 	}
 #endif
 
+    if (renderApi == Vulkan && config::RendererType == RenderType::Vulkan_GBuffer)
+    	return;
     switch (renderApi)
     {
     case OpenGL:

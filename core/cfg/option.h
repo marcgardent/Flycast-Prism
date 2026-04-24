@@ -448,6 +448,7 @@ extern Option<float> ExtraDepthScale;
 extern Option<bool> CustomTextures;
 extern Option<bool> PreloadCustomTextures;
 extern Option<bool> DumpTextures;
+extern Option<bool> DumpUniqueTextures;
 extern Option<bool> DumpReplacedTextures;
 extern Option<int> ScreenStretching;	// in percent. 150 means stretch from 4/3 to 6/3
 extern Option<bool> Fog;
@@ -470,8 +471,23 @@ extern Option<int> AnisotropicFiltering;
 extern Option<int> TextureFiltering; // 0: default, 1: force nearest, 2: force linear
 extern Option<bool> ThreadedRendering;
 extern Option<bool> DupeFrames;
+extern Option<bool> ShowDepth;
+extern Option<bool> ShowDepthOpaqueOnly;
+extern Option<bool> ShowNormals;
+extern Option<bool> ShowMaterial;
+extern Option<bool> ShowAlbedo;
+extern Option<bool> ShowHUD;
+extern Option<bool> EnableSSAO;
+extern Option<bool> ShowSSAO;
+extern Option<float> SSAORadius;
+extern Option<float> SSAOBias;
+extern Option<bool> ShowMotion;
+extern Option<bool> EnableDoF;
+extern Option<float> DoFFocus;
+extern Option<float> DoFBokehIntensity;
 extern Option<bool> NativeDepthInterpolation;
 extern Option<bool> EmulateFramebuffer;
+extern Option<bool> CaptureMetadataBuffers;
 extern Option<bool> FixUpscaleBleedingEdge;
 extern Option<bool> CustomGpuDriver;
 #ifdef VIDEO_ROUTING

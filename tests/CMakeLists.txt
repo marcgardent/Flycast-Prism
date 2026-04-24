@@ -1,3 +1,4 @@
+
 option(BUILD_GMOCK "Builds the googlemock subproject" OFF)
 option(INSTALL_GTEST "Enable installation of googletest. (Projects embedding googletest may want to turn this OFF.)" OFF)
 if(WIN32)
@@ -10,6 +11,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC inc)
 target_sources(${PROJECT_NAME} PRIVATE
         src/CheatManagerTest.cpp
         src/ConfigFileTest.cpp
+        src/PolyRoutingManagerTest.cpp
         src/div32_test.cpp
         src/test_stubs.cpp
         src/serialize_test.cpp
@@ -33,4 +35,7 @@ target_sources(${PROJECT_NAME} PRIVATE
         src/oslib/I18nTest.cpp
         src/util/PeriodicThreadTest.cpp
         src/util/TsQueueTest.cpp
-        src/util/WorkerThreadTest.cpp)
+        src/util/WorkerThreadTest.cpp
+        src/HudCompositorTest.cpp
+        src/GbufferContextTest.cpp
+        src/PolyRequestEvaluatorTest.cpp)

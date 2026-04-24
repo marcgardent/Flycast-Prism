@@ -658,6 +658,7 @@ private:
 		cv->x = vtx->xyz[0];
 		cv->y = vtx->xyz[1];
 		cv->z = invW;
+
 		update_fz(invW);
 		return cv;
 	}

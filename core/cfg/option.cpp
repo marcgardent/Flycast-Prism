@@ -78,6 +78,7 @@ Option<float> ExtraDepthScale("rend.ExtraDepthScale", 1.f);
 Option<bool> CustomTextures("rend.CustomTextures");
 Option<bool> PreloadCustomTextures("rend.PreloadCustomTextures");
 Option<bool> DumpTextures("rend.DumpTextures");
+Option<bool> DumpUniqueTextures("rend.DumpUniqueTextures");
 Option<bool> DumpReplacedTextures("rend.DumpReplacedTextures");
 Option<int> ScreenStretching("rend.ScreenStretching", 100);
 Option<bool> Fog("rend.Fog", true);
@@ -109,6 +110,20 @@ Option<int> AnisotropicFiltering("rend.AnisotropicFiltering", 1);
 Option<int> TextureFiltering("rend.TextureFiltering", 0); // Default
 Option<bool> ThreadedRendering("rend.ThreadedRendering", true);
 Option<bool> DupeFrames("rend.DupeFrames", false);
+Option<bool> ShowDepth("rend.ShowDepth", false);
+Option<bool> ShowDepthOpaqueOnly("rend.ShowDepthOpaqueOnly", true);
+Option<bool> ShowNormals("rend.ShowNormals", false);
+Option<bool> ShowMaterial("rend.ShowMaterial", false);
+Option<bool> ShowAlbedo("rend.ShowAlbedo", false);
+Option<bool> ShowHUD("rend.ShowHUD", false);
+Option<bool> EnableSSAO("rend.EnableSSAO", false);
+Option<bool> ShowSSAO("rend.ShowSSAO", false);
+Option<float> SSAORadius("rend.SSAORadius", 0.05f);
+Option<float> SSAOBias("rend.SSAOBias", 0.001f);
+Option<bool> ShowMotion("rend.ShowMotion", false);
+Option<bool> EnableDoF("rend.EnableDoF", false);
+Option<float> DoFFocus("rend.DoFFocus", 0.1f);
+Option<float> DoFBokehIntensity("rend.DoFBokehIntensity", 0.5f);
 Option<int> PerPixelLayers("rend.PerPixelLayers", 32);
 #ifdef TARGET_UWP
 Option<bool> NativeDepthInterpolation("rend.NativeDepthInterpolation", true);
@@ -116,6 +131,7 @@ Option<bool> NativeDepthInterpolation("rend.NativeDepthInterpolation", true);
 Option<bool> NativeDepthInterpolation("rend.NativeDepthInterpolation", false);
 #endif
 Option<bool> EmulateFramebuffer("rend.EmulateFramebuffer", false);
+Option<bool> CaptureMetadataBuffers("rend.CaptureMetadataBuffers", false);
 Option<bool> FixUpscaleBleedingEdge("rend.FixUpscaleBleedingEdge", true);
 Option<bool> CustomGpuDriver("rend.CustomGpuDriver", false);
 #ifdef VIDEO_ROUTING

@@ -119,6 +119,7 @@ LogManager::LogManager()
 	m_log[LogTypes::SAVESTATE] = {"SAVESTATE", "Save States"};
 	m_log[LogTypes::SH4] = {"SH4", "SH4 Modules"};
 
+
 	// Set up log listeners
 	int verbosity = config::loadInt("log", "Verbosity", LogTypes::LDEBUG);
 

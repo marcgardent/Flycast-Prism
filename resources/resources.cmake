@@ -56,3 +56,23 @@ cmrc_add_resources(flycast-resources
 	resources/i18n/zh_CN.po
 	resources/i18n/zh_HK.po
 	resources/i18n/zh_TW.po)
+
+cmrc_add_resources(flycast-resources
+	WHENCE core/rend/vulkan
+	core/rend/vulkan/shaders/vulkan_main.vert
+	core/rend/vulkan/shaders/vulkan_top.frag
+	core/rend/vulkan/shaders/vulkan_common.frag
+	core/rend/vulkan/shaders/vulkan_main.frag
+	core/rend/vulkan/shaders/vulkan_modvol.vert
+	core/rend/vulkan/shaders/vulkan_modvol.frag
+	core/rend/vulkan/shaders/vulkan_quad.vert
+	core/rend/vulkan/shaders/vulkan_quad.frag
+	core/rend/vulkan/shaders/vulkan_ssao.frag
+	core/rend/vulkan/shaders/vulkan_dof.frag
+	core/rend/vulkan/shaders/vulkan_material.frag
+	core/rend/vulkan/shaders/vulkan_gbuffer_3d_resolve.frag
+	core/rend/vulkan/shaders/vulkan_gbuffer_hud_overlay.frag
+	core/rend/vulkan/shaders/vulkan_n2_light.glsl
+	core/rend/vulkan/shaders/vulkan_n2.vert
+	core/rend/vulkan/shaders/vulkan_n2_modvol.vert)
+

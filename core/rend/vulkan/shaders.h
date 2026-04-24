@@ -52,6 +52,9 @@ struct FragmentShaderParams
 	int palette;
 	bool divPosZ;
 	bool dithering;
+	bool isTranslucent;
+	bool gbuffer;
+	int isHud;
 
 	u32 hash()
 	{
@@ -59,8 +62,13 @@ struct FragmentShaderParams
 			| ((u32)texture << 3) | ((u32)ignoreTexAlpha << 4) | (shaderInstr << 5)
 			| ((u32)offset << 7) | ((u32)fog << 8) | ((u32)gouraud << 10)
 			| ((u32)bumpmap << 11) | ((u32)clamping << 12) | ((u32)trilinear << 13)
-			| ((u32)palette << 14) | ((u32)divPosZ << 16) | ((u32)dithering << 17);
+			| ((u32)palette << 14) | ((u32)divPosZ << 16) | ((u32)dithering << 17)
+			| ((u32)isTranslucent << 18)
+			| ((u32)gbuffer << 19)
+			| ((u32)isHud << 20)
+			| ((u32)metadata << 21);
 	}
+	bool metadata;
 };
 
 struct ModVolShaderParams
@@ -147,7 +155,36 @@ public:
 			return *quadFragmentShader;
 		}
 	}
-
+	vk::ShaderModule GetSSAOFragmentShader()
+	{
+		if (!ssaoFragmentShader)
+			ssaoFragmentShader = compileSSAOFragmentShader();
+		return *ssaoFragmentShader;
+	}
+	vk::ShaderModule GetDoFFragmentShader()
+	{
+		if (!dofFragmentShader)
+			dofFragmentShader = compileDoFFragmentShader();
+		return *dofFragmentShader;
+	}
+	vk::ShaderModule GetMaterialFragmentShader()
+	{
+		if (!materialFragmentShader)
+			materialFragmentShader = compileMaterialFragmentShader();
+		return *materialFragmentShader;
+	}
+	vk::ShaderModule GetGBuffer3DResolveFragmentShader()
+	{
+		if (!gbuffer3DResolveFragmentShader)
+			gbuffer3DResolveFragmentShader = compileGBuffer3DResolveFragmentShader();
+		return *gbuffer3DResolveFragmentShader;
+	}
+	vk::ShaderModule GetGBufferHUDOverlayFragmentShader()
+	{
+		if (!gbufferHUDOverlayFragmentShader)
+			gbufferHUDOverlayFragmentShader = compileGBufferHUDOverlayFragmentShader();
+		return *gbufferHUDOverlayFragmentShader;
+	}
 	void term()
 	{
 		vertexShaders.clear();
@@ -159,6 +196,12 @@ public:
 		quadRotateVertexShader.reset();
 		quadFragmentShader.reset();
 		quadNoAlphaFragmentShader.reset();
+		ssaoFragmentShader.reset();
+		dofFragmentShader.reset();
+		materialFragmentShader.reset();
+		hudFragmentShader.reset();
+		gbuffer3DResolveFragmentShader.reset();
+		gbufferHUDOverlayFragmentShader.reset();
 	}
 
 private:
@@ -178,6 +221,11 @@ private:
 	vk::UniqueShaderModule compileModVolFragmentShader(bool divPosZ);
 	vk::UniqueShaderModule compileQuadVertexShader(bool rotate);
 	vk::UniqueShaderModule compileQuadFragmentShader(bool ignoreTexAlpha);
+	vk::UniqueShaderModule compileSSAOFragmentShader();
+	vk::UniqueShaderModule compileDoFFragmentShader();
+	vk::UniqueShaderModule compileMaterialFragmentShader();
+	vk::UniqueShaderModule compileGBuffer3DResolveFragmentShader();
+	vk::UniqueShaderModule compileGBufferHUDOverlayFragmentShader();
 
 	std::map<u32, vk::UniqueShaderModule> vertexShaders;
 	std::map<u32, vk::UniqueShaderModule> fragmentShaders;
@@ -187,4 +235,10 @@ private:
 	vk::UniqueShaderModule quadRotateVertexShader;
 	vk::UniqueShaderModule quadFragmentShader;
 	vk::UniqueShaderModule quadNoAlphaFragmentShader;
+	vk::UniqueShaderModule ssaoFragmentShader;
+	vk::UniqueShaderModule dofFragmentShader;
+	vk::UniqueShaderModule materialFragmentShader;
+	vk::UniqueShaderModule hudFragmentShader;
+	vk::UniqueShaderModule gbuffer3DResolveFragmentShader;
+	vk::UniqueShaderModule gbufferHUDOverlayFragmentShader;
 };

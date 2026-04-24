@@ -531,6 +531,28 @@ bool OptionSlider(const char *name, config::Option<int, PerGameOption>& option, 
 template bool OptionSlider(const char *name, config::Option<int, true>& option, int min, int max, const char *help, const char *format);
 template bool OptionSlider(const char *name, config::Option<int, false>& option, int min, int max, const char *help, const char *format);
 
+template<bool PerGameOption>
+bool OptionSliderFloat(const char *name, config::Option<float, PerGameOption>& option, float min, float max, const char *help, const char *format)
+{
+	bool valueChanged;
+	{
+		DisabledScope scope(option.isReadOnly());
+
+		float v = option;
+		valueChanged = ImGui::SliderFloat(name, &v, min, max, format);
+		if (valueChanged)
+			option.set(v);
+	}
+	if (help != nullptr)
+	{
+		ImGui::SameLine();
+		ShowHelpMarker(help);
+	}
+	return valueChanged;
+}
+template bool OptionSliderFloat(const char *name, config::Option<float, true>& option, float min, float max, const char *help, const char *format);
+template bool OptionSliderFloat(const char *name, config::Option<float, false>& option, float min, float max, const char *help, const char *format);
+
 bool OptionArrowButtons(const char *name, config::Option<int>& option, int min, int max, const char *help, const char *format)
 {
 	const float innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
