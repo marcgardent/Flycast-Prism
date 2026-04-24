@@ -28,11 +28,20 @@ layout (push_constant) uniform pushBlock
 	int showSSAO;
 } pc;
 
+layout (set = 0, binding = 4) uniform usampler2D materialTex;
+
 layout (location = 0) in vec2 inUV;
 layout (location = 0) out float FragColor;
 
 void main()
 {
+	uint matID = texture(materialTex, inUV).r;
+	if ((matID & 0x01u) == 0u) // MATERIAL_BIT_FOG
+	{
+		FragColor = 1.0;
+		return;
+	}
+
 	float depth = texture(depthTex, inUV).r;
 	vec3 N = texture(normalTex, inUV).rgb * 2.0 - 1.0;
 	N = normalize(N);

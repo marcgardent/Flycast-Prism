@@ -109,8 +109,8 @@ public:
                         noiseValues.data());
 
     // Descriptor set layout : binding 0 = depth, binding 1 = normals, binding 2
-    // = noise UBO, binding 3 = kernel UBO
-    std::array<vk::DescriptorSetLayoutBinding, 4> bindings = {
+    // = noise UBO, binding 3 = kernel UBO, binding 4 = material
+    std::array<vk::DescriptorSetLayoutBinding, 5> bindings = {
         vk::DescriptorSetLayoutBinding(
             0, vk::DescriptorType::eCombinedImageSampler, 1,
             vk::ShaderStageFlagBits::eFragment),
@@ -121,6 +121,9 @@ public:
                                        vk::ShaderStageFlagBits::eFragment),
         vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eUniformBuffer, 1,
                                        vk::ShaderStageFlagBits::eFragment),
+        vk::DescriptorSetLayoutBinding(
+            4, vk::DescriptorType::eCombinedImageSampler, 1,
+            vk::ShaderStageFlagBits::eFragment),
     };
     descSetLayout = ctx->GetDevice().createDescriptorSetLayoutUnique(
         vk::DescriptorSetLayoutCreateInfo(vk::DescriptorSetLayoutCreateFlags(),
@@ -250,7 +253,8 @@ public:
 
   // Execute le pass SSAO sur l'image courante
   void Draw(vk::CommandBuffer cmdBuffer, int imageIndex,
-            vk::ImageView depthView, vk::ImageView normalView, bool showSSAO) {
+            vk::ImageView depthView, vk::ImageView normalView,
+            vk::ImageView materialView, bool showSSAO) {
     if (imageIndex < 0 || imageIndex >= (int)framebuffers.size()) {
       ERROR_LOG(RENDERER,
                 "SSAOPass::Draw: Invalid imageIndex %d (framebuffers size: "
@@ -280,12 +284,14 @@ public:
         vk::ImageLayout::eDepthStencilReadOnlyOptimal);
     vk::DescriptorImageInfo normalInfo(*sampler, normalView,
                                        vk::ImageLayout::eShaderReadOnlyOptimal);
+    vk::DescriptorImageInfo materialInfo(
+        *sampler, materialView, vk::ImageLayout::eShaderReadOnlyOptimal);
     vk::DescriptorBufferInfo noiseInfo(*noiseBuffer->buffer, 0,
                                        16 * sizeof(glm::vec4));
     vk::DescriptorBufferInfo kernelInfo(
         *kernelBuffer->buffer, 0, kernelSamples.size() * sizeof(glm::vec4));
 
-    std::array<vk::WriteDescriptorSet, 4> writes = {
+    std::array<vk::WriteDescriptorSet, 5> writes = {
         vk::WriteDescriptorSet(*descSet, 0, 0,
                                vk::DescriptorType::eCombinedImageSampler,
                                depthInfo),
@@ -296,6 +302,9 @@ public:
             *descSet, 2, 0, vk::DescriptorType::eUniformBuffer, {}, noiseInfo),
         vk::WriteDescriptorSet(
             *descSet, 3, 0, vk::DescriptorType::eUniformBuffer, {}, kernelInfo),
+        vk::WriteDescriptorSet(*descSet, 4, 0,
+                               vk::DescriptorType::eCombinedImageSampler,
+                               materialInfo),
     };
     ctx->GetDevice().updateDescriptorSets(writes, nullptr);
 
@@ -1305,8 +1314,11 @@ public:
     if (!hudOverlayPass.IsInitialized())
       initHUDOverlay();
 
+    FramebufferAttachment *materialAtt =
+        screenDrawer.GetColorAttachment(imgIdx, GBUFFER_MATERIAL_INDEX);
     bool doSSAO = (config::EnableSSAO || config::ShowSSAO) &&
-                  ssaoPass.IsInitialized() && depthAtt && normalAtt;
+                  ssaoPass.IsInitialized() && depthAtt && normalAtt &&
+                  materialAtt;
     bool doDoF = config::EnableDoF && dofPass.IsInitialized() && depthAtt &&
                  resolve3DPass.GetAccumulationAttachment(imgIdx);
 
@@ -1334,7 +1346,8 @@ public:
 
       if (doSSAO && (viewMode == 0 || viewMode == 6))
         ssaoPass.Draw(cmdBuf, imgIdx, depthAtt->GetImageView(),
-                      normalAtt->GetImageView(), viewMode == 6);
+                      normalAtt->GetImageView(), materialAtt->GetImageView(),
+                      viewMode == 6);
 
       resolve3DPass.Draw(cmdBuf, imgIdx, viewMode);
 
