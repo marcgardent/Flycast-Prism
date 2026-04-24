@@ -448,6 +448,10 @@ option(BUILD_SHARED_LIBS "Build shared library" OFF)
 add_subdirectory(core/deps/glm)
 target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
 
+add_subdirectory(core/deps/exprtk)
+target_link_libraries(${PROJECT_NAME} PRIVATE exprtk::exprtk)
+
+
 if(USE_VULKAN)
 	if(USE_HOST_GLSLANG)
 		find_package(glslang REQUIRED)
