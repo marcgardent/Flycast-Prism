@@ -271,14 +271,14 @@ public:
 
   vk::Pipeline GetPipeline(u32 listType, bool sortTriangles,
                            const PolyParam &pp, int gpuPalette, bool dithering,
-                           u32 polyRoutingActions, bool metadata) {
+                           bool isHud, bool metadata) {
     u64 pipehash =
-        hash(listType, sortTriangles, &pp, gpuPalette, dithering, polyRoutingActions, metadata);
+        hash(listType, sortTriangles, &pp, gpuPalette, dithering, isHud, metadata);
     const auto &pipeline = pipelines.find(pipehash);
     if (pipeline != pipelines.end())
       return pipeline->second.get();
 
-    CreatePipeline(listType, sortTriangles, pp, gpuPalette, dithering, polyRoutingActions, metadata);
+    CreatePipeline(listType, sortTriangles, pp, gpuPalette, dithering, isHud, metadata);
     return *pipelines[pipehash];
   }
 
@@ -320,7 +320,7 @@ private:
   void CreateDepthPassPipeline(int cullMode, bool naomi2);
 
   u64 hash(u32 listType, bool sortTriangles, const PolyParam *pp,
-           int gpuPalette, bool dithering, u32 actions, bool metadata) const {
+           int gpuPalette, bool dithering, bool isHud, bool metadata) const {
     u64 hash = pp->pcw.Gouraud | (pp->pcw.Offset << 1) |
                (pp->pcw.Texture << 2) | (pp->pcw.Shadow << 3) |
                (((pp->tileclip >> 28) == 3) << 4);
@@ -340,15 +340,9 @@ private:
     hash |= (u64)(pp->tcw.PixelFmt == PixelBumpMap) << 31;
     hash |= (u64)dithering << 32;
     
-    // PolyRoutingManager actions
-    // Action_ToHud is bit 0, mapped to bit 33 in hash (legacy isHud)
-    if (actions & rend::Action_ToHud) hash |= (u64)1 << 33;
-    if (actions & rend::Action_AvoidAlbedo)   hash |= (u64)1 << 34;
-    if (actions & rend::Action_AvoidNormal)   hash |= (u64)1 << 35;
-    if (actions & rend::Action_AvoidMaterial) hash |= (u64)1 << 36;
-    if (actions & rend::Action_AvoidMotion)   hash |= (u64)1 << 37;
-    if (actions & rend::Action_AvoidDepth)    hash |= (u64)1 << 38;
-    if (metadata)                             hash |= (u64)1 << 39;
+    // isHud is bit 33 in hash
+    if (isHud) hash |= (u64)1 << 33;
+    if (metadata) hash |= (u64)1 << 39;
 
     return hash;
   }
@@ -413,7 +407,7 @@ private:
   }
 
   void CreatePipeline(u32 listType, bool sortTriangles, const PolyParam &pp,
-                      int gpuPalette, bool dithering, u32 polyRoutingAction, bool metadata);
+                      int gpuPalette, bool dithering, bool isHud, bool metadata);
 
   std::map<u64, vk::UniquePipeline> pipelines;
   std::map<u32, vk::UniquePipeline> modVolPipelines;

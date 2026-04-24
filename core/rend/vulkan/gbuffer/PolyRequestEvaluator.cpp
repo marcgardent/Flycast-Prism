@@ -27,6 +27,15 @@ PolyRequestEvaluator::PolyRequestEvaluator()
     symbol_table.add_variable("PC", pc);
     symbol_table.add_variable("MID", mid);
 
+    // Lowercase aliases
+    symbol_table.add_variable("wp_x", wp_x);
+    symbol_table.add_variable("wp_y", wp_y);
+    symbol_table.add_variable("wp_z", wp_z);
+    symbol_table.add_variable("z", z);
+    symbol_table.add_variable("texture_hash", th);
+    symbol_table.add_variable("poly_count", pc);
+    symbol_table.add_variable("material_id", mid);
+
     symbol_table.add_variable("MID_OPAQUE", mid_opaque);
     symbol_table.add_variable("MID_OPAQUE_MOD", mid_opaque_mod);
     symbol_table.add_variable("MID_TRANSLUCENT", mid_translucent);

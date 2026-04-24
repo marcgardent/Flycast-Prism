@@ -15,21 +15,21 @@ TEST_F(GbufferContextTest, UnifiedLoad) {
       "hud_zones": [
         {
           "name": "zone_1",
-          "mapping": { "x": 10, "y": 10, "w": 100, "h": 50, "anchor": "SCREEN_TOP_LEFT" }
+          "w": 100, "h": 50,
+          "source": { "x": 0, "y": 0, "anchor": "SCREEN_TOP_LEFT" },
+          "mapping": { "x": 10, "y": 10, "anchor": "SCREEN_TOP_LEFT" }
         }
       ],
-      "routing": [
-        {
-          "match": { "texHash": "0xABC" },
-          "actions": ["toHud"]
-        }
-      ]
+      "stencils": {
+        "HUD": "texture_hash == 2748"
+      }
     })";
 
     std::ofstream ofs("gbuffer_configuration.json");
     ofs << json;
     ofs.close();
 
+    context.UpdateViewport(640, 480);
     context.LoadConfig("gbuffer_configuration.json");
 
     // Verify HudCompositor
@@ -38,9 +38,9 @@ TEST_F(GbufferContextTest, UnifiedLoad) {
     EXPECT_EQ(transforms[0].name, "zone_1");
 
     // Verify PolyRoutingManager
-    PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 0, 0xABC};
-    u32 actions = context.GetRoutingManager().GetActions(params);
-    EXPECT_TRUE(PolyRoutingManager::IsToHud(actions));
+    PolyData data = {};
+    data.texture_hash = 0xABC;
+    EXPECT_TRUE(context.GetRoutingManager().IsHud(data));
 }
 
 TEST_F(GbufferContextTest, ViewportUpdate) {
@@ -49,7 +49,9 @@ TEST_F(GbufferContextTest, ViewportUpdate) {
       "hud_zones": [
         {
           "name": "zone_1",
-          "mapping": { "x": 0, "y": 0, "w": 640, "h": 480, "anchor": "SCREEN_TOP_LEFT" }
+          "w": 640, "h": 480,
+          "source": { "x": 0, "y": 0, "anchor": "SCREEN_TOP_LEFT" },
+          "mapping": { "x": 0, "y": 0, "anchor": "SCREEN_TOP_LEFT" }
         }
       ]
     })";

@@ -319,8 +319,7 @@ void PipelineManager::CreateDepthPassPipeline(int cullMode, bool naomi2) {
 
 void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
                                      const PolyParam &pp, int gpuPalette,
-                                     bool dithering, u32 polyRoutingAction, bool metadata) {
-  bool isHUD = polyRoutingAction & rend::Action_ToHud;
+                                     bool dithering, bool isHud, bool metadata) {
   vk::PipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo =
       GetMainVertexInputStateCreateInfo(true, pp.isNaomi2());
 
@@ -405,7 +404,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
     stencilOpState =
         vk::StencilOpState(vk::StencilOp::eKeep, vk::StencilOp::eKeep,
                            vk::StencilOp::eKeep, vk::CompareOp::eNever);
-  if (polyRoutingAction & rend::Action_ToHud)
+  if (isHud)
     depthWriteEnable = false;
 
   vk::PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo(
@@ -445,7 +444,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
   if (config::RendererType == RenderType::Vulkan_GBuffer) {
     // First attachment (Albedo) uses standard blending, write RGBA (unless HUD or AvoidAlbedo)
     vk::PipelineColorBlendAttachmentState albedoAttachment = pipelineColorBlendAttachmentState;
-    if (isHUD)
+    if (isHud)
         albedoAttachment.colorWriteMask = (vk::ColorComponentFlags)0;
     colorBlendAttachments.push_back(albedoAttachment);
 
@@ -453,19 +452,19 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        (isHUD) ? (vk::ColorComponentFlags)0 : colorComponentFlags));
+        (isHud) ? (vk::ColorComponentFlags)0 : colorComponentFlags));
 
     // Third attachment (Material ID) uses no blending, write R only
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        (isHUD) ? (vk::ColorComponentFlags)0 : vk::ColorComponentFlagBits::eR));
+        (isHud) ? (vk::ColorComponentFlags)0 : vk::ColorComponentFlagBits::eR));
 
     // Fourth attachment (Motion/Velocity) RG only, no blending
     colorBlendAttachments.push_back(vk::PipelineColorBlendAttachmentState(
         false, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
         vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
-        (isHUD) ? (vk::ColorComponentFlags)0
+        (isHud) ? (vk::ColorComponentFlags)0
               : (vk::ColorComponentFlagBits::eR |
                  vk::ColorComponentFlagBits::eG)));
 
@@ -475,7 +474,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
         vk::BlendOp::eAdd, vk::BlendFactor::eOne,
         vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd,
         colorComponentFlags);
-    if (!isHUD)
+    if (!isHud)
       hudAttachment.colorWriteMask = (vk::ColorComponentFlags)0;
     colorBlendAttachments.push_back(hudAttachment);
 
@@ -534,7 +533,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
   params.dithering = dithering;
   params.isTranslucent = listType == ListType_Translucent;
   params.gbuffer = config::RendererType == RenderType::Vulkan_GBuffer;
-  params.isHud = isHUD;
+  params.isHud = isHud;
   params.metadata = metadata;
   vk::ShaderModule fragment_module = shaderManager->GetFragmentShader(params);
 
@@ -562,8 +561,7 @@ void PipelineManager::CreatePipeline(u32 listType, bool sortTriangles,
       renderPass                             // renderPass
   );
 
-  pipelines[hash(listType, sortTriangles, &pp, gpuPalette, dithering,
-                 polyRoutingAction, metadata)] =
+  pipelines[hash(listType, sortTriangles, &pp, gpuPalette, dithering, isHud, metadata)] =
       GetContext()
           ->GetDevice()
           .createGraphicsPipelineUnique(GetContext()->GetPipelineCache(),

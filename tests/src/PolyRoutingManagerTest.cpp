@@ -16,137 +16,56 @@ protected:
     PolyRoutingManager manager;
 };
 
-TEST_F(PolyRoutingManagerTest, BasicMatching) {
-    CreateJson(R"({
-"routing": [
-  {
-    "match": { "texHash": "0xABCDEF" },
-    "actions": ["toHud"]
-  },
-  {
-    "match": { "x": 10.0, "y": 20.0, "z": 0.5 },
-    "actions": ["avoidDepth", "avoidNormal"]
-  }
-]
-})");
+TEST_F(PolyRoutingManagerTest, BasicStencils) {
+    CreateJson(R"raw({
+"stencils": {
+    "HUD": "texture_hash == 11259375",
+    "SKY": "z > 1000",
+    "SCENE": "1"
+}
+})raw");
 
-    PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 0, 0xABCDEF};
-    u32 actions = manager.GetActions(params);
-    EXPECT_TRUE(PolyRoutingManager::IsToHud(actions));
-    EXPECT_FALSE(PolyRoutingManager::IsAvoidDepth(actions));
+    PolyData data = {};
+    data.texture_hash = 0xABCDEF; // 11259375
+    EXPECT_TRUE(manager.IsHud(data));
+    EXPECT_FALSE(manager.IsSky(data));
 
-    params = {10.0f, 20.0f, 0.5f, 0, 0};
-    actions = manager.GetActions(params);
-    EXPECT_TRUE(PolyRoutingManager::IsAvoidDepth(actions));
-    EXPECT_TRUE(PolyRoutingManager::IsAvoidNormal(actions));
-    EXPECT_FALSE(PolyRoutingManager::IsToHud(actions));
+    data = {};
+    data.z = 1001;
+    EXPECT_FALSE(manager.IsHud(data));
+    EXPECT_TRUE(manager.IsSky(data));
+    EXPECT_TRUE(manager.IsScene(data));
 }
 
-TEST_F(PolyRoutingManagerTest, OverlappingRules) {
-    CreateJson(R"({
-"routing": [
-  {
-    "match": { "texHash": "0x123" },
-    "actions": ["avoidAlbedo"]
-  },
-  {
-    "match": { "texHash": "0x123" },
-    "actions": ["avoidNormal"]
-  }
-]
-})");
+TEST_F(PolyRoutingManagerTest, IsCloseFunction) {
+    CreateJson(R"raw({
+"stencils": {
+    "HUD": "isClose(wp_x, 10.0, abs_tol=0.01)"
+}
+})raw");
 
-    PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 0, 0x123};
-    u32 actions = manager.GetActions(params);
-    EXPECT_TRUE(PolyRoutingManager::IsAvoidAlbedo(actions));
-    EXPECT_TRUE(PolyRoutingManager::IsAvoidNormal(actions));
+    PolyData data = {};
+    data.wp_x = 10.005;
+    EXPECT_TRUE(manager.IsHud(data));
+
+    data.wp_x = 10.05;
+    EXPECT_FALSE(manager.IsHud(data));
 }
 
-TEST_F(PolyRoutingManagerTest, CoordinateTolerance) {
-    CreateJson(R"({
-"routing": [
-  {
-    "match": { "x": 10.0 },
-    "action": "avoidDepth"
-  }
-]
-})");
-
-    // Exact match
-    PolyRoutingManager::PolyMatchParams params = {10.0f, 0, 0, 0, 0};
-    EXPECT_TRUE(PolyRoutingManager::IsAvoidDepth(manager.GetActions(params)));
-
-    // Within tolerance (0.001)
-    params.x = 10.0005f;
-    EXPECT_TRUE(PolyRoutingManager::IsAvoidDepth(manager.GetActions(params)));
-
-    // Outside tolerance
-    params.x = 10.002f;
-    EXPECT_FALSE(PolyRoutingManager::IsAvoidDepth(manager.GetActions(params)));
+TEST_F(PolyRoutingManagerTest, MalformedExpressions) {
+    CreateJson(R"raw({
+"stencils": {
+    "HUD": "invalid expression @#$%"
+}
+})raw");
+    PolyData data = {};
+    EXPECT_FALSE(manager.IsHud(data));
 }
 
-TEST_F(PolyRoutingManagerTest, HudPassPersistence) {
-    CreateJson(R"({
-"routing": [
-  {
-    "match": { "texHash": "0x123456" },
-    "actions": ["startHudPass"]
-  }
-]
-})");
-
-    PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 0, 0};
-    EXPECT_FALSE(PolyRoutingManager::IsToHud(manager.GetActions(params)));
-
-    // Trigger HUD pass
-    params.texHash = 0x123456;
-    u32 actions = manager.GetActions(params);
-    EXPECT_TRUE(PolyRoutingManager::IsStartHudPass(actions));
-    EXPECT_TRUE(PolyRoutingManager::IsToHud(actions));
-
-    // Persists even without match
-    params.texHash = 0;
-    EXPECT_TRUE(PolyRoutingManager::IsToHud(manager.GetActions(params)));
-
-    // Resets on NewFrame
-    manager.NewFrame();
-    EXPECT_FALSE(PolyRoutingManager::IsToHud(manager.GetActions(params)));
-}
-
-TEST_F(PolyRoutingManagerTest, MalformedJson) {
-    // Missing 'routing' key
-    CreateJson(R"({
-"other_key": [
-  { "match": { "texHash": "0x1" }, "action": "toHud" }
-]
-})");
-    PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 0, 0x1};
-    EXPECT_FALSE(PolyRoutingManager::IsToHud(manager.GetActions(params)));
-
-    // Invalid action string
-    CreateJson(R"({
-"routing": [
-  { "match": { "texHash": "0x2" }, "action": "garbageAction" }
-]
-})");
-    params.texHash = 0x2;
-    EXPECT_EQ(manager.GetActions(params), Action_None);
-}
-
-TEST_F(PolyRoutingManagerTest, MultiActionList) {
-    CreateJson(R"({
-"routing": [
-  {
-    "match": { "count": 4 },
-    "actions": ["avoidMotion", "avoidMaterial", "avoidNormal"]
-  }
-]
-})");
-
-    PolyRoutingManager::PolyMatchParams params = {0, 0, 0, 4, 0};
-    u32 actions = manager.GetActions(params);
-    EXPECT_TRUE(PolyRoutingManager::IsAvoidMotion(actions));
-    EXPECT_TRUE(PolyRoutingManager::IsAvoidMaterial(actions));
-    EXPECT_TRUE(PolyRoutingManager::IsAvoidNormal(actions));
-    EXPECT_FALSE(PolyRoutingManager::IsAvoidAlbedo(actions));
+TEST_F(PolyRoutingManagerTest, MissingStencils) {
+    CreateJson(R"raw({
+"other_key": {}
+})raw");
+    PolyData data = {};
+    EXPECT_FALSE(manager.IsHud(data));
 }

@@ -215,8 +215,13 @@ void Drawer::DrawPoly(const vk::CommandBuffer &cmdBuffer, u32 listType,
 
   const Vertex &v = rendContext->verts[rendContext->idx[first]];
   u32 texHash = poly.texture ? poly.texture->texture_hash : 0;
-  u32 polyRoutingActions = gbufferContext.GetRoutingManager().GetActions({v.x, v.y, v.z, (int)poly.count, texHash});
 
+  PolyData polyData = { (double)v.x, (double)v.y, (double)v.z, (double)v.z, texHash, (u32)poly.count, poly.tcw.full };
+  bool isHud = gbufferContext.GetRoutingManager().IsHud(polyData);
+
+  vk::Pipeline pipeline = pipelineManager->GetPipeline(
+      listType, sortTriangles, poly, gpuPalette, dithering, isHud,
+      config::CaptureMetadataBuffers);
 
   // Velocity for motion buffer: delta centroid N-1 -> N (TCW hash lookup)
   glm::vec2 velocity(0.f);
@@ -253,9 +258,6 @@ void Drawer::DrawPoly(const vk::CommandBuffer &cmdBuffer, u32 listType,
                                    pushConstants);
   }
 
-  vk::Pipeline pipeline = pipelineManager->GetPipeline(
-      listType, sortTriangles, poly, gpuPalette, dithering, polyRoutingActions,
-      config::CaptureMetadataBuffers);
   cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
   if (poly.pcw.Texture || poly.isNaomi2()) {
     vk::DeviceSize offset = 0;

@@ -4,7 +4,18 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#ifdef verify
+#pragma push_macro("verify")
+#undef verify
+#define RESTORE_VERIFY
+#endif
+
 #include "exprtk.hpp"
+
+#ifdef RESTORE_VERIFY
+#pragma pop_macro("verify")
+#undef RESTORE_VERIFY
+#endif
 
 // Structure de données en entrée
 struct PolyData {
