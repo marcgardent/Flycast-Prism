@@ -34,6 +34,7 @@
 static bool mainui_enabled;
 u32 MainFrameCount;
 static bool forceReinit;
+static bool reloadRenderer;
 
 bool mainui_rend_frame()
 {
@@ -116,7 +117,7 @@ void mainui_loop(bool forceStart)
 		if (imguiDriver == nullptr)
 			forceReinit = true;
 
-		if (config::RendererType != currentRenderer || forceReinit)
+		if (config::RendererType != currentRenderer || forceReinit || reloadRenderer)
 		{
 			mainui_term();
 			int prevApi = isOpenGL(currentRenderer) ? 0 : isVulkan(currentRenderer) ? 1 : currentRenderer == RenderType::DirectX9 ? 2 : 3;
@@ -143,6 +144,7 @@ void mainui_loop(bool forceStart)
 			}
 			mainui_init();
 			forceReinit = false;
+			reloadRenderer = false;
 			currentRenderer = config::RendererType;
 		}
 
@@ -165,4 +167,9 @@ void mainui_stop()
 void mainui_reinit()
 {
 	forceReinit = true;
+}
+
+void mainui_reload_renderer()
+{
+	reloadRenderer = true;
 }

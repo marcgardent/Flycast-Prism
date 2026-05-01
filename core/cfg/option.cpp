@@ -65,6 +65,7 @@ Option<bool> VmuSound("VmuSound", false, "audio");
 // Rendering
 
 RendererOption RendererType;
+OptionString PluginPath("pvr.plugin_path", "libflycast_dummy_plugin.so");
 Option<bool> UseMipmaps("rend.UseMipmaps", true);
 Option<bool> Widescreen("rend.WideScreen");
 Option<bool> SuperWidescreen("rend.SuperWideScreen");

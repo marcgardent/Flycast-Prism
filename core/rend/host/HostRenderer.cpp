@@ -1,11 +1,19 @@
 #include "HostRenderer.h"
 #include "log/LogManager.h"
+#include "cfg/option.h"
+#include "hw/pvr/ta.h"
 #include <iostream>
+#include "wsi/context.h"
 
 #if defined(_WIN32)
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#endif
+
+#if defined(USE_SDL)
+#include <SDL.h>
+#include <SDL_syswm.h>
 #endif
 
 Renderer* rend_HostRenderer() {
@@ -23,8 +31,8 @@ HostRenderer::~HostRenderer() {
 
 bool HostRenderer::Init() {
     if (!loadPlugin()) {
-        ERROR_LOG(RENDERER, "Failed to load plugin renderer.");
-        return false;
+        ERROR_LOG(RENDERER, "Failed to load plugin renderer. Running as norend fallback.");
+        return true;
     }
 
     FlycastWindowHandle windowHandle = getWindowHandle();
@@ -44,6 +52,8 @@ void HostRenderer::Term() {
 
 void HostRenderer::Process(TA_context *ctx) {
     if (!vtable || !vtable->process) return;
+
+    ta_parse(ctx, true);
 
     PluginGeometryData data;
     data.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
@@ -83,17 +93,26 @@ bool HostRenderer::Present() {
 }
 
 bool HostRenderer::loadPlugin() {
+    std::string pluginPath = config::PluginPath.get();
+    if (pluginPath.empty()) {
 #if defined(_WIN32)
-    plugin_handle = LoadLibrary("flycast_dummy_plugin.dll");
+        pluginPath = "flycast_dummy_plugin.dll";
+#else
+        pluginPath = "libflycast_dummy_plugin.so";
+#endif
+    }
+
+#if defined(_WIN32)
+    plugin_handle = LoadLibraryA(pluginPath.c_str());
     if (!plugin_handle) {
-        ERROR_LOG(RENDERER, "Could not load flycast_dummy_plugin.dll");
+        ERROR_LOG(RENDERER, "Could not load %s", pluginPath.c_str());
         return false;
     }
     auto get_vtable = (const FlycastPluginVTable* (*)())GetProcAddress((HMODULE)plugin_handle, "flycast_plugin_get_vtable");
 #else
-    plugin_handle = dlopen("libflycast_dummy_plugin.so", RTLD_LAZY | RTLD_LOCAL);
+    plugin_handle = dlopen(pluginPath.c_str(), RTLD_LAZY | RTLD_LOCAL);
     if (!plugin_handle) {
-        ERROR_LOG(RENDERER, "Could not load libflycast_dummy_plugin.so: %s", dlerror());
+        ERROR_LOG(RENDERER, "Could not load %s: %s", pluginPath.c_str(), dlerror());
         return false;
     }
     auto get_vtable = (const FlycastPluginVTable* (*)())dlsym(plugin_handle, "flycast_plugin_get_vtable");
@@ -129,16 +148,39 @@ void HostRenderer::unloadPlugin() {
 
 FlycastWindowHandle HostRenderer::getWindowHandle() {
     FlycastWindowHandle handle = {};
-    // TODO: Fetch SDL_Window and use SDL_GetWindowWMInfo to populate the handle
-    // For now we set it to Wayland/X11 or whatever
+#if defined(USE_SDL)
+    void* sdl_win = nullptr;
+    void* unused = nullptr;
+    if (GraphicsContext::Instance()) {
+        GraphicsContext::Instance()->getWindow(&sdl_win, &unused);
+    }
+
+    if (sdl_win) {
+        SDL_SysWMinfo wmInfo;
+        SDL_VERSION(&wmInfo.version);
+        if (SDL_GetWindowWMInfo((SDL_Window*)sdl_win, &wmInfo)) {
 #if defined(_WIN32)
-    handle.os_type = FLYCAST_OS_WINDOWS;
+            handle.os_type = FLYCAST_OS_WINDOWS;
+            handle.window = (void*)wmInfo.info.win.window;
 #elif defined(__APPLE__)
-    handle.os_type = FLYCAST_OS_MACOS;
+            handle.os_type = FLYCAST_OS_MACOS;
+            handle.window = (void*)wmInfo.info.cocoa.window;
 #elif defined(__ANDROID__)
-    handle.os_type = FLYCAST_OS_ANDROID;
+            handle.os_type = FLYCAST_OS_ANDROID;
+            handle.window = (void*)wmInfo.info.android.window;
 #else
-    handle.os_type = FLYCAST_OS_X11; // Fallback
+            if (wmInfo.subsystem == SDL_SYSWM_X11) {
+                handle.os_type = FLYCAST_OS_X11;
+                handle.display = (void*)wmInfo.info.x11.display;
+                handle.window = (void*)wmInfo.info.x11.window;
+            } else if (wmInfo.subsystem == SDL_SYSWM_WAYLAND) {
+                handle.os_type = FLYCAST_OS_WAYLAND;
+                handle.display = (void*)wmInfo.info.wl.display;
+                handle.window = (void*)wmInfo.info.wl.surface;
+            }
+#endif
+        }
+    }
 #endif
     return handle;
 }

@@ -102,11 +102,11 @@ enum class RenderType {
 	DirectX9 = 1,
 	DirectX11 = 2,
 	DirectX11_OIT = 6,
-	Host = 8,
+	PluginEngine = 8,
 };
 
 static inline bool isOpenGL(RenderType renderType)  {
-	return renderType == RenderType::OpenGL || renderType == RenderType::OpenGL_OIT;
+	return renderType == RenderType::OpenGL || renderType == RenderType::OpenGL_OIT || renderType == RenderType::PluginEngine;
 }
 static inline bool isVulkan(RenderType renderType) {
 	return renderType == RenderType::Vulkan || renderType == RenderType::Vulkan_OIT;

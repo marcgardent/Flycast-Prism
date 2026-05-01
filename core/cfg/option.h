@@ -431,6 +431,7 @@ public:
 	}
 };
 extern RendererOption RendererType;
+extern OptionString PluginPath;
 extern Option<bool> UseMipmaps;
 extern Option<bool> Widescreen;
 extern Option<bool> SuperWidescreen;

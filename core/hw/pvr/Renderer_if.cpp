@@ -322,7 +322,7 @@ static void rend_create_renderer()
 		renderer = rend_OITDirectX11();
 		break;
 #endif
-	case RenderType::Host:
+	case RenderType::PluginEngine:
 		renderer = rend_HostRenderer();
 		break;
 	}

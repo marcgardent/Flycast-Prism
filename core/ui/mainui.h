@@ -28,3 +28,4 @@ void mainui_loop(bool forceStart = true);
 void mainui_start();
 void mainui_stop();
 void mainui_reinit();
+void mainui_reload_renderer();

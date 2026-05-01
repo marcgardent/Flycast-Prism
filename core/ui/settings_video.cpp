@@ -19,12 +19,14 @@
 #include "settings.h"
 #include "gui.h"
 #include "wsi/context.h"
+#include "mainui.h"
 
 enum RenderAPI {
 	OpenGL,
 	Vulkan,
 	DirectX9,
-	DirectX11
+	DirectX11,
+	PluginEngine
 };
 
 void gui_settings_video()
@@ -62,6 +64,10 @@ void gui_settings_video()
 		renderApi = DirectX11;
 		perPixel = true;
 		break;
+	case RenderType::PluginEngine:
+		renderApi = PluginEngine;
+		perPixel = false;
+		break;
 	}
 
 	constexpr int apiCount = 0
@@ -77,6 +83,7 @@ void gui_settings_video()
 		#ifdef USE_DX11
 			+ 1
 		#endif
+			+ 1 // PluginEngine
 			;
 
     float innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
@@ -110,8 +117,25 @@ void gui_settings_video()
 			ImGui::RadioButton("DirectX 11", &renderApi, DirectX11);
 			ImGui::NextColumn();
 #endif
+			ImGui::RadioButton("Plugin Engine", &renderApi, PluginEngine);
+			ImGui::NextColumn();
+
 			ImGui::Columns(1, nullptr, false);
     	}
+
+		if (renderApi == PluginEngine)
+		{
+			static char pluginPathBuf[512];
+			strncpy(pluginPathBuf, config::PluginPath.get().c_str(), sizeof(pluginPathBuf) - 1);
+			if (ImGui::InputText(T("Plugin Library Path (.so/.dll)"), pluginPathBuf, sizeof(pluginPathBuf)))
+			{
+				config::PluginPath = pluginPathBuf;
+			}
+			if (ImGui::Button(T("Reload Plugin")))
+			{
+				mainui_reload_renderer();
+			}
+		}
     }
     header(T("Transparent Sorting"));
     {
@@ -432,5 +456,8 @@ void gui_settings_video()
     case DirectX11:
     	config::RendererType = perPixel ? RenderType::DirectX11_OIT : RenderType::DirectX11;
     	break;
+    case PluginEngine:
+        config::RendererType = RenderType::PluginEngine;
+        break;
     }
 }
