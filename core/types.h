@@ -102,6 +102,7 @@ enum class RenderType {
 	DirectX9 = 1,
 	DirectX11 = 2,
 	DirectX11_OIT = 6,
+	Host = 8,
 };
 
 static inline bool isOpenGL(RenderType renderType)  {

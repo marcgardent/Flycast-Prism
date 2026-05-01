@@ -281,6 +281,7 @@ Renderer* rend_OITVulkan();
 Renderer* rend_DirectX9();
 Renderer* rend_DirectX11();
 Renderer* rend_OITDirectX11();
+Renderer* rend_HostRenderer();
 
 static void rend_create_renderer()
 {
@@ -321,6 +322,9 @@ static void rend_create_renderer()
 		renderer = rend_OITDirectX11();
 		break;
 #endif
+	case RenderType::Host:
+		renderer = rend_HostRenderer();
+		break;
 	}
 #endif
 }
