@@ -2,6 +2,7 @@
 #include "log/LogManager.h"
 #include "cfg/option.h"
 #include "hw/pvr/ta.h"
+#include "hw/pvr/pvr_regs.h"
 #include <iostream>
 #include "wsi/context.h"
 
@@ -125,6 +126,15 @@ void HostRenderer::Process(TA_context *ctx) {
             data.depth_func = MapDepthFunc(poly.isp.DepthMode);
             data.depth_write = !poly.isp.ZWriteDis;
             data.offset_enable = poly.pcw.Offset;
+
+            // Fog state (API v9)
+            data.fog_mode = config::Fog ? poly.tsp.FogCtrl : 2;
+            data.fog_color = FOG_COL_RAM.full;
+            data.fog_vertex_color = FOG_COL_VERT.full;
+            data.fog_density = FOG_DENSITY.get();
+            data.fog_clamp_min = ctx->rend.fog_clamp_min.full;
+            data.fog_clamp_max = ctx->rend.fog_clamp_max.full;
+            data.fog_table = FOG_TABLE;
 
             vtable->process(&data);
         }

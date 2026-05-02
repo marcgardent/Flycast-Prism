@@ -13,6 +13,7 @@
 #include "cases/TestTEX01.h"
 #include "cases/TestTRN01.h"
 #include "cases/TestSPE01.h"
+#include "cases/TestSPE02.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -49,6 +50,7 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestTEX01>());
     mgr.registerTest(std::make_unique<TestTRN01>());
     mgr.registerTest(std::make_unique<TestSPE01>());
+    mgr.registerTest(std::make_unique<TestSPE02>());
 }
 
 void printHelp(const char* progName) {
@@ -299,6 +301,15 @@ int main(int argc, char** argv) {
                 geom.depth_func = batch.depthFunc;
                 geom.depth_write = batch.depthWrite;
                 geom.offset_enable = batch.offsetEnable;
+
+                // Fog (SPE-02)
+                geom.fog_mode = batch.fogMode;
+                geom.fog_color = batch.fogColor;
+                geom.fog_vertex_color = batch.fogVertexColor;
+                geom.fog_density = batch.fogDensity;
+                geom.fog_clamp_min = batch.fogClampMin;
+                geom.fog_clamp_max = batch.fogClampMax;
+                geom.fog_table = batch.fogTable.empty() ? nullptr : batch.fogTable.data();
 
                 if (vtable->process) {
                     vtable->process(&geom);

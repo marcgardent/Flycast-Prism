@@ -139,6 +139,15 @@ typedef struct {
 
     // Specular / Offset Color (Added in v8)
     bool               offset_enable;
+
+    // Fog state (Added in v9)
+    uint32_t           fog_mode;         // 0: Table, 1: Vertex, 2: None, 3: Table 2
+    uint32_t           fog_color;        // ARGB8888
+    uint32_t           fog_vertex_color; // ARGB8888
+    float              fog_density;      // From FOG_DENSITY register
+    uint32_t           fog_clamp_min;    // ARGB8888
+    uint32_t           fog_clamp_max;    // ARGB8888
+    const uint32_t*    fog_table;        // 128 entries (32-bit each)
 } PluginGeometryData;
 
 /**
@@ -190,7 +199,7 @@ typedef struct {
 // PLUGIN EXPORTED INTERFACE
 // ============================================================================
 
-#define FLYCAST_PLUGIN_API_VERSION 8
+#define FLYCAST_PLUGIN_API_VERSION 9
 
 /**
  * Function table that the Rust/C++ plugin MUST implement.

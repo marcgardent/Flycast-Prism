@@ -113,6 +113,13 @@ static void dummy_process(const PluginGeometryData* data) {
         // Vertices/Indices
         snprintf(buffer, sizeof(buffer), "    - Geometry: %zu vertices, %zu indices", data->vertex_count, data->index_count);
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+
+        // Fog (Added in v9)
+        snprintf(buffer, sizeof(buffer), "    - Fog: mode=%u, color=0x%08X, vtx_color=0x%08X, density=%f, clamp=0x%08X..0x%08X, table=%s",
+                 data->fog_mode, data->fog_color, data->fog_vertex_color, data->fog_density, 
+                 data->fog_clamp_min, data->fog_clamp_max,
+                 data->fog_table ? "present" : "null");
+        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
     }
 }
 

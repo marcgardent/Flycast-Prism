@@ -30,6 +30,15 @@ struct DrawBatch {
 
     // Specular (SPE-01)
     bool offsetEnable = false;
+
+    // Fog (SPE-02)
+    uint32_t fogMode = 2; // NONE
+    uint32_t fogColor = 0xFFA0A0A0; // Default gray fog
+    uint32_t fogVertexColor = 0xFFFFFFFF;
+    float fogDensity = 1.0f;
+    uint32_t fogClampMin = 0x00000000;
+    uint32_t fogClampMax = 0xFFFFFFFF;
+    std::vector<uint32_t> fogTable; // 128 entries
 };
 
 struct TestData {
