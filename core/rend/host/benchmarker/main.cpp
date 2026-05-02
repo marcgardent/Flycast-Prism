@@ -2,7 +2,12 @@
 #include <SDL2/SDL_syswm.h>
 #include <iostream>
 #include <vector>
+#include <string>
+#include <algorithm>
 #include "../flycast_plugin_api.h"
+#include "TestCase.h"
+#include "TestManager.h"
+#include "tests.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -30,13 +35,61 @@ static FlycastHostInterface bench_host_if = {
     bench_log
 };
 
+void registerAllTests() {
+    auto& mgr = TestManager::instance();
+    mgr.registerTest(std::make_unique<TestGEO01>());
+    mgr.registerTest(std::make_unique<TestSHD01>());
+}
+
+void printHelp(const char* progName) {
+    std::cout << "Usage: " << progName << " <plugin_path> [options]" << std::endl;
+    std::cout << "Options:" << std::endl;
+    std::cout << "  --test <id>    Pre-select a test case (e.g., GEO-01)" << std::endl;
+    std::cout << "  --list         List available test cases" << std::endl;
+}
+
 int main(int argc, char** argv) {
+    registerAllTests();
+
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <plugin_path>" << std::endl;
+        printHelp(argv[0]);
         return 1;
     }
 
     const char* pluginPath = argv[1];
+    std::string preSelectedTestId = "";
+
+    for (int i = 2; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--test" && i + 1 < argc) {
+            preSelectedTestId = argv[++i];
+        } else if (arg == "--list") {
+            std::cout << "Available tests:" << std::endl;
+            for (auto& t : TestManager::instance().getTests()) {
+                std::cout << "  " << t->getId() << ": " << t->getName() << " - " << t->getDescription() << std::endl;
+            }
+            return 0;
+        }
+    }
+
+    TestCase* activeTest = nullptr;
+    const auto& allTests = TestManager::instance().getTests();
+    
+    if (!preSelectedTestId.empty()) {
+        activeTest = TestManager::instance().getTestById(preSelectedTestId);
+        if (!activeTest) {
+            std::cerr << "Unknown test ID: " << preSelectedTestId << std::endl;
+            return 1;
+        }
+    } else {
+        // Default to the first registered test without any user interaction
+        if (!allTests.empty()) {
+            activeTest = allTests[0].get();
+        } else {
+            std::cerr << "No tests registered!" << std::endl;
+            return 1;
+        }
+    }
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
@@ -44,8 +97,8 @@ int main(int argc, char** argv) {
     }
 
     SDL_Window* window = SDL_CreateWindow("Flycast Benchmarker",
-                                          SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                          1280, 720, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+                                           SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                           1280, 720, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     if (!window) {
         std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
         SDL_Quit();
@@ -126,7 +179,6 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    // Create a dummy non-null host handle for the benchmarker
     FlycastHostHandle benchHandle = (FlycastHostHandle)0xCAFE;
 
     if (!vtable->init(benchHandle, &winHandle, &bench_host_if)) {
@@ -143,8 +195,19 @@ int main(int argc, char** argv) {
         vtable->resize(lastW, lastH);
     }
 
+    std::cout << "Starting test: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
+    {
+        std::string title = "Flycast Benchmarker - " + activeTest->getId();
+        SDL_SetWindowTitle(window, title.c_str());
+    }
+
     bool running = true;
+    uint32_t lastTicks = SDL_GetTicks();
     while (running) {
+        uint32_t currentTicks = SDL_GetTicks();
+        float dt = (currentTicks - lastTicks) / 1000.0f;
+        lastTicks = currentTicks;
+
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
@@ -157,41 +220,41 @@ int main(int argc, char** argv) {
                 if (vtable->resize) {
                     vtable->resize(lastW, lastH);
                 }
+            } else if (event.type == SDL_KEYDOWN) {
+                size_t currentIndex = 0;
+                for (size_t i = 0; i < allTests.size(); ++i) {
+                    if (allTests[i].get() == activeTest) {
+                        currentIndex = i;
+                        break;
+                    }
+                }
+
+                if (event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_n) {
+                    currentIndex = (currentIndex + 1) % allTests.size();
+                    activeTest = allTests[currentIndex].get();
+                    std::cout << "Switched to: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
+                    std::string title = "Flycast Benchmarker - " + activeTest->getId();
+                    SDL_SetWindowTitle(window, title.c_str());
+                } else if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_p) {
+                    currentIndex = (currentIndex + allTests.size() - 1) % allTests.size();
+                    activeTest = allTests[currentIndex].get();
+                    std::cout << "Switched to: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
+                    std::string title = "Flycast Benchmarker - " + activeTest->getId();
+                    SDL_SetWindowTitle(window, title.c_str());
+                }
             }
         }
 
-        // Blue Quad
-        PluginVertex vertices[4] = {};
-        
-        // Define a quad in normalized coordinates or 640x480?
-        // Let's use something that looks like a centered quad.
-        float centerX = 320.0f;
-        float centerY = 240.0f;
-        float size = 100.0f;
+        activeTest->update(dt);
 
-        // TL
-        vertices[0].x = centerX - size; vertices[0].y = centerY - size; vertices[0].z = 0.5f;
-        // TR
-        vertices[1].x = centerX + size; vertices[1].y = centerY - size; vertices[1].z = 0.5f;
-        // BR
-        vertices[2].x = centerX + size; vertices[2].y = centerY + size; vertices[2].z = 0.5f;
-        // BL
-        vertices[3].x = centerX - size; vertices[3].y = centerY + size; vertices[3].z = 0.5f;
-
-        for (int i = 0; i < 4; ++i) {
-            vertices[i].col[0] = 0;   // R
-            vertices[i].col[1] = 0;   // G
-            vertices[i].col[2] = 255; // B
-            vertices[i].col[3] = 255; // A
-        }
-
-        uint32_t indices[6] = {0, 1, 2, 0, 2, 3};
+        TestData testData;
+        activeTest->prepare(testData);
 
         PluginGeometryData geom = {};
-        geom.vertices = vertices;
-        geom.vertex_count = 4;
-        geom.indices = indices;
-        geom.index_count = 6;
+        geom.vertices = testData.vertices.data();
+        geom.vertex_count = (uint32_t)testData.vertices.size();
+        geom.indices = testData.indices.data();
+        geom.index_count = (uint32_t)testData.indices.size();
 
         if (vtable->process) {
             vtable->process(&geom);
@@ -211,7 +274,7 @@ int main(int argc, char** argv) {
             vtable->present();
         }
 
-        SDL_Delay(16); // ~60fps
+        SDL_Delay(16);
     }
 
     if (vtable->term) {
