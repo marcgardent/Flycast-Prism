@@ -99,6 +99,19 @@ void HostRenderer::Process(TA_context *ctx) {
 
             data.cull_mode = MapCullMode(poly.isp.CullMode);
 
+            // Texture state (API v6)
+            // tex_data and palette are left null: VRAM decoding is deferred (future task).
+            // We set tex_mode so plugins can at least detect textured geometry.
+            if (poly.pcw.Texture) {
+                if (poly.tcw.PixelFmt == PixelPal8) {
+                    data.tex_mode = FLYCAST_TEX_PAL8;
+                    data.tex_width  = 8u << poly.tsp.TexU; // PVR2: TexU encodes log2(width)-3
+                    data.tex_height = 8u << poly.tsp.TexV;
+                    // tex_data / palette: nullptr (VRAM decoding not yet implemented)
+                }
+                // Other texture formats: leave tex_mode = FLYCAST_TEX_NONE (zeroized)
+            }
+
             vtable->process(&data);
         }
     };
@@ -126,7 +139,7 @@ void HostRenderer::RenderFramebuffer(const FramebufferInfo& info) {
     
     pluginInfo.width = FB_X_CLIP.max + 1;
     if (FB_W_LINESTRIDE.stride != 0)
-        pluginInfo.width = std::min(FB_W_LINESTRIDE.stride * 4, pluginInfo.width);
+        pluginInfo.width = std::min((uint32_t)FB_W_LINESTRIDE.stride * 4, pluginInfo.width);
     
     pluginInfo.height = FB_Y_CLIP.max + 1;
     if (SCALER_CTL.vscalefactor < 0x400)

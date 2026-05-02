@@ -61,12 +61,14 @@ static void dummy_process(const PluginGeometryData* data) {
     static bool last_scissor_enable = false;
     static int32_t last_sx = 0, last_sy = 0, last_sw = 0, last_sh = 0;
     static FlycastCullMode last_cull = (FlycastCullMode)-1;
+    static FlycastTexMode  last_tex  = (FlycastTexMode)-1;
 
     bool scissor_changed = (data->scissor_enable != last_scissor_enable || 
         (data->scissor_enable && (data->scissor_x != last_sx || data->scissor_y != last_sy || 
                                    data->scissor_w != last_sw || data->scissor_h != last_sh)));
     
     bool cull_changed = (data->cull_mode != last_cull);
+    bool tex_changed  = (data->tex_mode  != last_tex);
 
     if (scissor_changed) {
         last_scissor_enable = data->scissor_enable;
@@ -92,12 +94,34 @@ static void dummy_process(const PluginGeometryData* data) {
         if (host_if && host_handle) {
             const char* cull_str = "Unknown";
             switch(data->cull_mode) {
-                case FLYCAST_CULL_NONE: cull_str = "NONE"; break;
+                case FLYCAST_CULL_NONE:  cull_str = "NONE";  break;
                 case FLYCAST_CULL_FRONT: cull_str = "FRONT"; break;
-                case FLYCAST_CULL_BACK: cull_str = "BACK"; break;
+                case FLYCAST_CULL_BACK:  cull_str = "BACK";  break;
             }
             char buffer[128];
             snprintf(buffer, sizeof(buffer), "Cull Mode: %s", cull_str);
+            host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+        }
+    }
+
+    // Added in v6: texture state
+    if (tex_changed) {
+        last_tex = data->tex_mode;
+        if (host_if && host_handle) {
+            char buffer[256];
+            switch (data->tex_mode) {
+                case FLYCAST_TEX_NONE:
+                    snprintf(buffer, sizeof(buffer), "Tex Mode: NONE (vertex color)");
+                    break;
+                case FLYCAST_TEX_PAL8:
+                    snprintf(buffer, sizeof(buffer), "Tex Mode: PAL8 (%ux%u, palette=%s)",
+                             data->tex_width, data->tex_height,
+                             data->palette ? "present" : "null");
+                    break;
+                default:
+                    snprintf(buffer, sizeof(buffer), "Tex Mode: unknown (%d)", (int)data->tex_mode);
+                    break;
+            }
             host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
         }
     }
