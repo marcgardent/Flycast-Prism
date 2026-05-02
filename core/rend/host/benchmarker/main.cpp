@@ -135,6 +135,10 @@ int main(int argc, char** argv) {
     }
 
     int lastW = 0, lastH = 0;
+    SDL_GetWindowSize(window, &lastW, &lastH);
+    if (vtable->resize) {
+        vtable->resize(lastW, lastH);
+    }
 
     bool running = true;
     while (running) {
@@ -142,16 +146,14 @@ int main(int argc, char** argv) {
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
                 running = false;
-            }
-        }
-
-        int winW, winH;
-        SDL_GetWindowSize(window, &winW, &winH);
-        if (winW != lastW || winH != lastH) {
-            lastW = winW;
-            lastH = winH;
-            if (vtable->resize) {
-                vtable->resize(winW, winH);
+            } else if (event.type == SDL_WINDOWEVENT && 
+                       (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || 
+                        event.window.event == SDL_WINDOWEVENT_RESIZED)) {
+                lastW = event.window.data1;
+                lastH = event.window.data2;
+                if (vtable->resize) {
+                    vtable->resize(lastW, lastH);
+                }
             }
         }
 
