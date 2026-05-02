@@ -38,6 +38,7 @@ static FlycastHostInterface bench_host_if = {
 void registerAllTests() {
     auto& mgr = TestManager::instance();
     mgr.registerTest(std::make_unique<TestGEO01>());
+    mgr.registerTest(std::make_unique<TestGEO03>());
     mgr.registerTest(std::make_unique<TestSHD01>());
 }
 
@@ -255,6 +256,11 @@ int main(int argc, char** argv) {
         geom.vertex_count = (uint32_t)testData.vertices.size();
         geom.indices = testData.indices.data();
         geom.index_count = (uint32_t)testData.indices.size();
+        geom.scissor_enable = testData.scissorEnable;
+        geom.scissor_x = testData.scissorX;
+        geom.scissor_y = testData.scissorY;
+        geom.scissor_w = testData.scissorW;
+        geom.scissor_h = testData.scissorH;
 
         if (vtable->process) {
             vtable->process(&geom);

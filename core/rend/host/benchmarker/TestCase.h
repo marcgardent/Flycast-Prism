@@ -6,6 +6,12 @@
 struct TestData {
     std::vector<PluginVertex> vertices;
     std::vector<uint32_t> indices;
+
+    bool scissorEnable = false;
+    int32_t scissorX = 0;
+    int32_t scissorY = 0;
+    int32_t scissorW = 0;
+    int32_t scissorH = 0;
 };
 
 class TestCase {

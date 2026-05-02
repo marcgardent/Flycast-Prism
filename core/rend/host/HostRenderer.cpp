@@ -75,6 +75,12 @@ void HostRenderer::Process(TA_context *ctx) {
     data.indices = ctx->rend.idx.data();
     data.index_count = ctx->rend.idx.size();
 
+    data.scissor_enable = false; // Default to disabled for now
+    data.scissor_x = 0;
+    data.scissor_y = 0;
+    data.scissor_w = 0;
+    data.scissor_h = 0;
+
     vtable->process(&data);
 }
 

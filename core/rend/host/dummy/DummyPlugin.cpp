@@ -57,7 +57,33 @@ static void dummy_resize(uint32_t width, uint32_t height) {
     std::cout << "[DummyPlugin] Resize callback: " << width << "x" << height << std::endl;
 }
 
-static void dummy_process(const PluginGeometryData* data) {}
+static void dummy_process(const PluginGeometryData* data) {
+    static bool last_scissor_enable = false;
+    static int32_t last_sx = 0, last_sy = 0, last_sw = 0, last_sh = 0;
+
+    if (data->scissor_enable != last_scissor_enable || 
+        (data->scissor_enable && (data->scissor_x != last_sx || data->scissor_y != last_sy || 
+                                  data->scissor_w != last_sw || data->scissor_h != last_sh))) {
+        
+        last_scissor_enable = data->scissor_enable;
+        last_sx = data->scissor_x;
+        last_sy = data->scissor_y;
+        last_sw = data->scissor_w;
+        last_sh = data->scissor_h;
+
+        if (host_if && host_handle) {
+            char buffer[256];
+            if (data->scissor_enable) {
+                snprintf(buffer, sizeof(buffer), "Scissor ENABLED: %d,%d %dx%d", 
+                         data->scissor_x, data->scissor_y, data->scissor_w, data->scissor_h);
+            } else {
+                snprintf(buffer, sizeof(buffer), "Scissor DISABLED");
+            }
+            host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+        }
+    }
+}
+
 static bool dummy_render() { return true; }
 static void dummy_render_framebuffer(const PluginFramebufferInfo* info) {
     // Only log once to avoid spamming
@@ -122,4 +148,3 @@ static const FlycastPluginVTable vtable = {
 PLUGIN_EXPORT const FlycastPluginVTable* flycast_plugin_get_vtable(void) {
     return &vtable;
 }
-

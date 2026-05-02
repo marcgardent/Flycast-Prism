@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <stdbool.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -67,6 +66,13 @@ typedef struct {
 
     const uint32_t* indices;
     size_t index_count;
+
+    // Scissor / Clipping state (Added in v4)
+    bool scissor_enable;
+    int32_t scissor_x; // Supports negative values for widescreen
+    int32_t scissor_y;
+    int32_t scissor_w;
+    int32_t scissor_h;
 } PluginGeometryData;
 
 /**
@@ -118,7 +124,7 @@ typedef struct {
 // PLUGIN EXPORTED INTERFACE
 // ============================================================================
 
-#define FLYCAST_PLUGIN_API_VERSION 3
+#define FLYCAST_PLUGIN_API_VERSION 4
 
 /**
  * Function table that the Rust/C++ plugin MUST implement.
