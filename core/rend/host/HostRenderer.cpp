@@ -63,26 +63,51 @@ void HostRenderer::Term() {
     unloadPlugin();
 }
 
+static FlycastCullMode MapCullMode(u32 pvrCullMode) {
+    switch (pvrCullMode) {
+        case 0: return FLYCAST_CULL_NONE;
+        case 1: return FLYCAST_CULL_BACK;  // Culls CW (positive area)
+        case 2: return FLYCAST_CULL_FRONT; // Culls CCW (negative area)
+        default: return FLYCAST_CULL_NONE;
+    }
+}
+
 void HostRenderer::Process(TA_context *ctx) {
     if (!vtable || !vtable->process) return;
 
     ta_parse(ctx, true);
 
-    PluginGeometryData data;
-    data.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
-    data.vertex_count = ctx->rend.verts.size();
-    
-    data.indices = ctx->rend.idx.data();
-    data.index_count = ctx->rend.idx.size();
+    auto processBatches = [&](const std::vector<PolyParam>& polys) {
+        for (const auto& poly : polys) {
+            if (poly.count == 0) continue;
 
-    data.scissor_enable = false; // Default to disabled for now
-    data.scissor_x = 0;
-    data.scissor_y = 0;
-    data.scissor_w = 0;
-    data.scissor_h = 0;
+            PluginGeometryData data;
+            data.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
+            data.vertex_count = ctx->rend.verts.size();
+            
+            data.indices = &ctx->rend.idx[poly.first];
+            data.index_count = poly.count;
 
-    vtable->process(&data);
+            data.scissor_enable = true; 
+            data.scissor_x = ctx->rend.fb_X_CLIP.min;
+            data.scissor_y = ctx->rend.fb_Y_CLIP.min;
+            data.scissor_w = (int32_t)ctx->rend.fb_X_CLIP.max - (int32_t)ctx->rend.fb_X_CLIP.min + 1;
+            data.scissor_h = (int32_t)ctx->rend.fb_Y_CLIP.max - (int32_t)ctx->rend.fb_Y_CLIP.min + 1;
+
+            if (data.scissor_w < 0) data.scissor_w = 0;
+            if (data.scissor_h < 0) data.scissor_h = 0;
+
+            data.cull_mode = MapCullMode(poly.isp.CullMode);
+
+            vtable->process(&data);
+        }
+    };
+
+    processBatches(ctx->rend.global_param_op);
+    processBatches(ctx->rend.global_param_pt);
+    processBatches(ctx->rend.global_param_tr);
 }
+
 
 bool HostRenderer::Render() {
     checkResize();
@@ -98,11 +123,17 @@ void HostRenderer::RenderFramebuffer(const FramebufferInfo& info) {
     PluginFramebufferInfo pluginInfo;
     pluginInfo.fb_r_sof1 = info.fb_r_sof1;
     pluginInfo.fb_r_sof2 = info.fb_r_sof2;
-    // TODO: Calculate real resolution from info
-    pluginInfo.width = 640;
-    pluginInfo.height = 480;
+    
+    pluginInfo.width = FB_X_CLIP.max + 1;
+    if (FB_W_LINESTRIDE.stride != 0)
+        pluginInfo.width = std::min(FB_W_LINESTRIDE.stride * 4, pluginInfo.width);
+    
+    pluginInfo.height = FB_Y_CLIP.max + 1;
+    if (SCALER_CTL.vscalefactor < 0x400)
+        pluginInfo.height = pluginInfo.height * 1024 / SCALER_CTL.vscalefactor;
 
     vtable->render_framebuffer(&pluginInfo);
+
 }
 
 bool HostRenderer::Present() {
