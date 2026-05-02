@@ -16,6 +16,8 @@
 #include <SDL_syswm.h>
 #endif
 
+#include "version.h"
+
 Renderer* rend_HostRenderer() {
     return new rend::HostRenderer();
 }
@@ -23,6 +25,10 @@ Renderer* rend_HostRenderer() {
 namespace rend {
 
 HostRenderer::HostRenderer() {
+    host_interface.get_game_id = GetGameId;
+    host_interface.get_host_name = GetHostName;
+    host_interface.get_host_version = GetHostVersion;
+    host_interface.log = LogMessage;
 }
 
 HostRenderer::~HostRenderer() {
@@ -35,10 +41,17 @@ bool HostRenderer::Init() {
         return true;
     }
 
+    if (vtable) {
+        INFO_LOG(RENDERER, "Loaded plugin: %s v%s (API v%d)", 
+                 vtable->name ? vtable->name : "Unknown", 
+                 vtable->version ? vtable->version : "0.0.0",
+                 vtable->api_version);
+    }
+
     FlycastWindowHandle windowHandle = getWindowHandle();
 
     if (vtable && vtable->init) {
-        return vtable->init(reinterpret_cast<FlycastHostHandle>(this), &windowHandle);
+        return vtable->init(reinterpret_cast<FlycastHostHandle>(this), &windowHandle, &host_interface);
     }
     return false;
 }
@@ -66,6 +79,7 @@ void HostRenderer::Process(TA_context *ctx) {
 }
 
 bool HostRenderer::Render() {
+    checkResize();
     if (vtable && vtable->render) {
         return vtable->render();
     }
@@ -183,6 +197,51 @@ FlycastWindowHandle HostRenderer::getWindowHandle() {
     }
 #endif
     return handle;
+}
+
+const char* HostRenderer::GetGameId(FlycastHostHandle host) {
+    return config::Settings::instance().getGameId().c_str();
+}
+
+const char* HostRenderer::GetHostName(FlycastHostHandle host) {
+    return "Flycast";
+}
+
+const char* HostRenderer::GetHostVersion(FlycastHostHandle host) {
+    return GIT_VERSION;
+}
+
+void HostRenderer::LogMessage(FlycastHostHandle host, FlycastLogLevel level, const char* message) {
+    LogTypes::LOG_LEVELS l = LogTypes::LINFO;
+    switch (level) {
+        case FLYCAST_LOG_DEBUG: l = LogTypes::LDEBUG; break;
+        case FLYCAST_LOG_INFO:  l = LogTypes::LINFO;  break;
+        case FLYCAST_LOG_WARN:  l = LogTypes::LWARNING; break;
+        case FLYCAST_LOG_ERROR: l = LogTypes::LERROR; break;
+    }
+    GenericLog(l, LogTypes::RENDERER, __FILE__, __LINE__, "[Plugin] %s", message);
+}
+
+void HostRenderer::checkResize() {
+    if (!vtable || !vtable->resize) return;
+
+#if defined(USE_SDL)
+    void* sdl_win = nullptr;
+    void* unused = nullptr;
+    if (GraphicsContext::Instance()) {
+        GraphicsContext::Instance()->getWindow(&sdl_win, &unused);
+    }
+
+    if (sdl_win) {
+        int w, h;
+        SDL_GetWindowSize((SDL_Window*)sdl_win, &w, &h);
+        if (w != (int)last_width || h != (int)last_height) {
+            last_width = w;
+            last_height = h;
+            vtable->resize(w, h);
+        }
+    }
+#endif
 }
 
 } // namespace rend

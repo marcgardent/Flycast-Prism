@@ -16,6 +16,20 @@
 #define LIB_CLOSE(lib) dlclose(lib)
 #endif
 
+const char* bench_get_game_id(FlycastHostHandle host) { return "BENCHMARK"; }
+const char* bench_get_host_name(FlycastHostHandle host) { return "FlycastBench"; }
+const char* bench_get_host_version(FlycastHostHandle host) { return "1.0-bench"; }
+void bench_log(FlycastHostHandle host, FlycastLogLevel level, const char* message) {
+    std::cout << "[BenchLog] " << message << std::endl;
+}
+
+static FlycastHostInterface bench_host_if = {
+    bench_get_game_id,
+    bench_get_host_name,
+    bench_get_host_version,
+    bench_log
+};
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <plugin_path>" << std::endl;
@@ -77,6 +91,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    std::cout << "Loaded plugin: " << (vtable->name ? vtable->name : "Unknown") 
+              << " v" << (vtable->version ? vtable->version : "0.0.0") << std::endl;
+
     SDL_SysWMinfo wmInfo;
     SDL_VERSION(&wmInfo.version);
     if (!SDL_GetWindowWMInfo(window, &wmInfo)) {
@@ -109,7 +126,7 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    if (!vtable->init(nullptr, &winHandle)) {
+    if (!vtable->init(nullptr, &winHandle, &bench_host_if)) {
         std::cerr << "Plugin init failed" << std::endl;
         LIB_CLOSE(lib);
         SDL_DestroyWindow(window);
@@ -117,12 +134,24 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    int lastW = 0, lastH = 0;
+
     bool running = true;
     while (running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
                 running = false;
+            }
+        }
+
+        int winW, winH;
+        SDL_GetWindowSize(window, &winW, &winH);
+        if (winW != lastW || winH != lastH) {
+            lastW = winW;
+            lastH = winH;
+            if (vtable->resize) {
+                vtable->resize(winW, winH);
             }
         }
 
@@ -163,9 +192,7 @@ int main(int argc, char** argv) {
             vtable->process(&geom);
         }
 
-        int winW, winH;
-        SDL_GetWindowSize(window, &winW, &winH);
-        PluginFramebufferInfo fbInfo = { 0, 0, (uint32_t)winW, (uint32_t)winH };
+        PluginFramebufferInfo fbInfo = { 0, 0, (uint32_t)lastW, (uint32_t)lastH };
         
         if (vtable->render_framebuffer) {
             vtable->render_framebuffer(&fbInfo);

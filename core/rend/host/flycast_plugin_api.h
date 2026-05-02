@@ -80,21 +80,65 @@ typedef struct {
 } PluginFramebufferInfo;
 
 // ============================================================================
+// HOST INTERFACE (CALLBACKS)
+// ============================================================================
+
+typedef enum {
+    FLYCAST_LOG_DEBUG = 0,
+    FLYCAST_LOG_INFO  = 1,
+    FLYCAST_LOG_WARN  = 2,
+    FLYCAST_LOG_ERROR = 3
+} FlycastLogLevel;
+
+typedef struct {
+    /**
+     * Returns the current Game ID (e.g., "MK-51000").
+     * Pointer valid until next call or plugin termination.
+     */
+    const char* (*get_game_id)(FlycastHostHandle host);
+
+    /**
+     * Returns the host name ("Flycast").
+     */
+    const char* (*get_host_name)(FlycastHostHandle host);
+
+    /**
+     * Returns the host version string.
+     */
+    const char* (*get_host_version)(FlycastHostHandle host);
+
+    /**
+     * Sends a log message to the host.
+     */
+    void (*log)(FlycastHostHandle host, FlycastLogLevel level, const char* message);
+
+} FlycastHostInterface;
+
+// ============================================================================
 // PLUGIN EXPORTED INTERFACE
 // ============================================================================
 
-#define FLYCAST_PLUGIN_API_VERSION 1
+#define FLYCAST_PLUGIN_API_VERSION 3
 
 /**
- * Function table that the Rust plugin MUST implement.
+ * Function table that the Rust/C++ plugin MUST implement.
  */
 typedef struct {
     uint32_t struct_size; // For API version checking
     uint32_t api_version;
 
-    // The plugin receives window info to self-initialize
-    bool (*init)(FlycastHostHandle host, const FlycastWindowHandle* window);
+    // Plugin identification (provided by plugin)
+    const char* name;
+    const char* version;
+
+    // The plugin receives window info and host interface to self-initialize
+    bool (*init)(FlycastHostHandle host, const FlycastWindowHandle* window, const FlycastHostInterface* host_if);
     void (*term)(void);
+
+    /**
+     * Called when the host window is resized.
+     */
+    void (*resize)(uint32_t width, uint32_t height);
 
     // Equivalent to Renderer::Process
     void (*process)(const PluginGeometryData* data);

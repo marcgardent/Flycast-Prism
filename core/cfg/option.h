@@ -75,6 +75,10 @@ public:
 		this->gameId = gameId;
 	}
 
+	const std::string& getGameId() const {
+		return gameId;
+	}
+
 	bool hasPerGameConfig() const {
 		return perGameConfig;
 	}

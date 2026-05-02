@@ -22,9 +22,19 @@ private:
     bool loadPlugin();
     void unloadPlugin();
     FlycastWindowHandle getWindowHandle();
+    void checkResize();
+
+    // Host interface implementation
+    static const char* GetGameId(FlycastHostHandle host);
+    static const char* GetHostName(FlycastHostHandle host);
+    static const char* GetHostVersion(FlycastHostHandle host);
+    static void LogMessage(FlycastHostHandle host, FlycastLogLevel level, const char* message);
 
     void* plugin_handle = nullptr;
     const FlycastPluginVTable* vtable = nullptr;
+    FlycastHostInterface host_interface;
+    uint32_t last_width = 0;
+    uint32_t last_height = 0;
 };
 
 } // namespace rend
