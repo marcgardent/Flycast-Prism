@@ -8,7 +8,13 @@ if(NOT TARGET SDL2::SDL2 AND NOT TARGET SDL2::SDL2-static AND NOT SDL2_FOUND)
     find_package(SDL2 REQUIRED)
 endif()
 
-add_executable(benchmarker main.cpp TestCase.h TestManager.h tests.h)
+add_executable(benchmarker main.cpp TestCase.h TestManager.h tests.h
+        cases/TestGEO01.h
+        cases/TestGEO02.h
+        cases/TestSHD01.h
+        cases/TestTEX01.h
+        cases/common.h
+        cases/TestGEO03.h)
 
 # flycast_plugin_api.h is in the parent directory
 target_include_directories(benchmarker PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../)

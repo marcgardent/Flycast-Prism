@@ -3,11 +3,14 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <algorithm>
 #include "../flycast_plugin_api.h"
 #include "TestCase.h"
 #include "TestManager.h"
-#include "tests.h"
+#include "cases/TestGEO01.h"
+#include "cases/TestGEO02.h"
+#include "cases/TestGEO03.h"
+#include "cases/TestSHD01.h"
+#include "cases/TestTEX01.h"
 
 #if defined(_WIN32)
 #include <windows.h>
