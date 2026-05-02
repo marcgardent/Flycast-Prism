@@ -126,7 +126,10 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    if (!vtable->init(nullptr, &winHandle, &bench_host_if)) {
+    // Create a dummy non-null host handle for the benchmarker
+    FlycastHostHandle benchHandle = (FlycastHostHandle)0xCAFE;
+
+    if (!vtable->init(benchHandle, &winHandle, &bench_host_if)) {
         std::cerr << "Plugin init failed" << std::endl;
         LIB_CLOSE(lib);
         SDL_DestroyWindow(window);

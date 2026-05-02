@@ -54,6 +54,7 @@ static void dummy_resize(uint32_t width, uint32_t height) {
         snprintf(buffer, sizeof(buffer), "Window resized to %dx%d", width, height);
         host_if->log(host_handle, FLYCAST_LOG_INFO, buffer);
     }
+    std::cout << "[DummyPlugin] Resize callback: " << width << "x" << height << std::endl;
 }
 
 static void dummy_process(const PluginGeometryData* data) {}
