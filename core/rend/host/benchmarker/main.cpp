@@ -41,6 +41,7 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestGEO02>());
     mgr.registerTest(std::make_unique<TestGEO03>());
     mgr.registerTest(std::make_unique<TestSHD01>());
+    mgr.registerTest(std::make_unique<TestTEX01>());
 }
 
 void printHelp(const char* progName) {
@@ -264,6 +265,12 @@ int main(int argc, char** argv) {
             geom.scissor_w = batch.scissorW;
             geom.scissor_h = batch.scissorH;
             geom.cull_mode = batch.cullMode;
+            // Texture (TEX-01)
+            geom.tex_mode   = batch.texMode;
+            geom.tex_width  = batch.texWidth;
+            geom.tex_height = batch.texHeight;
+            geom.tex_data   = batch.texData.empty()   ? nullptr : batch.texData.data();
+            geom.palette    = batch.palette.empty()   ? nullptr : batch.palette.data();
 
             if (vtable->process) {
                 vtable->process(&geom);

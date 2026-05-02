@@ -14,6 +14,13 @@ struct DrawBatch {
     int32_t scissorH = 0;
 
     FlycastCullMode cullMode = FLYCAST_CULL_NONE;
+
+    // Texture (TEX-01)
+    FlycastTexMode texMode = FLYCAST_TEX_NONE;
+    uint32_t texWidth = 0;
+    uint32_t texHeight = 0;
+    std::vector<uint8_t> texData;      // texWidth * texHeight bytes (8BPP indices)
+    std::vector<uint32_t> palette;     // 256 ARGB32 entries
 };
 
 struct TestData {

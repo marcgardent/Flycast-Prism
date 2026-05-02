@@ -65,6 +65,14 @@ typedef enum {
 } FlycastCullMode;
 
 /**
+ * Texture mode for a draw batch.
+ */
+typedef enum {
+    FLYCAST_TEX_NONE = 0, // No texture, use vertex color (Gouraud)
+    FLYCAST_TEX_PAL8 = 1  // 8BPP indexed texture with 256-entry ARGB32 palette
+} FlycastTexMode;
+
+/**
  * Container for geometry data sent during `Process()`.
  */
 typedef struct {
@@ -83,6 +91,13 @@ typedef struct {
 
     // Culling state (Added in v5)
     FlycastCullMode cull_mode;
+
+    // Texture state (Added in v6)
+    FlycastTexMode  tex_mode;    // Texture sampling mode
+    uint32_t        tex_width;   // Texture width in pixels
+    uint32_t        tex_height;  // Texture height in pixels
+    const uint8_t*  tex_data;    // tex_width * tex_height bytes (8BPP palette indices)
+    const uint32_t* palette;     // 256 ARGB32 entries (A=MSB, B=LSB)
 } PluginGeometryData;
 
 /**
@@ -134,7 +149,7 @@ typedef struct {
 // PLUGIN EXPORTED INTERFACE
 // ============================================================================
 
-#define FLYCAST_PLUGIN_API_VERSION 5
+#define FLYCAST_PLUGIN_API_VERSION 6
 
 /**
  * Function table that the Rust/C++ plugin MUST implement.

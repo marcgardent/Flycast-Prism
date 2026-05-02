@@ -81,7 +81,7 @@ void HostRenderer::Process(TA_context *ctx) {
         for (const auto& poly : polys) {
             if (poly.count == 0) continue;
 
-            PluginGeometryData data;
+            PluginGeometryData data = {};
             data.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
             data.vertex_count = ctx->rend.verts.size();
             
