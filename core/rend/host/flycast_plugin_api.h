@@ -73,6 +73,36 @@ typedef enum {
 } FlycastTexMode;
 
 /**
+ * Blending factors (Added in v7)
+ * Based on PVR2 hardware modes.
+ */
+typedef enum {
+    FLYCAST_BLEND_ZERO            = 0,
+    FLYCAST_BLEND_ONE             = 1,
+    FLYCAST_BLEND_OTHER_COLOR     = 2, // Source: Dest Color, Dest: Source Color
+    FLYCAST_BLEND_INV_OTHER_COLOR = 3, // Source: 1 - Dest Color, Dest: 1 - Source Color
+    FLYCAST_BLEND_SRC_ALPHA       = 4,
+    FLYCAST_BLEND_INV_SRC_ALPHA   = 5,
+    FLYCAST_BLEND_DST_ALPHA       = 6,
+    FLYCAST_BLEND_INV_DST_ALPHA   = 7
+} FlycastBlendFactor;
+
+/**
+ * Depth comparison functions (Added in v7)
+ * Matches PVR2 depth modes.
+ */
+typedef enum {
+    FLYCAST_DEPTH_NEVER    = 0,
+    FLYCAST_DEPTH_LESS     = 1,
+    FLYCAST_DEPTH_EQUAL    = 2,
+    FLYCAST_DEPTH_LEQUAL   = 3,
+    FLYCAST_DEPTH_GREATER  = 4,
+    FLYCAST_DEPTH_NOTEQUAL = 5,
+    FLYCAST_DEPTH_GEQUAL   = 6,
+    FLYCAST_DEPTH_ALWAYS   = 7
+} FlycastDepthFunc;
+
+/**
  * Container for geometry data sent during `Process()`.
  */
 typedef struct {
@@ -98,6 +128,14 @@ typedef struct {
     uint32_t        tex_height;  // Texture height in pixels
     const uint8_t*  tex_data;    // tex_width * tex_height bytes (8BPP palette indices)
     const uint32_t* palette;     // 256 ARGB32 entries (A=MSB, B=LSB)
+
+    // Transparency state (Added in v7)
+    FlycastBlendFactor src_blend;
+    FlycastBlendFactor dst_blend;
+
+    // Depth state (Added in v7)
+    FlycastDepthFunc   depth_func;
+    bool               depth_write;
 } PluginGeometryData;
 
 /**
@@ -149,7 +187,7 @@ typedef struct {
 // PLUGIN EXPORTED INTERFACE
 // ============================================================================
 
-#define FLYCAST_PLUGIN_API_VERSION 6
+#define FLYCAST_PLUGIN_API_VERSION 7
 
 /**
  * Function table that the Rust/C++ plugin MUST implement.

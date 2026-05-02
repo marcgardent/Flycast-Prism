@@ -21,6 +21,12 @@ struct DrawBatch {
     uint32_t texHeight = 0;
     std::vector<uint8_t> texData;      // texWidth * texHeight bytes (8BPP indices)
     std::vector<uint32_t> palette;     // 256 ARGB32 entries
+
+    // Transparency (TRN-01)
+    FlycastBlendFactor srcBlend = FLYCAST_BLEND_ONE;
+    FlycastBlendFactor dstBlend = FLYCAST_BLEND_ZERO;
+    FlycastDepthFunc depthFunc = FLYCAST_DEPTH_GEQUAL;
+    bool depthWrite = true;
 };
 
 struct TestData {

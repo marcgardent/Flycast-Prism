@@ -11,6 +11,7 @@
 #include "cases/TestGEO03.h"
 #include "cases/TestSHD01.h"
 #include "cases/TestTEX01.h"
+#include "cases/TestTRN01.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -45,6 +46,7 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestGEO03>());
     mgr.registerTest(std::make_unique<TestSHD01>());
     mgr.registerTest(std::make_unique<TestTEX01>());
+    mgr.registerTest(std::make_unique<TestTRN01>());
 }
 
 void printHelp(const char* progName) {
@@ -52,6 +54,7 @@ void printHelp(const char* progName) {
     std::cout << "Options:" << std::endl;
     std::cout << "  --test <id>    Pre-select a test case (e.g., GEO-01)" << std::endl;
     std::cout << "  --list         List available test cases" << std::endl;
+    std::cout << "  --continuous   Enable continuous rendering (default: once per test)" << std::endl;
 }
 
 int main(int argc, char** argv) {
@@ -65,6 +68,7 @@ int main(int argc, char** argv) {
     const char* pluginPath = argv[1];
     std::string preSelectedTestId = "";
 
+    bool continuousMode = false;
     for (int i = 2; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--test" && i + 1 < argc) {
@@ -75,6 +79,8 @@ int main(int argc, char** argv) {
                 std::cout << "  " << t->getId() << ": " << t->getName() << " - " << t->getDescription() << std::endl;
             }
             return 0;
+        } else if (arg == "--continuous") {
+            continuousMode = true;
         }
     }
 
@@ -208,6 +214,7 @@ int main(int argc, char** argv) {
     }
 
     bool running = true;
+    bool needsRender = true;
     uint32_t lastTicks = SDL_GetTicks();
     while (running) {
         uint32_t currentTicks = SDL_GetTicks();
@@ -226,6 +233,7 @@ int main(int argc, char** argv) {
                 if (vtable->resize) {
                     vtable->resize(lastW, lastH);
                 }
+                needsRender = true;
             } else if (event.type == SDL_KEYDOWN) {
                 size_t currentIndex = 0;
                 for (size_t i = 0; i < allTests.size(); ++i) {
@@ -241,57 +249,73 @@ int main(int argc, char** argv) {
                     std::cout << "Switched to: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
                     std::string title = "Flycast Benchmarker - " + activeTest->getId();
                     SDL_SetWindowTitle(window, title.c_str());
+                    needsRender = true;
                 } else if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_p) {
                     currentIndex = (currentIndex + allTests.size() - 1) % allTests.size();
                     activeTest = allTests[currentIndex].get();
                     std::cout << "Switched to: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
                     std::string title = "Flycast Benchmarker - " + activeTest->getId();
                     SDL_SetWindowTitle(window, title.c_str());
+                    needsRender = true;
                 }
             }
         }
 
-        activeTest->update(dt);
-
-        TestData testData;
-        activeTest->prepare(testData);
-
-        for (auto& batch : testData.batches) {
-            PluginGeometryData geom = {};
-            geom.vertices = batch.vertices.data();
-            geom.vertex_count = (uint32_t)batch.vertices.size();
-            geom.indices = batch.indices.data();
-            geom.index_count = (uint32_t)batch.indices.size();
-            geom.scissor_enable = batch.scissorEnable;
-            geom.scissor_x = batch.scissorX;
-            geom.scissor_y = batch.scissorY;
-            geom.scissor_w = batch.scissorW;
-            geom.scissor_h = batch.scissorH;
-            geom.cull_mode = batch.cullMode;
-            // Texture (TEX-01)
-            geom.tex_mode   = batch.texMode;
-            geom.tex_width  = batch.texWidth;
-            geom.tex_height = batch.texHeight;
-            geom.tex_data   = batch.texData.empty()   ? nullptr : batch.texData.data();
-            geom.palette    = batch.palette.empty()   ? nullptr : batch.palette.data();
-
-            if (vtable->process) {
-                vtable->process(&geom);
+        if (continuousMode || needsRender) {
+            {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[Frame Render] Test: %s", activeTest->getId().c_str());
+                bench_log(benchHandle, FLYCAST_LOG_INFO, buf);
             }
-        }
 
-        PluginFramebufferInfo fbInfo = { 0, 0, (uint32_t)lastW, (uint32_t)lastH };
-        
-        if (vtable->render_framebuffer) {
-            vtable->render_framebuffer(&fbInfo);
-        }
+            activeTest->update(dt);
 
-        if (vtable->render) {
-            vtable->render();
-        }
+            TestData testData;
+            activeTest->prepare(testData);
 
-        if (vtable->present) {
-            vtable->present();
+            for (auto& batch : testData.batches) {
+                PluginGeometryData geom = {};
+                geom.vertices = batch.vertices.data();
+                geom.vertex_count = (uint32_t)batch.vertices.size();
+                geom.indices = batch.indices.data();
+                geom.index_count = (uint32_t)batch.indices.size();
+                geom.scissor_enable = batch.scissorEnable;
+                geom.scissor_x = batch.scissorX;
+                geom.scissor_y = batch.scissorY;
+                geom.scissor_w = batch.scissorW;
+                geom.scissor_h = batch.scissorH;
+                geom.cull_mode = batch.cullMode;
+                // Texture (TEX-01)
+                geom.tex_mode   = batch.texMode;
+                geom.tex_width  = batch.texWidth;
+                geom.tex_height = batch.texHeight;
+                geom.tex_data   = batch.texData.empty()   ? nullptr : batch.texData.data();
+                geom.palette    = batch.palette.empty()   ? nullptr : batch.palette.data();
+
+                geom.src_blend = batch.srcBlend;
+                geom.dst_blend = batch.dstBlend;
+                geom.depth_func = batch.depthFunc;
+                geom.depth_write = batch.depthWrite;
+
+                if (vtable->process) {
+                    vtable->process(&geom);
+                }
+            }
+
+            PluginFramebufferInfo fbInfo = { 0, 0, (uint32_t)lastW, (uint32_t)lastH };
+            
+            if (vtable->render_framebuffer) {
+                vtable->render_framebuffer(&fbInfo);
+            }
+
+            if (vtable->render) {
+                vtable->render();
+            }
+
+            if (vtable->present) {
+                vtable->present();
+            }
+            needsRender = false;
         }
 
         SDL_Delay(16);

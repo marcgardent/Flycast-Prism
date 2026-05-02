@@ -72,6 +72,14 @@ static FlycastCullMode MapCullMode(u32 pvrCullMode) {
     }
 }
 
+static FlycastBlendFactor MapBlendFactor(u32 pvrBlendFactor) {
+    return static_cast<FlycastBlendFactor>(pvrBlendFactor & 7);
+}
+
+static FlycastDepthFunc MapDepthFunc(u32 pvrDepthFunc) {
+    return static_cast<FlycastDepthFunc>(pvrDepthFunc & 7);
+}
+
 void HostRenderer::Process(TA_context *ctx) {
     if (!vtable || !vtable->process) return;
 
@@ -111,6 +119,11 @@ void HostRenderer::Process(TA_context *ctx) {
                 }
                 // Other texture formats: leave tex_mode = FLYCAST_TEX_NONE (zeroized)
             }
+
+            data.src_blend = MapBlendFactor(poly.tsp.SrcInstr);
+            data.dst_blend = MapBlendFactor(poly.tsp.DstInstr);
+            data.depth_func = MapDepthFunc(poly.isp.DepthMode);
+            data.depth_write = !poly.isp.ZWriteDis;
 
             vtable->process(&data);
         }
