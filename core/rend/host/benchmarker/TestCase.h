@@ -57,4 +57,5 @@ public:
     
     virtual void prepare(TestData& data) = 0;
     virtual void update(float dt) {}
+    virtual uint32_t getFrameCount() const { return 1; }
 };

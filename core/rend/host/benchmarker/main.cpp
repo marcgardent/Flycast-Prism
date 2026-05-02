@@ -17,6 +17,7 @@
 #include "cases/TestSPE01.h"
 #include "cases/TestSPE02.h"
 #include "cases/TestOIT01.h"
+#include "cases/TestGC01.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -55,14 +56,15 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestSPE01>());
     mgr.registerTest(std::make_unique<TestSPE02>());
     mgr.registerTest(std::make_unique<TestOIT01>());
+    mgr.registerTest(std::make_unique<TestGC01>());
 }
 
 void printHelp(const char* progName) {
     std::cout << "Usage: " << progName << " <plugin_path> [options]" << std::endl;
     std::cout << "Options:" << std::endl;
-    std::cout << "  --test <id>    Pre-select a test case (e.g., GEO-01)" << std::endl;
+    std::cout << "  --test <id>    Run specific test and exit when finished" << std::endl;
     std::cout << "  --list         List available test cases" << std::endl;
-    std::cout << "  --continuous   Enable continuous rendering (default: once per test)" << std::endl;
+    std::cout << "  --continuous   Loop current test forever" << std::endl;
 }
 
 int main(int argc, char** argv) {
@@ -77,10 +79,14 @@ int main(int argc, char** argv) {
     std::string preSelectedTestId = "";
 
     bool continuousMode = false;
+    bool singleTestMode = false;
+    int currentTestIdx = 0;
+
     for (int i = 2; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--test" && i + 1 < argc) {
             preSelectedTestId = argv[++i];
+            singleTestMode = true;
         } else if (arg == "--list") {
             std::cout << "Available tests:" << std::endl;
             for (auto& t : TestManager::instance().getTests()) {
@@ -101,10 +107,17 @@ int main(int argc, char** argv) {
             std::cerr << "Unknown test ID: " << preSelectedTestId << std::endl;
             return 1;
         }
+        // Find the index for single test mode too
+        for (size_t i = 0; i < allTests.size(); i++) {
+            if (allTests[i]->getId() == preSelectedTestId) {
+                currentTestIdx = (int)i;
+                break;
+            }
+        }
     } else {
-        // Default to the first registered test without any user interaction
         if (!allTests.empty()) {
             activeTest = allTests[0].get();
+            currentTestIdx = 0;
         } else {
             std::cerr << "No tests registered!" << std::endl;
             return 1;
@@ -224,6 +237,8 @@ int main(int argc, char** argv) {
     bool running = true;
     bool needsRender = true;
     uint32_t lastTicks = SDL_GetTicks();
+    uint32_t frame_count = 0;
+
     while (running) {
         uint32_t currentTicks = SDL_GetTicks();
         float dt = (currentTicks - lastTicks) / 1000.0f;
@@ -243,37 +258,35 @@ int main(int argc, char** argv) {
                 }
                 needsRender = true;
             } else if (event.type == SDL_KEYDOWN) {
-                size_t currentIndex = 0;
-                for (size_t i = 0; i < allTests.size(); ++i) {
-                    if (allTests[i].get() == activeTest) {
-                        currentIndex = i;
-                        break;
+                if (event.key.keysym.sym == SDLK_ESCAPE) {
+                    running = false;
+                } else if (!singleTestMode) {
+                    if (event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_SPACE) {
+                        currentTestIdx = (currentTestIdx + 1) % allTests.size();
+                        activeTest = allTests[currentTestIdx].get();
+                        frame_count = 0;
+                        needsRender = true;
+                        std::cout << "Starting test: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
+                        SDL_SetWindowTitle(window, ("Flycast Benchmarker - " + activeTest->getId()).c_str());
+                    } else if (event.key.keysym.sym == SDLK_LEFT) {
+                        currentTestIdx = (currentTestIdx + (int)allTests.size() - 1) % allTests.size();
+                        activeTest = allTests[currentTestIdx].get();
+                        frame_count = 0;
+                        needsRender = true;
+                        std::cout << "Starting test: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
+                        SDL_SetWindowTitle(window, ("Flycast Benchmarker - " + activeTest->getId()).c_str());
                     }
-                }
-
-                if (event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_n) {
-                    currentIndex = (currentIndex + 1) % allTests.size();
-                    activeTest = allTests[currentIndex].get();
-                    std::cout << "Switched to: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
-                    std::string title = "Flycast Benchmarker - " + activeTest->getId();
-                    SDL_SetWindowTitle(window, title.c_str());
-                    needsRender = true;
-                } else if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_p) {
-                    currentIndex = (currentIndex + allTests.size() - 1) % allTests.size();
-                    activeTest = allTests[currentIndex].get();
-                    std::cout << "Switched to: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
-                    std::string title = "Flycast Benchmarker - " + activeTest->getId();
-                    SDL_SetWindowTitle(window, title.c_str());
-                    needsRender = true;
                 }
             }
         }
 
-        if (continuousMode || needsRender) {
+        if (continuousMode || needsRender || (frame_count < activeTest->getFrameCount())) {
             {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "[Frame Render] Test: %s", activeTest->getId().c_str());
-                bench_log(benchHandle, FLYCAST_LOG_INFO, buf);
+                if (frame_count == 0) {
+                    char buf[128];
+                    snprintf(buf, sizeof(buf), "[Frame Render] Starting Test: %s", activeTest->getId().c_str());
+                    bench_log(benchHandle, FLYCAST_LOG_INFO, buf);
+                }
             }
 
             activeTest->update(dt);
@@ -283,7 +296,33 @@ int main(int argc, char** argv) {
 
             static uint32_t last_palette_crc = 0;
             static uint32_t last_fog_crc = 0;
-            static std::map<const void*, uint32_t> bench_tex_cache;
+            
+            struct BenchTextureInfo {
+                uint32_t handle;
+                uint32_t last_frame_used;
+            };
+            static std::map<const void*, BenchTextureInfo> bench_tex_cache;
+            frame_count++;
+
+            // Auto-exit in single test mode
+            if (singleTestMode && !continuousMode && frame_count > activeTest->getFrameCount()) {
+                running = false;
+                break;
+            }
+
+            // --- GC: Cleanup unused textures every 120 frames ---
+            if (frame_count % 120 == 0) {
+                for (auto it = bench_tex_cache.begin(); it != bench_tex_cache.end(); ) {
+                    if (frame_count - it->second.last_frame_used > 120) {
+                        if (vtable->destroy_texture) {
+                            vtable->destroy_texture(it->second.handle);
+                        }
+                        it = bench_tex_cache.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
 
             for (auto& batch : testData.batches) {
                 PluginGeometryData geom = {};
@@ -330,10 +369,11 @@ int main(int argc, char** argv) {
                             if (vtable->update_texture) {
                                 vtable->update_texture(h, batch.texData.data());
                             }
-                            bench_tex_cache[tex_ptr] = h;
+                            bench_tex_cache[tex_ptr] = { h, frame_count };
                         }
                     }
-                    geom.texture_handle = bench_tex_cache[tex_ptr];
+                    bench_tex_cache[tex_ptr].last_frame_used = frame_count;
+                    geom.texture_handle = bench_tex_cache[tex_ptr].handle;
                 }
 
                 geom.src_blend = batch.srcBlend;
