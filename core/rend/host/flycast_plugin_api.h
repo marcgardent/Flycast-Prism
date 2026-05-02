@@ -57,6 +57,12 @@ typedef struct {
     float nx, ny, nz;
 } PluginVertex;
 
+typedef enum {
+    FLYCAST_CULL_NONE  = 0,
+    FLYCAST_CULL_FRONT = 1,
+    FLYCAST_CULL_BACK  = 2
+} FlycastCullMode;
+
 /**
  * Container for geometry data sent during `Process()`.
  */
@@ -73,6 +79,9 @@ typedef struct {
     int32_t scissor_y;
     int32_t scissor_w;
     int32_t scissor_h;
+
+    // Culling state (Added in v5)
+    FlycastCullMode cull_mode;
 } PluginGeometryData;
 
 /**
@@ -124,7 +133,7 @@ typedef struct {
 // PLUGIN EXPORTED INTERFACE
 // ============================================================================
 
-#define FLYCAST_PLUGIN_API_VERSION 4
+#define FLYCAST_PLUGIN_API_VERSION 5
 
 /**
  * Function table that the Rust/C++ plugin MUST implement.

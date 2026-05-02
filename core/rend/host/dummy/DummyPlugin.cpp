@@ -60,11 +60,15 @@ static void dummy_resize(uint32_t width, uint32_t height) {
 static void dummy_process(const PluginGeometryData* data) {
     static bool last_scissor_enable = false;
     static int32_t last_sx = 0, last_sy = 0, last_sw = 0, last_sh = 0;
+    static FlycastCullMode last_cull = (FlycastCullMode)-1;
 
-    if (data->scissor_enable != last_scissor_enable || 
+    bool scissor_changed = (data->scissor_enable != last_scissor_enable || 
         (data->scissor_enable && (data->scissor_x != last_sx || data->scissor_y != last_sy || 
-                                  data->scissor_w != last_sw || data->scissor_h != last_sh))) {
-        
+                                   data->scissor_w != last_sw || data->scissor_h != last_sh)));
+    
+    bool cull_changed = (data->cull_mode != last_cull);
+
+    if (scissor_changed) {
         last_scissor_enable = data->scissor_enable;
         last_sx = data->scissor_x;
         last_sy = data->scissor_y;
@@ -79,6 +83,21 @@ static void dummy_process(const PluginGeometryData* data) {
             } else {
                 snprintf(buffer, sizeof(buffer), "Scissor DISABLED");
             }
+            host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+        }
+    }
+
+    if (cull_changed) {
+        last_cull = data->cull_mode;
+        if (host_if && host_handle) {
+            const char* cull_str = "Unknown";
+            switch(data->cull_mode) {
+                case FLYCAST_CULL_NONE: cull_str = "NONE"; break;
+                case FLYCAST_CULL_FRONT: cull_str = "FRONT"; break;
+                case FLYCAST_CULL_BACK: cull_str = "BACK"; break;
+            }
+            char buffer[128];
+            snprintf(buffer, sizeof(buffer), "Cull Mode: %s", cull_str);
             host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
         }
     }

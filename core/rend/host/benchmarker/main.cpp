@@ -38,6 +38,7 @@ static FlycastHostInterface bench_host_if = {
 void registerAllTests() {
     auto& mgr = TestManager::instance();
     mgr.registerTest(std::make_unique<TestGEO01>());
+    mgr.registerTest(std::make_unique<TestGEO02>());
     mgr.registerTest(std::make_unique<TestGEO03>());
     mgr.registerTest(std::make_unique<TestSHD01>());
 }
@@ -251,19 +252,22 @@ int main(int argc, char** argv) {
         TestData testData;
         activeTest->prepare(testData);
 
-        PluginGeometryData geom = {};
-        geom.vertices = testData.vertices.data();
-        geom.vertex_count = (uint32_t)testData.vertices.size();
-        geom.indices = testData.indices.data();
-        geom.index_count = (uint32_t)testData.indices.size();
-        geom.scissor_enable = testData.scissorEnable;
-        geom.scissor_x = testData.scissorX;
-        geom.scissor_y = testData.scissorY;
-        geom.scissor_w = testData.scissorW;
-        geom.scissor_h = testData.scissorH;
+        for (auto& batch : testData.batches) {
+            PluginGeometryData geom = {};
+            geom.vertices = batch.vertices.data();
+            geom.vertex_count = (uint32_t)batch.vertices.size();
+            geom.indices = batch.indices.data();
+            geom.index_count = (uint32_t)batch.indices.size();
+            geom.scissor_enable = batch.scissorEnable;
+            geom.scissor_x = batch.scissorX;
+            geom.scissor_y = batch.scissorY;
+            geom.scissor_w = batch.scissorW;
+            geom.scissor_h = batch.scissorH;
+            geom.cull_mode = batch.cullMode;
 
-        if (vtable->process) {
-            vtable->process(&geom);
+            if (vtable->process) {
+                vtable->process(&geom);
+            }
         }
 
         PluginFramebufferInfo fbInfo = { 0, 0, (uint32_t)lastW, (uint32_t)lastH };
