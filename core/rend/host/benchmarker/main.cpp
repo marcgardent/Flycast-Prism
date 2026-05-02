@@ -3,6 +3,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <map>
+#include <algorithm>
 #include "../flycast_plugin_api.h"
 #include "TestCase.h"
 #include "TestManager.h"
@@ -14,6 +16,7 @@
 #include "cases/TestTRN01.h"
 #include "cases/TestSPE01.h"
 #include "cases/TestSPE02.h"
+#include "cases/TestOIT01.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -51,6 +54,7 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestTRN01>());
     mgr.registerTest(std::make_unique<TestSPE01>());
     mgr.registerTest(std::make_unique<TestSPE02>());
+    mgr.registerTest(std::make_unique<TestOIT01>());
 }
 
 void printHelp(const char* progName) {
@@ -277,6 +281,10 @@ int main(int argc, char** argv) {
             TestData testData;
             activeTest->prepare(testData);
 
+            static uint32_t last_palette_crc = 0;
+            static uint32_t last_fog_crc = 0;
+            static std::map<const void*, uint32_t> bench_tex_cache;
+
             for (auto& batch : testData.batches) {
                 PluginGeometryData geom = {};
                 geom.vertices = batch.vertices.data();
@@ -289,12 +297,44 @@ int main(int argc, char** argv) {
                 geom.scissor_w = batch.scissorW;
                 geom.scissor_h = batch.scissorH;
                 geom.cull_mode = batch.cullMode;
-                // Texture (TEX-01)
-                geom.tex_mode   = batch.texMode;
-                geom.tex_width  = batch.texWidth;
-                geom.tex_height = batch.texHeight;
-                geom.tex_data   = batch.texData.empty()   ? nullptr : batch.texData.data();
-                geom.palette    = batch.palette.empty()   ? nullptr : batch.palette.data();
+
+                // --- v11 State Tracking ---
+
+                // 1. Palette
+                if (!batch.palette.empty()) {
+                    uint32_t crc = 0;
+                    for (auto c : batch.palette) crc ^= c;
+                    if (crc != last_palette_crc && vtable->update_palette) {
+                        vtable->update_palette(batch.palette.data());
+                        last_palette_crc = crc;
+                    }
+                }
+
+                // 2. Fog Table
+                if (!batch.fogTable.empty()) {
+                    uint32_t crc = 0;
+                    for (auto c : batch.fogTable) crc ^= c;
+                    if (crc != last_fog_crc && vtable->update_fog_table) {
+                        vtable->update_fog_table(batch.fogTable.data());
+                        last_fog_crc = crc;
+                    }
+                }
+
+                // 3. Textures
+                geom.texture_handle = 0;
+                if (!batch.texData.empty()) {
+                    const void* tex_ptr = batch.texData.data();
+                    if (bench_tex_cache.find(tex_ptr) == bench_tex_cache.end()) {
+                        if (vtable->create_texture) {
+                            uint32_t h = vtable->create_texture(batch.texWidth, batch.texHeight, batch.texMode);
+                            if (vtable->update_texture) {
+                                vtable->update_texture(h, batch.texData.data());
+                            }
+                            bench_tex_cache[tex_ptr] = h;
+                        }
+                    }
+                    geom.texture_handle = bench_tex_cache[tex_ptr];
+                }
 
                 geom.src_blend = batch.srcBlend;
                 geom.dst_blend = batch.dstBlend;
@@ -309,7 +349,9 @@ int main(int argc, char** argv) {
                 geom.fog_density = batch.fogDensity;
                 geom.fog_clamp_min = batch.fogClampMin;
                 geom.fog_clamp_max = batch.fogClampMax;
-                geom.fog_table = batch.fogTable.empty() ? nullptr : batch.fogTable.data();
+
+                // OIT (OIT-01)
+                geom.list_type = batch.listType;
 
                 if (vtable->process) {
                     vtable->process(&geom);

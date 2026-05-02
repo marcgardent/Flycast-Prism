@@ -8,6 +8,10 @@
 extern "C" {
 #endif
 
+
+#define FLYCAST_PLUGIN_API_VERSION 11
+
+
 // ============================================================================
 // OPAQUE TYPES & HOST INTERFACE
 // ============================================================================
@@ -103,6 +107,15 @@ typedef enum {
 } FlycastDepthFunc;
 
 /**
+ * PVR2 List Types (Added in v10)
+ */
+typedef enum {
+    FLYCAST_LIST_OPAQUE           = 0,
+    FLYCAST_LIST_PUNCH_THROUGH    = 1,
+    FLYCAST_LIST_TRANSLUCENT      = 2
+} FlycastListType;
+
+/**
  * Container for geometry data sent during `Process()`.
  */
 typedef struct {
@@ -122,12 +135,8 @@ typedef struct {
     // Culling state (Added in v5)
     FlycastCullMode cull_mode;
 
-    // Texture state (Added in v6)
-    FlycastTexMode  tex_mode;    // Texture sampling mode
-    uint32_t        tex_width;   // Texture width in pixels
-    uint32_t        tex_height;  // Texture height in pixels
-    const uint8_t*  tex_data;    // tex_width * tex_height bytes (8BPP palette indices)
-    const uint32_t* palette;     // 256 ARGB32 entries (A=MSB, B=LSB)
+    // Texture state (Updated in v11 to use handles)
+    uint32_t        texture_handle; // 0 means no texture
 
     // Transparency state (Added in v7)
     FlycastBlendFactor src_blend;
@@ -147,7 +156,10 @@ typedef struct {
     float              fog_density;      // From FOG_DENSITY register
     uint32_t           fog_clamp_min;    // ARGB8888
     uint32_t           fog_clamp_max;    // ARGB8888
-    const uint32_t*    fog_table;        // 128 entries (32-bit each)
+    // fog_table removed in v11 (pushed via callback)
+
+    // List type (Added in v10)
+    FlycastListType    list_type;
 } PluginGeometryData;
 
 /**
@@ -199,7 +211,7 @@ typedef struct {
 // PLUGIN EXPORTED INTERFACE
 // ============================================================================
 
-#define FLYCAST_PLUGIN_API_VERSION 9
+
 
 /**
  * Function table that the Rust/C++ plugin MUST implement.
@@ -232,6 +244,25 @@ typedef struct {
 
     // Equivalent to SwapBuffers or vkQueuePresentKHR
     bool (*present)(void);
+
+    // --- State Management (Added in v11) ---
+
+    /**
+     * Updates the global palette (1024 ARGB32 entries).
+     */
+    void (*update_palette)(const uint32_t* palette_data);
+
+    /**
+     * Updates the global fog table (128 entries).
+     */
+    void (*update_fog_table)(const uint32_t* fog_table_data);
+
+    /**
+     * Texture Management
+     */
+    uint32_t (*create_texture)(uint32_t width, uint32_t height, FlycastTexMode mode);
+    void (*update_texture)(uint32_t handle, const uint8_t* data);
+    void (*destroy_texture)(uint32_t handle);
 
 } FlycastPluginVTable;
 

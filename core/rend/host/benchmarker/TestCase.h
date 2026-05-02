@@ -39,6 +39,9 @@ struct DrawBatch {
     uint32_t fogClampMin = 0x00000000;
     uint32_t fogClampMax = 0xFFFFFFFF;
     std::vector<uint32_t> fogTable; // 128 entries
+
+    // OIT (OIT-01)
+    FlycastListType listType = FLYCAST_LIST_OPAQUE;
 };
 
 struct TestData {

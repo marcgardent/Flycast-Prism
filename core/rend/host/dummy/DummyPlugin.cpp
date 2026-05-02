@@ -57,6 +57,44 @@ static void dummy_resize(uint32_t width, uint32_t height) {
     std::cout << "[DummyPlugin] Resize callback: " << width << "x" << height << std::endl;
 }
 
+static void dummy_update_palette(const uint32_t* palette_data) {
+    if (host_if && host_handle) {
+        host_if->log(host_handle, FLYCAST_LOG_INFO, "[DummyPlugin] update_palette called");
+    }
+}
+
+static void dummy_update_fog_table(const uint32_t* fog_table_data) {
+    if (host_if && host_handle) {
+        host_if->log(host_handle, FLYCAST_LOG_INFO, "[DummyPlugin] update_fog_table called");
+    }
+}
+
+static uint32_t dummy_create_texture(uint32_t width, uint32_t height, FlycastTexMode mode) {
+    static uint32_t next_id = 1;
+    if (host_if && host_handle) {
+        char buffer[128];
+        snprintf(buffer, sizeof(buffer), "[DummyPlugin] create_texture %ux%u mode=%d -> ID %u", width, height, (int)mode, next_id);
+        host_if->log(host_handle, FLYCAST_LOG_INFO, buffer);
+    }
+    return next_id++;
+}
+
+static void dummy_update_texture(uint32_t handle, const uint8_t* data) {
+    if (host_if && host_handle) {
+        char buffer[128];
+        snprintf(buffer, sizeof(buffer), "[DummyPlugin] update_texture ID %u", handle);
+        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+    }
+}
+
+static void dummy_destroy_texture(uint32_t handle) {
+    if (host_if && host_handle) {
+        char buffer[128];
+        snprintf(buffer, sizeof(buffer), "[DummyPlugin] destroy_texture ID %u", handle);
+        host_if->log(host_handle, FLYCAST_LOG_INFO, buffer);
+    }
+}
+
 static void dummy_process(const PluginGeometryData* data) {
     if (host_if && host_handle) {
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, "  [Process Batch]");
@@ -82,19 +120,11 @@ static void dummy_process(const PluginGeometryData* data) {
         snprintf(buffer, sizeof(buffer), "    - Cull Mode: %s", cull_str);
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
 
-        // Texture
-        switch (data->tex_mode) {
-            case FLYCAST_TEX_NONE:
-                snprintf(buffer, sizeof(buffer), "    - Tex Mode: NONE (vertex color)");
-                break;
-            case FLYCAST_TEX_PAL8:
-                snprintf(buffer, sizeof(buffer), "    - Tex Mode: PAL8 (%ux%u, palette=%s)",
-                         data->tex_width, data->tex_height,
-                         data->palette ? "present" : "null");
-                break;
-            default:
-                snprintf(buffer, sizeof(buffer), "    - Tex Mode: unknown (%d)", (int)data->tex_mode);
-                break;
+        // Texture (Updated in v11)
+        if (data->texture_handle != 0) {
+            snprintf(buffer, sizeof(buffer), "    - Texture Handle: %u", data->texture_handle);
+        } else {
+            snprintf(buffer, sizeof(buffer), "    - Texture: NONE");
         }
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
 
@@ -114,11 +144,20 @@ static void dummy_process(const PluginGeometryData* data) {
         snprintf(buffer, sizeof(buffer), "    - Geometry: %zu vertices, %zu indices", data->vertex_count, data->index_count);
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
 
-        // Fog (Added in v9)
-        snprintf(buffer, sizeof(buffer), "    - Fog: mode=%u, color=0x%08X, vtx_color=0x%08X, density=%f, clamp=0x%08X..0x%08X, table=%s",
+        // Fog (Updated in v11)
+        snprintf(buffer, sizeof(buffer), "    - Fog: mode=%u, color=0x%08X, vtx_color=0x%08X, density=%f, clamp=0x%08X..0x%08X",
                  data->fog_mode, data->fog_color, data->fog_vertex_color, data->fog_density, 
-                 data->fog_clamp_min, data->fog_clamp_max,
-                 data->fog_table ? "present" : "null");
+                 data->fog_clamp_min, data->fog_clamp_max);
+        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+
+        // List Type (Added in v10)
+        const char* list_str = "Unknown";
+        switch (data->list_type) {
+            case FLYCAST_LIST_OPAQUE:        list_str = "OPAQUE"; break;
+            case FLYCAST_LIST_PUNCH_THROUGH: list_str = "PUNCH_THROUGH"; break;
+            case FLYCAST_LIST_TRANSLUCENT:   list_str = "TRANSLUCENT"; break;
+        }
+        snprintf(buffer, sizeof(buffer), "    - List Type: %s", list_str);
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
     }
 }
@@ -176,9 +215,9 @@ static bool dummy_present() {
 
 static const FlycastPluginVTable vtable = {
     sizeof(FlycastPluginVTable),
-    FLYCAST_PLUGIN_API_VERSION,
+    11,
     "Dummy Renderer",
-    "1.0.0",
+    "1.1.0",
     dummy_init_wrapper,
 
     dummy_term,
@@ -186,7 +225,13 @@ static const FlycastPluginVTable vtable = {
     dummy_process,
     dummy_render,
     dummy_render_framebuffer,
-    dummy_present
+    dummy_present,
+
+    dummy_update_palette,
+    dummy_update_fog_table,
+    dummy_create_texture,
+    dummy_update_texture,
+    dummy_destroy_texture
 };
 
 PLUGIN_EXPORT const FlycastPluginVTable* flycast_plugin_get_vtable(void) {

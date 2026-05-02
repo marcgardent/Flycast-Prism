@@ -18,6 +18,9 @@
 #endif
 
 #include "version.h"
+#include "rend/TexCache.h"
+#include "rend/texconv.h"
+#include "hw/pvr/pvr_mem.h"
 
 Renderer* rend_HostRenderer() {
     return new rend::HostRenderer();
@@ -61,6 +64,15 @@ void HostRenderer::Term() {
     if (vtable && vtable->term) {
         vtable->term();
     }
+    
+    // v11: Destroy all remaining textures in the plugin
+    if (vtable && vtable->destroy_texture) {
+        for (auto const& [addr, info] : texture_cache) {
+            vtable->destroy_texture(info.handle);
+        }
+    }
+    texture_cache.clear();
+
     unloadPlugin();
 }
 
@@ -86,7 +98,30 @@ void HostRenderer::Process(TA_context *ctx) {
 
     ta_parse(ctx, true);
 
-    auto processBatches = [&](const std::vector<PolyParam>& polys) {
+    // --- v11 State Tracking (Push Model) ---
+
+    // 1. Palette Update
+    uint32_t palette_hash = 0;
+    for (int i = 0; i < 1024; i++) palette_hash ^= palette32_ram[i] + i;
+    if (palette_hash != last_palette_crc) {
+        if (vtable->update_palette) {
+            vtable->update_palette(palette32_ram);
+        }
+        last_palette_crc = palette_hash;
+    }
+
+    // 2. Fog Table Update
+    uint32_t fog_hash = 0;
+    const uint32_t* fog_ptr = (const uint32_t*)FOG_TABLE;
+    for (int i = 0; i < 128; i++) fog_hash ^= fog_ptr[i] + i;
+    if (fog_hash != last_fog_crc) {
+        if (vtable->update_fog_table) {
+            vtable->update_fog_table(fog_ptr);
+        }
+        last_fog_crc = fog_hash;
+    }
+
+    auto processBatches = [&](const std::vector<PolyParam>& polys, FlycastListType listType) {
         for (const auto& poly : polys) {
             if (poly.count == 0) continue;
 
@@ -108,17 +143,47 @@ void HostRenderer::Process(TA_context *ctx) {
 
             data.cull_mode = MapCullMode(poly.isp.CullMode);
 
-            // Texture state (API v6)
-            // tex_data and palette are left null: VRAM decoding is deferred (future task).
-            // We set tex_mode so plugins can at least detect textured geometry.
-            if (poly.pcw.Texture) {
-                if (poly.tcw.PixelFmt == PixelPal8) {
-                    data.tex_mode = FLYCAST_TEX_PAL8;
-                    data.tex_width  = 8u << poly.tsp.TexU; // PVR2: TexU encodes log2(width)-3
-                    data.tex_height = 8u << poly.tsp.TexV;
-                    // tex_data / palette: nullptr (VRAM decoding not yet implemented)
+            // --- v11 Texture Management (Push Model) ---
+            data.texture_handle = 0;
+            if (poly.pcw.Texture && poly.texture) {
+                uint32_t vram_addr = poly.tcw.TexAddr << 3;
+                auto it = texture_cache.find(vram_addr);
+                
+                uint32_t width = 8u << poly.tsp.TexU;
+                uint32_t height = 8u << poly.tsp.TexV;
+                FlycastTexMode mode = (poly.tcw.PixelFmt == PixelPal8) ? FLYCAST_TEX_PAL8 : FLYCAST_TEX_NONE;
+
+                bool needs_push = false;
+
+                if (it == texture_cache.end() || it->second.width != width || it->second.height != height || it->second.mode != mode) {
+                    // New or changed texture parameters
+                    if (it != texture_cache.end() && vtable->destroy_texture) {
+                        vtable->destroy_texture(it->second.handle);
+                    }
+
+                    if (vtable->create_texture) {
+                        uint32_t handle = vtable->create_texture(width, height, mode);
+                        texture_cache[vram_addr] = { handle, width, height, mode, 0, FrameCount };
+                        it = texture_cache.find(vram_addr);
+                        needs_push = true;
+                    }
+                } else {
+                    // Texture already exists, check for content update (Dirty Tracking)
+                    if (poly.texture->Updates > it->second.last_updates_count) {
+                        needs_push = true;
+                    }
+                    it->second.last_frame_used = FrameCount;
                 }
-                // Other texture formats: leave tex_mode = FLYCAST_TEX_NONE (zeroized)
+
+                if (needs_push && it != texture_cache.end()) {
+                    if (vtable->update_texture) {
+                        vtable->update_texture(it->second.handle, &vram[vram_addr]);
+                    }
+                    it->second.last_updates_count = poly.texture->Updates;
+                    data.texture_handle = it->second.handle;
+                } else if (it != texture_cache.end()) {
+                    data.texture_handle = it->second.handle;
+                }
             }
 
             data.src_blend = MapBlendFactor(poly.tsp.SrcInstr);
@@ -127,22 +192,22 @@ void HostRenderer::Process(TA_context *ctx) {
             data.depth_write = !poly.isp.ZWriteDis;
             data.offset_enable = poly.pcw.Offset;
 
-            // Fog state (API v9)
             data.fog_mode = config::Fog ? poly.tsp.FogCtrl : 2;
             data.fog_color = FOG_COL_RAM.full;
             data.fog_vertex_color = FOG_COL_VERT.full;
             data.fog_density = FOG_DENSITY.get();
             data.fog_clamp_min = ctx->rend.fog_clamp_min.full;
             data.fog_clamp_max = ctx->rend.fog_clamp_max.full;
-            data.fog_table = FOG_TABLE;
+
+            data.list_type = listType;
 
             vtable->process(&data);
         }
     };
 
-    processBatches(ctx->rend.global_param_op);
-    processBatches(ctx->rend.global_param_pt);
-    processBatches(ctx->rend.global_param_tr);
+    processBatches(ctx->rend.global_param_op, FLYCAST_LIST_OPAQUE);
+    processBatches(ctx->rend.global_param_pt, FLYCAST_LIST_PUNCH_THROUGH);
+    processBatches(ctx->rend.global_param_tr, FLYCAST_LIST_TRANSLUCENT);
 }
 
 
@@ -174,10 +239,29 @@ void HostRenderer::RenderFramebuffer(const FramebufferInfo& info) {
 }
 
 bool HostRenderer::Present() {
+    // v11: Periodic cleanup of unused textures
+    if (FrameCount % 120 == 0) {
+        CleanupTextures();
+    }
+
     if (vtable && vtable->present) {
         return vtable->present();
     }
     return true;
+}
+
+void HostRenderer::CleanupTextures() {
+    if (!vtable || !vtable->destroy_texture) return;
+
+    // Remove textures that haven't been used for 120 frames
+    for (auto it = texture_cache.begin(); it != texture_cache.end(); ) {
+        if (FrameCount - it->second.last_frame_used > 120) {
+            vtable->destroy_texture(it->second.handle);
+            it = texture_cache.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 bool HostRenderer::loadPlugin() {
