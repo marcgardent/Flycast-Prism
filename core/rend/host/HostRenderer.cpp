@@ -124,6 +124,7 @@ void HostRenderer::Process(TA_context *ctx) {
             data.dst_blend = MapBlendFactor(poly.tsp.DstInstr);
             data.depth_func = MapDepthFunc(poly.isp.DepthMode);
             data.depth_write = !poly.isp.ZWriteDis;
+            data.offset_enable = poly.pcw.Offset;
 
             vtable->process(&data);
         }

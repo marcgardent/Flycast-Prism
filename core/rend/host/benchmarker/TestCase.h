@@ -27,6 +27,9 @@ struct DrawBatch {
     FlycastBlendFactor dstBlend = FLYCAST_BLEND_ZERO;
     FlycastDepthFunc depthFunc = FLYCAST_DEPTH_GEQUAL;
     bool depthWrite = true;
+
+    // Specular (SPE-01)
+    bool offsetEnable = false;
 };
 
 struct TestData {

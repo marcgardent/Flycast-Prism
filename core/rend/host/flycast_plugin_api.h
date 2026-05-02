@@ -136,6 +136,9 @@ typedef struct {
     // Depth state (Added in v7)
     FlycastDepthFunc   depth_func;
     bool               depth_write;
+
+    // Specular / Offset Color (Added in v8)
+    bool               offset_enable;
 } PluginGeometryData;
 
 /**
@@ -187,7 +190,7 @@ typedef struct {
 // PLUGIN EXPORTED INTERFACE
 // ============================================================================
 
-#define FLYCAST_PLUGIN_API_VERSION 7
+#define FLYCAST_PLUGIN_API_VERSION 8
 
 /**
  * Function table that the Rust/C++ plugin MUST implement.

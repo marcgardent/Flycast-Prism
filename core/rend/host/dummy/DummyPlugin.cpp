@@ -106,6 +106,10 @@ static void dummy_process(const PluginGeometryData* data) {
         snprintf(buffer, sizeof(buffer), "    - Depth State: func=%d, write=%s", (int)data->depth_func, data->depth_write ? "true" : "false");
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
 
+        // Offset Color
+        snprintf(buffer, sizeof(buffer), "    - Offset Enable: %s", data->offset_enable ? "true" : "false");
+        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+
         // Vertices/Indices
         snprintf(buffer, sizeof(buffer), "    - Geometry: %zu vertices, %zu indices", data->vertex_count, data->index_count);
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);

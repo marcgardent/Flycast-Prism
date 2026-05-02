@@ -12,6 +12,7 @@
 #include "cases/TestSHD01.h"
 #include "cases/TestTEX01.h"
 #include "cases/TestTRN01.h"
+#include "cases/TestSPE01.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -47,6 +48,7 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestSHD01>());
     mgr.registerTest(std::make_unique<TestTEX01>());
     mgr.registerTest(std::make_unique<TestTRN01>());
+    mgr.registerTest(std::make_unique<TestSPE01>());
 }
 
 void printHelp(const char* progName) {
@@ -296,6 +298,7 @@ int main(int argc, char** argv) {
                 geom.dst_blend = batch.dstBlend;
                 geom.depth_func = batch.depthFunc;
                 geom.depth_write = batch.depthWrite;
+                geom.offset_enable = batch.offsetEnable;
 
                 if (vtable->process) {
                     vtable->process(&geom);
