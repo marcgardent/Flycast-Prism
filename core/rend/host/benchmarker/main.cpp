@@ -217,165 +217,167 @@ int main(int argc, char** argv) {
         }
 
         // --- Phase de Rendu ---
-        perf.pluginTimeMs = 0;
         auto frameStart = std::chrono::high_resolution_clock::now();
+        if (continuousMode || (frame_count < activeTest->getFrameCount())) {
+            perf.pluginTimeMs = 0;
 
-        activeTest->update(1.0f / activeTest->getTargetFPS());
-        TestData testData;
-        activeTest->prepare(testData);
+            activeTest->update(1.0f / activeTest->getTargetFPS());
+            TestData testData;
+            activeTest->prepare(testData);
 
-        // 1. Mise à jour de la Palette (Global state)
-        if (!testData.batches.empty() && !testData.batches[0].palette.empty()) {
-            uint32_t crc = 0;
-            const auto& pal = testData.batches[0].palette;
-            for (size_t i = 0; i < pal.size(); ++i) crc ^= pal[i] + i;
-            if (crc != last_palette_crc && vtable->update_palette) {
-                auto start = std::chrono::high_resolution_clock::now();
-                vtable->update_palette(pal.data());
-                perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
-                last_palette_crc = crc;
-            }
-        }
-
-        // 2. Mise à jour de la Table de Fog
-        if (!testData.batches.empty() && !testData.batches[0].fogTable.empty()) {
-            uint32_t crc = 0;
-            const auto& fog = testData.batches[0].fogTable;
-            for (size_t i = 0; i < fog.size(); ++i) crc ^= fog[i] + i;
-            if (crc != last_fog_crc && vtable->update_fog_table) {
-                auto start = std::chrono::high_resolution_clock::now();
-                vtable->update_fog_table(fog.data());
-                perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
-                last_fog_crc = crc;
-            }
-        }
-
-        // 3. Traitement de la Géométrie
-        bool use_mega_batch = false;
-        if (vtable->get_capabilities && vtable->process_mega_batch) {
-            use_mega_batch = (vtable->get_capabilities() & FLYCAST_CAP_MEGA_BATCH) != 0;
-        }
-
-        auto resolveTexture = [&](DrawBatch& batch) -> uint32_t {
-            if (batch.texData.empty()) return 0;
-            const void* ptr = batch.texData.data();
-            if (bench_tex_cache.find(ptr) == bench_tex_cache.end()) {
-                if (vtable->create_texture) {
-                    uint32_t h = vtable->create_texture(batch.texWidth, batch.texHeight, batch.texMode);
-                    if (vtable->update_texture) vtable->update_texture(h, static_cast<const uint8_t*>(ptr));
-                    bench_tex_cache[ptr] = { h, frame_count };
+            // 1. Mise à jour de la Palette (Global state)
+            if (!testData.batches.empty() && !testData.batches[0].palette.empty()) {
+                uint32_t crc = 0;
+                const auto& pal = testData.batches[0].palette;
+                for (size_t i = 0; i < pal.size(); ++i) crc ^= pal[i] + i;
+                if (crc != last_palette_crc && vtable->update_palette) {
+                    auto start = std::chrono::high_resolution_clock::now();
+                    vtable->update_palette(pal.data());
+                    perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
+                    last_palette_crc = crc;
                 }
             }
-            bench_tex_cache[ptr].last_frame_used = frame_count;
-            return bench_tex_cache[ptr].handle;
-        };
 
-        if (use_mega_batch) {
-            std::vector<PluginVertex> allVerts;
-            std::vector<uint32_t> allIdx;
-            std::map<FlycastListType, std::vector<FlycastDrawCommand>> listCmds;
-
-            for (auto& batch : testData.batches) {
-                // Simulate non-contiguous index buffer (Gap)
-                for (int i = 0; i < 32; i++) allIdx.push_back(0); 
-
-                FlycastDrawCommand cmd = {};
-                cmd.texture_handle = resolveTexture(batch);
-                cmd.index_offset = (uint32_t)allIdx.size();
-                cmd.index_count = (uint32_t)batch.indices.size();
-
-                // Mapping des états (Idem HostRenderer)
-                cmd.src_blend = batch.srcBlend;
-                cmd.dst_blend = batch.dstBlend;
-                cmd.depth_func = batch.depthFunc;
-                cmd.depth_write = batch.depthWrite;
-                cmd.cull_mode = batch.cullMode;
-                cmd.scissor_enable = batch.scissorEnable;
-                cmd.scissor_x = batch.scissorX; cmd.scissor_y = batch.scissorY;
-                cmd.scissor_w = batch.scissorW; cmd.scissor_h = batch.scissorH;
-
-                cmd.fog_mode = batch.fogMode;
-                cmd.fog_color = batch.fogColor;
-                cmd.fog_density = batch.fogDensity;
-
-                uint32_t vBase = (uint32_t)allVerts.size();
-                for (auto& v : batch.vertices) allVerts.push_back(v);
-                for (auto i : batch.indices) allIdx.push_back(i + vBase);
-
-                listCmds[batch.listType].push_back(cmd);
-            }
-
-            for (auto& [type, cmds] : listCmds) {
-                PluginMegaBatch mega = {};
-                mega.vertices = allVerts.data();
-                mega.vertex_count = allVerts.size();
-                mega.indices = allIdx.data();
-                mega.index_count = allIdx.size();
-                mega.commands = cmds.data();
-                mega.command_count = cmds.size();
-                mega.list_type = type;
-
-                auto start = std::chrono::high_resolution_clock::now();
-                vtable->process_mega_batch(&mega);
-                perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
-            }
-        } else {
-            for (auto& batch : testData.batches) {
-                PluginGeometryData geom = {};
-                geom.vertices = batch.vertices.data();
-                geom.vertex_count = batch.vertices.size();
-                geom.indices = batch.indices.data();
-                geom.index_count = batch.indices.size();
-                geom.texture_handle = resolveTexture(batch);
-                geom.list_type = batch.listType;
-                // ... copy other states ...
-                if (vtable->process) {
+            // 2. Mise à jour de la Table de Fog
+            if (!testData.batches.empty() && !testData.batches[0].fogTable.empty()) {
+                uint32_t crc = 0;
+                const auto& fog = testData.batches[0].fogTable;
+                for (size_t i = 0; i < fog.size(); ++i) crc ^= fog[i] + i;
+                if (crc != last_fog_crc && vtable->update_fog_table) {
                     auto start = std::chrono::high_resolution_clock::now();
-                    vtable->process(&geom);
+                    vtable->update_fog_table(fog.data());
+                    perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
+                    last_fog_crc = crc;
+                }
+            }
+
+            // 3. Traitement de la Géométrie
+            bool use_mega_batch = false;
+            if (vtable->get_capabilities && vtable->process_mega_batch) {
+                use_mega_batch = (vtable->get_capabilities() & FLYCAST_CAP_MEGA_BATCH) != 0;
+            }
+
+            auto resolveTexture = [&](DrawBatch& batch) -> uint32_t {
+                if (batch.texData.empty()) return 0;
+                const void* ptr = batch.texData.data();
+                if (bench_tex_cache.find(ptr) == bench_tex_cache.end()) {
+                    if (vtable->create_texture) {
+                        uint32_t h = vtable->create_texture(batch.texWidth, batch.texHeight, batch.texMode);
+                        if (vtable->update_texture) vtable->update_texture(h, static_cast<const uint8_t*>(ptr));
+                        bench_tex_cache[ptr] = { h, frame_count };
+                    }
+                }
+                bench_tex_cache[ptr].last_frame_used = frame_count;
+                return bench_tex_cache[ptr].handle;
+            };
+
+            if (use_mega_batch) {
+                std::vector<PluginVertex> allVerts;
+                std::vector<uint32_t> allIdx;
+                std::map<FlycastListType, std::vector<FlycastDrawCommand>> listCmds;
+
+                for (auto& batch : testData.batches) {
+                    // Simulate non-contiguous index buffer (Gap)
+                    for (int i = 0; i < 32; i++) allIdx.push_back(0); 
+
+                    FlycastDrawCommand cmd = {};
+                    cmd.texture_handle = resolveTexture(batch);
+                    cmd.index_offset = (uint32_t)allIdx.size();
+                    cmd.index_count = (uint32_t)batch.indices.size();
+
+                    // Mapping des états (Idem HostRenderer)
+                    cmd.src_blend = batch.srcBlend;
+                    cmd.dst_blend = batch.dstBlend;
+                    cmd.depth_func = batch.depthFunc;
+                    cmd.depth_write = batch.depthWrite;
+                    cmd.cull_mode = batch.cullMode;
+                    cmd.scissor_enable = batch.scissorEnable;
+                    cmd.scissor_x = batch.scissorX; cmd.scissor_y = batch.scissorY;
+                    cmd.scissor_w = batch.scissorW; cmd.scissor_h = batch.scissorH;
+
+                    cmd.fog_mode = batch.fogMode;
+                    cmd.fog_color = batch.fogColor;
+                    cmd.fog_density = batch.fogDensity;
+
+                    uint32_t vBase = (uint32_t)allVerts.size();
+                    for (auto& v : batch.vertices) allVerts.push_back(v);
+                    for (auto i : batch.indices) allIdx.push_back(i + vBase);
+
+                    listCmds[batch.listType].push_back(cmd);
+                }
+
+                for (auto& [type, cmds] : listCmds) {
+                    PluginMegaBatch mega = {};
+                    mega.vertices = allVerts.data();
+                    mega.vertex_count = allVerts.size();
+                    mega.indices = allIdx.data();
+                    mega.index_count = allIdx.size();
+                    mega.commands = cmds.data();
+                    mega.command_count = cmds.size();
+                    mega.list_type = type;
+
+                    auto start = std::chrono::high_resolution_clock::now();
+                    vtable->process_mega_batch(&mega);
                     perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
                 }
+            } else {
+                for (auto& batch : testData.batches) {
+                    PluginGeometryData geom = {};
+                    geom.vertices = batch.vertices.data();
+                    geom.vertex_count = batch.vertices.size();
+                    geom.indices = batch.indices.data();
+                    geom.index_count = batch.indices.size();
+                    geom.texture_handle = resolveTexture(batch);
+                    geom.list_type = batch.listType;
+                    // ... copy other states ...
+                    if (vtable->process) {
+                        auto start = std::chrono::high_resolution_clock::now();
+                        vtable->process(&geom);
+                        perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
+                    }
+                }
             }
-        }
 
-        // 4. Render Framebuffer (Simule la sortie vers la RAM vidéo/écran)
-        PluginFramebufferInfo fbInfo = {};
-        fbInfo.width = g_pvr.fb_x_clip_max + 1;
-        if (g_pvr.stride != 0) fbInfo.width = std::min(g_pvr.stride * 4, fbInfo.width);
-        fbInfo.height = g_pvr.fb_y_clip_max + 1;
-        if (g_pvr.v_scale < 0x400) fbInfo.height = fbInfo.height * 1024 / g_pvr.v_scale;
+            // 4. Render Framebuffer (Simule la sortie vers la RAM vidéo/écran)
+            PluginFramebufferInfo fbInfo = {};
+            fbInfo.width = g_pvr.fb_x_clip_max + 1;
+            if (g_pvr.stride != 0) fbInfo.width = std::min(g_pvr.stride * 4, fbInfo.width);
+            fbInfo.height = g_pvr.fb_y_clip_max + 1;
+            if (g_pvr.v_scale < 0x400) fbInfo.height = fbInfo.height * 1024 / g_pvr.v_scale;
 
-        if (vtable->render_framebuffer) {
-            auto start = std::chrono::high_resolution_clock::now();
-            vtable->render_framebuffer(&fbInfo);
-            perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
-        }
-
-        // 5. Final Render & Present
-        if (vtable->render) {
-            auto start = std::chrono::high_resolution_clock::now();
-            vtable->render();
-            perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
-        }
-
-        if (vtable->present) {
-            auto start = std::chrono::high_resolution_clock::now();
-            vtable->present();
-            perf.presentTimeMs = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
-            perf.pluginTimeMs += perf.presentTimeMs;
-        }
-
-        // --- Garbage Collection (Toutes les 120 frames, comme HostRenderer) ---
-        if (frame_count % 120 == 0) {
-            for (auto it = bench_tex_cache.begin(); it != bench_tex_cache.end(); ) {
-                if (frame_count - it->second.last_frame_used > 120) {
-                    if (vtable->destroy_texture) vtable->destroy_texture(it->second.handle);
-                    it = bench_tex_cache.erase(it);
-                } else ++it;
+            if (vtable->render_framebuffer) {
+                auto start = std::chrono::high_resolution_clock::now();
+                vtable->render_framebuffer(&fbInfo);
+                perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
             }
-        }
 
-        perf.buildTimeMs = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - frameStart).count();
-        frame_count++;
+            // 5. Final Render & Present
+            if (vtable->render) {
+                auto start = std::chrono::high_resolution_clock::now();
+                vtable->render();
+                perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
+            }
+
+            if (vtable->present) {
+                auto start = std::chrono::high_resolution_clock::now();
+                vtable->present();
+                perf.presentTimeMs = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
+                perf.pluginTimeMs += perf.presentTimeMs;
+            }
+
+            // --- Garbage Collection (Toutes les 120 frames, comme HostRenderer) ---
+            if (frame_count % 120 == 0) {
+                for (auto it = bench_tex_cache.begin(); it != bench_tex_cache.end(); ) {
+                    if (frame_count - it->second.last_frame_used > 120) {
+                        if (vtable->destroy_texture) vtable->destroy_texture(it->second.handle);
+                        it = bench_tex_cache.erase(it);
+                    } else ++it;
+                }
+            }
+
+            perf.buildTimeMs = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - frameStart).count();
+            frame_count++;
+        }
 
         if (singleTestMode && !continuousMode && frame_count >= activeTest->getFrameCount()) running = false;
         
