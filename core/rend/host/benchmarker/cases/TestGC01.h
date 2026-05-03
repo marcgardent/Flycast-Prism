@@ -13,12 +13,12 @@ public:
     std::string getName() const override { return "Garbage Collection"; }
     std::string getDescription() const override { return "Garbage collection (GC) test. Verifies that GPU resources (textures) are automatically destroyed after a period of inactivity (120 frames)."; }
     std::string getExpected() const override { return "A white textured triangle (Z=0.5) visible for 10 frames, then replaced by a tiny red dot. Check logs for 'Destroying texture' around frame 130."; }
+    uint32_t getFrameCount() const override { return 250; }
 
     void update(float dt) override {
         frame++;
     }
 
-    uint32_t getFrameCount() const override { return 250; }
 
     void prepare(TestData& data) override {
         // Only render the texture during the first 10 frames

@@ -31,6 +31,7 @@ add_executable(benchmarker main.cpp TestCase.h TestManager.h
         ${IMGUI_DIR}/imgui_tables.cpp
         ${IMGUI_DIR}/imgui_demo.cpp
         ${IMGUI_DIR}/imgui_cjk.cpp
+        cases/TestExtGeo03.h
 )
 
 # flycast_plugin_api.h is in the parent directory

@@ -63,6 +63,7 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestSPE02>());
     mgr.registerTest(std::make_unique<TestOIT01>());
     mgr.registerTest(std::make_unique<TestGC01>());
+    mgr.registerTest(std::make_unique<TestEXTGEO03>());
 }
 
 static void print_usage(const char* argv0) {
