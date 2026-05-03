@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 
-#define FLYCAST_PLUGIN_API_VERSION 11
+#define FLYCAST_PLUGIN_API_VERSION 12
 
 
 // ============================================================================
@@ -77,14 +77,13 @@ typedef enum {
 } FlycastTexMode;
 
 /**
- * Blending factors (Added in v7)
- * Based on PVR2 hardware modes.
+ * Blending factors
  */
 typedef enum {
     FLYCAST_BLEND_ZERO            = 0,
     FLYCAST_BLEND_ONE             = 1,
-    FLYCAST_BLEND_OTHER_COLOR     = 2, // Source: Dest Color, Dest: Source Color
-    FLYCAST_BLEND_INV_OTHER_COLOR = 3, // Source: 1 - Dest Color, Dest: 1 - Source Color
+    FLYCAST_BLEND_OTHER_COLOR     = 2,
+    FLYCAST_BLEND_INV_OTHER_COLOR = 3,
     FLYCAST_BLEND_SRC_ALPHA       = 4,
     FLYCAST_BLEND_INV_SRC_ALPHA   = 5,
     FLYCAST_BLEND_DST_ALPHA       = 6,
@@ -92,8 +91,7 @@ typedef enum {
 } FlycastBlendFactor;
 
 /**
- * Depth comparison functions (Added in v7)
- * Matches PVR2 depth modes.
+ * Depth comparison functions
  */
 typedef enum {
     FLYCAST_DEPTH_NEVER    = 0,
@@ -107,7 +105,7 @@ typedef enum {
 } FlycastDepthFunc;
 
 /**
- * PVR2 List Types (Added in v10)
+ * PVR2 List Types
  */
 typedef enum {
     FLYCAST_LIST_OPAQUE           = 0,
@@ -116,7 +114,83 @@ typedef enum {
 } FlycastListType;
 
 /**
- * Container for geometry data sent during `Process()`.
+ * Legacy Structure (Retained for backwards compatibility)
+ */
+typedef struct {
+    const PluginVertex* vertices;
+    size_t vertex_count;
+    const uint32_t* indices;
+    size_t index_count;
+
+    bool scissor_enable;
+    int32_t scissor_x;
+    int32_t scissor_y;
+    int32_t scissor_w;
+    int32_t scissor_h;
+
+    FlycastCullMode cull_mode;
+    uint32_t        texture_handle;
+
+    FlycastBlendFactor src_blend;
+    FlycastBlendFactor dst_blend;
+    FlycastDepthFunc   depth_func;
+    bool               depth_write;
+    bool               offset_enable;
+
+    uint32_t           fog_mode;
+    uint32_t           fog_color;
+    uint32_t           fog_vertex_color;
+    float              fog_density;
+    uint32_t           fog_clamp_min;
+    uint32_t           fog_clamp_max;
+
+    FlycastListType    list_type;
+} PluginGeometryData;
+
+// ============================================================================
+// V12 MEGA-BATCHING & SUB-ALLOCATION
+// ============================================================================
+
+typedef enum {
+    FLYCAST_CAP_NONE = 0,
+    FLYCAST_CAP_MEGA_BATCH = (1 << 0) // Plugin requests full Mega-Batches with DrawCommands
+} PluginCapabilities;
+
+/**
+ * A single draw command (Lot) inside a Mega-Batch.
+ */
+typedef struct {
+    uint32_t index_offset; // Offset within the global MegaBatch indices array
+    uint32_t index_count;  // Number of indices to draw
+
+    // Material & State
+    uint32_t texture_handle;
+    FlycastBlendFactor src_blend;
+    FlycastBlendFactor dst_blend;
+    FlycastDepthFunc depth_func;
+    bool depth_write;
+    FlycastCullMode cull_mode;
+    bool offset_enable;
+
+    // Scissor
+    bool scissor_enable;
+    int32_t scissor_x;
+    int32_t scissor_y;
+    int32_t scissor_w;
+    int32_t scissor_h;
+
+    // Fog
+    uint32_t fog_mode;
+    uint32_t fog_color;
+    uint32_t fog_vertex_color;
+    float fog_density;
+    uint32_t fog_clamp_min;
+    uint32_t fog_clamp_max;
+} FlycastDrawCommand;
+
+/**
+ * A full list of geometry (e.g., all Opaque polygons for the frame).
+ * Zero-copy: points directly to the emulator's global vertex/index buffers.
  */
 typedef struct {
     const PluginVertex* vertices;
@@ -125,42 +199,11 @@ typedef struct {
     const uint32_t* indices;
     size_t index_count;
 
-    // Scissor / Clipping state (Added in v4)
-    bool scissor_enable;
-    int32_t scissor_x; // Supports negative values for widescreen
-    int32_t scissor_y;
-    int32_t scissor_w;
-    int32_t scissor_h;
+    const FlycastDrawCommand* commands;
+    size_t command_count;
 
-    // Culling state (Added in v5)
-    FlycastCullMode cull_mode;
-
-    // Texture state (Updated in v11 to use handles)
-    uint32_t        texture_handle; // 0 means no texture
-
-    // Transparency state (Added in v7)
-    FlycastBlendFactor src_blend;
-    FlycastBlendFactor dst_blend;
-
-    // Depth state (Added in v7)
-    FlycastDepthFunc   depth_func;
-    bool               depth_write;
-
-    // Specular / Offset Color (Added in v8)
-    bool               offset_enable;
-
-    // Fog state (Added in v9)
-    uint32_t           fog_mode;         // 0: Table, 1: Vertex, 2: None, 3: Table 2
-    uint32_t           fog_color;        // ARGB8888
-    uint32_t           fog_vertex_color; // ARGB8888
-    float              fog_density;      // From FOG_DENSITY register
-    uint32_t           fog_clamp_min;    // ARGB8888
-    uint32_t           fog_clamp_max;    // ARGB8888
-    // fog_table removed in v11 (pushed via callback)
-
-    // List type (Added in v10)
-    FlycastListType    list_type;
-} PluginGeometryData;
+    FlycastListType list_type;
+} PluginMegaBatch;
 
 /**
  * Framebuffer information.
@@ -184,92 +227,51 @@ typedef enum {
 } FlycastLogLevel;
 
 typedef struct {
-    /**
-     * Returns the current Game ID (e.g., "MK-51000").
-     * Pointer valid until next call or plugin termination.
-     */
     const char* (*get_game_id)(FlycastHostHandle host);
-
-    /**
-     * Returns the host name ("Flycast").
-     */
     const char* (*get_host_name)(FlycastHostHandle host);
-
-    /**
-     * Returns the host version string.
-     */
     const char* (*get_host_version)(FlycastHostHandle host);
-
-    /**
-     * Sends a log message to the host.
-     */
     void (*log)(FlycastHostHandle host, FlycastLogLevel level, const char* message);
-
 } FlycastHostInterface;
 
 // ============================================================================
 // PLUGIN EXPORTED INTERFACE
 // ============================================================================
 
-
-
-/**
- * Function table that the Rust/C++ plugin MUST implement.
- */
 typedef struct {
-    uint32_t struct_size; // For API version checking
+    uint32_t struct_size;
     uint32_t api_version;
 
-    // Plugin identification (provided by plugin)
     const char* name;
     const char* version;
 
-    // The plugin receives window info and host interface to self-initialize
     bool (*init)(FlycastHostHandle host, const FlycastWindowHandle* window, const FlycastHostInterface* host_if);
     void (*term)(void);
-
-    /**
-     * Called when the host window is resized.
-     */
     void (*resize)(uint32_t width, uint32_t height);
 
-    // Equivalent to Renderer::Process
+    // Rendering capabilities (Added v12)
+    uint32_t (*get_capabilities)(void);
+
+    // Legacy render (fallback if MEGA_BATCH is not supported)
     void (*process)(const PluginGeometryData* data);
 
-    // Equivalent to Renderer::Render
+    // Mega-Batch render (v12)
+    void (*process_mega_batch)(const PluginMegaBatch* batch);
+
     bool (*render)(void);
-
-    // Equivalent to Renderer::RenderFramebuffer
     void (*render_framebuffer)(const PluginFramebufferInfo* info);
-
-    // Equivalent to SwapBuffers or vkQueuePresentKHR
     bool (*present)(void);
 
-    // --- State Management (Added in v11) ---
-
-    /**
-     * Updates the global palette (1024 ARGB32 entries).
-     */
+    // State Management
     void (*update_palette)(const uint32_t* palette_data);
-
-    /**
-     * Updates the global fog table (128 entries).
-     */
     void (*update_fog_table)(const uint32_t* fog_table_data);
 
-    /**
-     * Texture Management
-     */
+    // Texture Management
     uint32_t (*create_texture)(uint32_t width, uint32_t height, FlycastTexMode mode);
     void (*update_texture)(uint32_t handle, const uint8_t* data);
     void (*destroy_texture)(uint32_t handle);
 
 } FlycastPluginVTable;
 
-/**
- * The ONLY function exported (symbol) by the dynamic plugin library (.so/.dll).
- * In Rust: #[no_mangle] pub extern "C" fn flycast_plugin_get_vtable() -> *const FlycastPluginVTable
- */
 #if defined(_WIN32)
   #define PLUGIN_EXPORT __declspec(dllexport)
 #else

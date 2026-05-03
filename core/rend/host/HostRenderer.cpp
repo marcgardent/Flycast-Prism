@@ -48,8 +48,8 @@ bool HostRenderer::Init() {
     }
 
     if (vtable) {
-        INFO_LOG(RENDERER, "Loaded plugin: %s v%s (API v%d)", 
-                 vtable->name ? vtable->name : "Unknown", 
+        INFO_LOG(RENDERER, "Loaded plugin: %s v%s (API v%d)",
+                 vtable->name ? vtable->name : "Unknown",
                  vtable->version ? vtable->version : "0.0.0",
                  vtable->api_version);
     }
@@ -66,18 +66,15 @@ void HostRenderer::Term() {
     if (vtable && vtable->term) {
         vtable->term();
     }
-    
-    // v11: Destroy all remaining textures in the plugin
     asset_cache.Clear();
-
     unloadPlugin();
 }
 
 static FlycastCullMode MapCullMode(u32 pvrCullMode) {
     switch (pvrCullMode) {
         case 0: return FLYCAST_CULL_NONE;
-        case 1: return FLYCAST_CULL_BACK;  // Culls CW (positive area)
-        case 2: return FLYCAST_CULL_FRONT; // Culls CCW (negative area)
+        case 1: return FLYCAST_CULL_BACK;
+        case 2: return FLYCAST_CULL_FRONT;
         default: return FLYCAST_CULL_NONE;
     }
 }
@@ -91,19 +88,15 @@ static FlycastDepthFunc MapDepthFunc(u32 pvrDepthFunc) {
 }
 
 void HostRenderer::Process(TA_context *ctx) {
-    if (!vtable || !vtable->process) return;
+    if (!vtable) return;
 
     ta_parse(ctx, true);
-
-    // --- v11 State Tracking (Push Model) ---
 
     // 1. Palette Update
     uint32_t palette_hash = 0;
     for (int i = 0; i < 1024; i++) palette_hash ^= palette32_ram[i] + i;
     if (palette_hash != last_palette_crc) {
-        if (vtable->update_palette) {
-            vtable->update_palette(palette32_ram);
-        }
+        if (vtable->update_palette) vtable->update_palette(palette32_ram);
         last_palette_crc = palette_hash;
     }
 
@@ -112,76 +105,136 @@ void HostRenderer::Process(TA_context *ctx) {
     const uint32_t* fog_ptr = (const uint32_t*)FOG_TABLE;
     for (int i = 0; i < 128; i++) fog_hash ^= fog_ptr[i] + i;
     if (fog_hash != last_fog_crc) {
-        if (vtable->update_fog_table) {
-            vtable->update_fog_table(fog_ptr);
-        }
+        if (vtable->update_fog_table) vtable->update_fog_table(fog_ptr);
         last_fog_crc = fog_hash;
     }
 
-    auto processBatches = [&](const std::vector<PolyParam>& polys, FlycastListType listType) {
-        for (const auto& poly : polys) {
-            if (poly.count == 0) continue;
+    // Determine capabilities
+    bool use_mega_batch = false;
+    if (vtable->get_capabilities && vtable->process_mega_batch) {
+        use_mega_batch = (vtable->get_capabilities() & FLYCAST_CAP_MEGA_BATCH) != 0;
+    }
 
-            PluginGeometryData data = {};
-            data.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
-            data.vertex_count = ctx->rend.verts.size();
-            
-            data.indices = &ctx->rend.idx[poly.first];
-            data.index_count = poly.count;
+    auto processList = [&](const std::vector<PolyParam>& polys, FlycastListType listType) {
+        if (polys.empty()) return;
 
-            data.scissor_enable = true; 
-            data.scissor_x = ctx->rend.fb_X_CLIP.min;
-            data.scissor_y = ctx->rend.fb_Y_CLIP.min;
-            data.scissor_w = (int32_t)ctx->rend.fb_X_CLIP.max - (int32_t)ctx->rend.fb_X_CLIP.min + 1;
-            data.scissor_h = (int32_t)ctx->rend.fb_Y_CLIP.max - (int32_t)ctx->rend.fb_Y_CLIP.min + 1;
+        if (use_mega_batch) {
+            mega_commands.clear();
+            mega_commands.reserve(polys.size());
 
-            if (data.scissor_w < 0) data.scissor_w = 0;
-            if (data.scissor_h < 0) data.scissor_h = 0;
+            for (const auto& poly : polys) {
+                if (poly.count == 0) continue;
 
-            data.cull_mode = MapCullMode(poly.isp.CullMode);
+                FlycastDrawCommand cmd = {};
+                cmd.index_offset = poly.first; // Direct offset into ctx->rend.idx
+                cmd.index_count = poly.count;
 
-            // --- v11 Texture Management (Push Model) ---
-            data.texture_handle = 0;
-            if (poly.pcw.Texture && poly.texture) {
-                uint32_t vram_addr = poly.tcw.TexAddr << 3;
-                uint32_t width = 8u << poly.tsp.TexU;
-                uint32_t height = 8u << poly.tsp.TexV;
-                FlycastTexMode mode = (poly.tcw.PixelFmt == PixelPal8) ? FLYCAST_TEX_PAL8 : FLYCAST_TEX_NONE;
+                cmd.scissor_enable = true;
+                cmd.scissor_x = ctx->rend.fb_X_CLIP.min;
+                cmd.scissor_y = ctx->rend.fb_Y_CLIP.min;
+                cmd.scissor_w = (int32_t)ctx->rend.fb_X_CLIP.max - (int32_t)ctx->rend.fb_X_CLIP.min + 1;
+                cmd.scissor_h = (int32_t)ctx->rend.fb_Y_CLIP.max - (int32_t)ctx->rend.fb_Y_CLIP.min + 1;
+                if (cmd.scissor_w < 0) cmd.scissor_w = 0;
+                if (cmd.scissor_h < 0) cmd.scissor_h = 0;
 
-                data.texture_handle = asset_cache.GetTexture(vram_addr, width, height, mode, 
-                                                            poly.texture->Updates, FrameCount, &vram[vram_addr]);
+                cmd.cull_mode = MapCullMode(poly.isp.CullMode);
+
+                cmd.texture_handle = 0;
+                if (poly.pcw.Texture && poly.texture) {
+                    uint32_t vram_addr = poly.tcw.TexAddr << 3;
+                    uint32_t width = 8u << poly.tsp.TexU;
+                    uint32_t height = 8u << poly.tsp.TexV;
+                    FlycastTexMode mode = (poly.tcw.PixelFmt == PixelPal8) ? FLYCAST_TEX_PAL8 : FLYCAST_TEX_NONE;
+                    cmd.texture_handle = asset_cache.GetTexture(vram_addr, width, height, mode,
+                                                                poly.texture->Updates, FrameCount, &vram[vram_addr]);
+                }
+
+                cmd.src_blend = MapBlendFactor(poly.tsp.SrcInstr);
+                cmd.dst_blend = MapBlendFactor(poly.tsp.DstInstr);
+                cmd.depth_func = MapDepthFunc(poly.isp.DepthMode);
+                cmd.depth_write = !poly.isp.ZWriteDis;
+                cmd.offset_enable = poly.pcw.Offset;
+
+                cmd.fog_mode = config::Fog ? poly.tsp.FogCtrl : 2;
+                cmd.fog_color = FOG_COL_RAM.full;
+                cmd.fog_vertex_color = FOG_COL_VERT.full;
+                cmd.fog_density = FOG_DENSITY.get();
+                cmd.fog_clamp_min = ctx->rend.fog_clamp_min.full;
+                cmd.fog_clamp_max = ctx->rend.fog_clamp_max.full;
+
+                mega_commands.push_back(cmd);
             }
 
-            data.src_blend = MapBlendFactor(poly.tsp.SrcInstr);
-            data.dst_blend = MapBlendFactor(poly.tsp.DstInstr);
-            data.depth_func = MapDepthFunc(poly.isp.DepthMode);
-            data.depth_write = !poly.isp.ZWriteDis;
-            data.offset_enable = poly.pcw.Offset;
+            if (!mega_commands.empty()) {
+                PluginMegaBatch mega = {};
+                // Zero copy: Direct pointers to the global TA buffers
+                mega.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
+                mega.vertex_count = ctx->rend.verts.size();
+                mega.indices = ctx->rend.idx.data();
+                mega.index_count = ctx->rend.idx.size();
+                mega.commands = mega_commands.data();
+                mega.command_count = mega_commands.size();
+                mega.list_type = listType;
 
-            data.fog_mode = config::Fog ? poly.tsp.FogCtrl : 2;
-            data.fog_color = FOG_COL_RAM.full;
-            data.fog_vertex_color = FOG_COL_VERT.full;
-            data.fog_density = FOG_DENSITY.get();
-            data.fog_clamp_min = ctx->rend.fog_clamp_min.full;
-            data.fog_clamp_max = ctx->rend.fog_clamp_max.full;
+                vtable->process_mega_batch(&mega);
+            }
 
-            data.list_type = listType;
+        } else if (vtable->process) {
+            // Legacy Path (Draw-Call per Batch)
+            for (const auto& poly : polys) {
+                if (poly.count == 0) continue;
 
-            vtable->process(&data);
+                PluginGeometryData data = {};
+                data.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
+                data.vertex_count = ctx->rend.verts.size();
+                data.indices = &ctx->rend.idx[poly.first];
+                data.index_count = poly.count;
+
+                data.scissor_enable = true;
+                data.scissor_x = ctx->rend.fb_X_CLIP.min;
+                data.scissor_y = ctx->rend.fb_Y_CLIP.min;
+                data.scissor_w = (int32_t)ctx->rend.fb_X_CLIP.max - (int32_t)ctx->rend.fb_X_CLIP.min + 1;
+                data.scissor_h = (int32_t)ctx->rend.fb_Y_CLIP.max - (int32_t)ctx->rend.fb_Y_CLIP.min + 1;
+
+                data.cull_mode = MapCullMode(poly.isp.CullMode);
+
+                data.texture_handle = 0;
+                if (poly.pcw.Texture && poly.texture) {
+                    uint32_t vram_addr = poly.tcw.TexAddr << 3;
+                    uint32_t width = 8u << poly.tsp.TexU;
+                    uint32_t height = 8u << poly.tsp.TexV;
+                    FlycastTexMode mode = (poly.tcw.PixelFmt == PixelPal8) ? FLYCAST_TEX_PAL8 : FLYCAST_TEX_NONE;
+                    data.texture_handle = asset_cache.GetTexture(vram_addr, width, height, mode,
+                                                                poly.texture->Updates, FrameCount, &vram[vram_addr]);
+                }
+
+                data.src_blend = MapBlendFactor(poly.tsp.SrcInstr);
+                data.dst_blend = MapBlendFactor(poly.tsp.DstInstr);
+                data.depth_func = MapDepthFunc(poly.isp.DepthMode);
+                data.depth_write = !poly.isp.ZWriteDis;
+                data.offset_enable = poly.pcw.Offset;
+
+                data.fog_mode = config::Fog ? poly.tsp.FogCtrl : 2;
+                data.fog_color = FOG_COL_RAM.full;
+                data.fog_vertex_color = FOG_COL_VERT.full;
+                data.fog_density = FOG_DENSITY.get();
+                data.fog_clamp_min = ctx->rend.fog_clamp_min.full;
+                data.fog_clamp_max = ctx->rend.fog_clamp_max.full;
+                data.list_type = listType;
+
+                vtable->process(&data);
+            }
         }
     };
 
-    processBatches(ctx->rend.global_param_op, FLYCAST_LIST_OPAQUE);
-    processBatches(ctx->rend.global_param_pt, FLYCAST_LIST_PUNCH_THROUGH);
-    processBatches(ctx->rend.global_param_tr, FLYCAST_LIST_TRANSLUCENT);
+    processList(ctx->rend.global_param_op, FLYCAST_LIST_OPAQUE);
+    processList(ctx->rend.global_param_pt, FLYCAST_LIST_PUNCH_THROUGH);
+    processList(ctx->rend.global_param_tr, FLYCAST_LIST_TRANSLUCENT);
 }
-
 
 bool HostRenderer::Render() {
     checkResize();
-    if (vtable && vtable->render) {
-        return vtable->render();
-    }
+    if (vtable && vtable->render) return vtable->render();
     return true;
 }
 
@@ -191,31 +244,23 @@ void HostRenderer::RenderFramebuffer(const FramebufferInfo& info) {
     PluginFramebufferInfo pluginInfo;
     pluginInfo.fb_r_sof1 = info.fb_r_sof1;
     pluginInfo.fb_r_sof2 = info.fb_r_sof2;
-    
+
     pluginInfo.width = FB_X_CLIP.max + 1;
     if (FB_W_LINESTRIDE.stride != 0)
         pluginInfo.width = std::min((uint32_t)FB_W_LINESTRIDE.stride * 4, pluginInfo.width);
-    
+
     pluginInfo.height = FB_Y_CLIP.max + 1;
     if (SCALER_CTL.vscalefactor < 0x400)
         pluginInfo.height = pluginInfo.height * 1024 / SCALER_CTL.vscalefactor;
 
     vtable->render_framebuffer(&pluginInfo);
-
 }
 
 bool HostRenderer::Present() {
-    // v11: Periodic cleanup of unused textures
-    if (FrameCount % 120 == 0) {
-        asset_cache.CollectGarbage(FrameCount);
-    }
-
-    if (vtable && vtable->present) {
-        return vtable->present();
-    }
+    if (FrameCount % 120 == 0) asset_cache.CollectGarbage(FrameCount);
+    if (vtable && vtable->present) return vtable->present();
     return true;
 }
-
 
 bool HostRenderer::loadPlugin() {
     std::string pluginPath = config::PluginPath.get();
@@ -251,7 +296,7 @@ bool HostRenderer::loadPlugin() {
 
     vtable = get_vtable();
     if (!vtable || vtable->api_version != FLYCAST_PLUGIN_API_VERSION) {
-        ERROR_LOG(RENDERER, "Invalid plugin API version.");
+        ERROR_LOG(RENDERER, "Invalid plugin API version. Expected %d, got %d", FLYCAST_PLUGIN_API_VERSION, vtable ? vtable->api_version : 0);
         unloadPlugin();
         return false;
     }
