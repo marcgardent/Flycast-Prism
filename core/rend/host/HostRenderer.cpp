@@ -33,6 +33,8 @@ HostRenderer::HostRenderer() : asset_cache(vtable) {
     host_interface.get_host_name = GetHostName;
     host_interface.get_host_version = GetHostVersion;
     host_interface.log = LogMessage;
+    last_palette_crc = 0;
+    last_fog_crc = 0;
 }
 
 HostRenderer::~HostRenderer() {

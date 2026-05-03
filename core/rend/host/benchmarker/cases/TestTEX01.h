@@ -1,32 +1,39 @@
 #pragma once
 
 #include "TestCommon.h"
+#include <cstring>
+
+// Simulated hardware RAM for palette, monitored by the host
+extern uint32_t palette32_ram[1024];
 
 
 // ============================================================================
 // TEX-01 : Palette Lookup (8BPP)
 // A full-screen quad textured with a 256x256 8BPP indexed texture.
 // Each texel index = (x + y) & 0xFF -> 256 diagonal rainbow bands.
-// Palette: 256 entries, HSL rainbow (hue = i/256 * 360 degrees).
+// Palette: 1024 entries (Hardware standard), using the first 256 for HSL rainbow (hue = i/256 * 360 degrees).
 // Expected: smooth diagonal rainbow gradient across the screen.
 // ============================================================================
 class TestTEX01 : public TestCase {
 public:
     std::string getId() const override { return "TEX-01"; }
     std::string getName() const override { return "Palette Lookup (8BPP)"; }
-    std::string getDescription() const override { return "Texture mapping with palette lookup (8BPP). Each texel is an index into a 256-color palette."; }
+    std::string getDescription() const override { return "Texture mapping with palette lookup (8BPP). Each texel is an index into a 256-color palette (within a 1024 hardware bank)."; }
     std::string getExpected() const override { return "A full-screen rainbow gradient (Z=0.5) using an 8BPP indexed texture."; }
 
     void prepare(TestData& data) override {
         constexpr uint32_t TEX_W = 256;
         constexpr uint32_t TEX_H = 256;
 
-        // ---- Build rainbow palette (256 ARGB32 entries) ----
-        std::vector<uint32_t> pal(256);
+        // ---- Build rainbow palette (1024 ARGB32 entries to match hardware) ----
+        std::vector<uint32_t> pal(1024, 0);
         for (int i = 0; i < 256; ++i) {
             float hue = (float)i / 256.0f * 360.0f;
             pal[i] = hsl_to_argb32(hue, 1.0f, 0.5f);
         }
+
+        // Write to simulated hardware RAM so the host detects the update
+        memcpy(palette32_ram, pal.data(), 1024 * sizeof(uint32_t));
 
         // ---- Build 8BPP texture: index = (x + y) & 0xFF ----
         // Produces 256 diagonal bands, each mapped to a distinct palette color.

@@ -36,6 +36,7 @@ add_executable(benchmarker main.cpp TestCase.h TestManager.h
 # flycast_plugin_api.h is in the parent directory
 target_include_directories(benchmarker PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/../
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../
     ${IMGUI_DIR}
 )
 
@@ -49,7 +50,7 @@ elseif(SDL2_FOUND)
 endif()
 
 # Link against dynamic loading library (dl on Linux)
-target_link_libraries(benchmarker PRIVATE ${CMAKE_DL_LIBS})
+target_link_libraries(benchmarker PRIVATE ${CMAKE_DL_LIBS} nowide::nowide)
 
 # Define loader for imgui_impl_opengl3
 target_compile_definitions(benchmarker PRIVATE IMGUI_IMPL_OPENGL_LOADER_CUSTOM)

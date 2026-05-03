@@ -21,6 +21,8 @@
 #include "BenchUI.h"
 
 static BenchUI* g_ui = nullptr;
+uint32_t palette32_ram[1024];
+uint32_t FOG_TABLE[128];
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -346,11 +348,7 @@ int main(int argc, char** argv) {
                 frame_count++;
             }
 
-            // Auto-exit in single test mode
-            if (singleTestMode && !continuousMode && frame_count >= activeTest->getFrameCount()) {
-                running = false;
-                break;
-            }
+
 
             // --- GC: Cleanup unused textures every 120 frames ---
             if (frame_count % 120 == 0) {
@@ -384,7 +382,7 @@ int main(int argc, char** argv) {
                 // 1. Palette
                 if (!batch.palette.empty()) {
                     uint32_t crc = 0;
-                    for (auto c : batch.palette) crc ^= c;
+                    for (size_t i = 0; i < batch.palette.size(); ++i) crc ^= batch.palette[i] + i;
                     if (crc != last_palette_crc && vtable->update_palette) {
                         vtable->update_palette(batch.palette.data());
                         last_palette_crc = crc;
@@ -454,6 +452,11 @@ int main(int argc, char** argv) {
                 vtable->present();
             }
             needsRender = false;
+
+            // Auto-exit in single test mode
+            if (singleTestMode && !continuousMode && frame_count >= activeTest->getFrameCount()) {
+                running = false;
+            }
         }
 
         SDL_Delay(16);
