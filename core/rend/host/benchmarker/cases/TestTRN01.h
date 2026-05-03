@@ -12,9 +12,8 @@ class TestTRN01 : public TestCase {
 public:
     std::string getId() const override { return "TRN-01"; }
     std::string getName() const override { return "Alpha Blending (Translucency)"; }
-    std::string getDescription() const override {
-        return "Overlapping quads testing SrcAlpha/InvSrcAlpha blending.";
-    }
+    std::string getDescription() const override { return "Alpha blending (translucency) test. Overlaps a translucent blue quad (50% alpha) on top of an opaque red background."; }
+    std::string getExpected() const override { return "A purple rectangle in the center. The translucent blue quad (Z=0.6, Front) should correctly blend over the opaque red background (Z=0.5, Back)."; }
 
     void prepare(TestData& data) override {
         // 1. Background quad (Red, Opaque)

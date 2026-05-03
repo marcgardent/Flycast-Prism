@@ -14,9 +14,8 @@ class TestTEX01 : public TestCase {
 public:
     std::string getId() const override { return "TEX-01"; }
     std::string getName() const override { return "Palette Lookup (8BPP)"; }
-    std::string getDescription() const override {
-        return "An indexed 8BPP sprite with a rainbow palette buffer.";
-    }
+    std::string getDescription() const override { return "Texture mapping with palette lookup (8BPP). Each texel is an index into a 256-color palette."; }
+    std::string getExpected() const override { return "A full-screen rainbow gradient (Z=0.5) using an 8BPP indexed texture."; }
 
     void prepare(TestData& data) override {
         constexpr uint32_t TEX_W = 256;

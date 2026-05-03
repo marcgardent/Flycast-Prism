@@ -104,7 +104,7 @@ public:
         ImGui::NewFrame();
 
         float padding = 10.0f * uiScale;
-        float infoHeight = 150.0f * uiScale; // Increased for combo
+        float infoHeight = 250.0f * uiScale; // Increased for extra text
 
         // UI Definition
         ImGui::SetNextWindowPos(ImVec2(padding, padding), ImGuiCond_Always);
@@ -125,8 +125,12 @@ public:
         }
 
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(1, 1, 0, 1), "Name: %s", allTests[currentIdx]->getName().c_str());
-        ImGui::TextWrapped("Desc: %s", allTests[currentIdx]->getDescription().c_str());
+        ImGui::TextColored(ImVec4(0, 1, 1, 1), "Objective:");
+        ImGui::TextWrapped("%s", allTests[currentIdx]->getDescription().c_str());
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0, 1, 0, 1), "Expected Result:");
+        ImGui::TextWrapped("%s", allTests[currentIdx]->getExpected().c_str());
+        ImGui::Separator();
         ImGui::Text("Frames: %u / %u", frameCount, totalFrames);
         ImGui::SameLine(ImGui::GetWindowWidth() - 80 * uiScale);
         if (ImGui::Button("Quit", ImVec2(70 * uiScale, 0))) {

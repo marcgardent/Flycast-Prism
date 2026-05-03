@@ -54,6 +54,7 @@ public:
     virtual std::string getId() const = 0;
     virtual std::string getName() const = 0;
     virtual std::string getDescription() const = 0;
+    virtual std::string getExpected() const = 0;
     
     virtual void prepare(TestData& data) = 0;
     virtual void update(float dt) {}

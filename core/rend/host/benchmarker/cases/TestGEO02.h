@@ -4,7 +4,8 @@ class TestGEO02 : public TestCase {
 public:
     std::string getId() const override { return "GEO-02"; }
     std::string getName() const override { return "Culling"; }
-    std::string getDescription() const override { return "Three overlapping triangles with different winding and culling."; }
+    std::string getDescription() const override { return "Backface culling and winding order test. Validates that only correctly wound triangles are rendered when culling is enabled."; }
+    std::string getExpected() const override { return "Red triangle (Z=0.5, Front) and Green triangle (Z=0.4, Middle) visible. Red overlaps Green. Blue triangle (Z=0.3, Back) is culled and invisible."; }
 
     void prepare(TestData& data) override {
         // 1. Red Triangle: CCW, Cull None (Visible)

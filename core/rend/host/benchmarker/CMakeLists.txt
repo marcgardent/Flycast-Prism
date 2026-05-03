@@ -16,10 +16,15 @@ set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../deps/imgui)
 add_executable(benchmarker main.cpp TestCase.h TestManager.h
         cases/TestGEO01.h
         cases/TestGEO02.h
+        cases/TestGEO03.h
         cases/TestSHD01.h
         cases/TestTEX01.h
+        cases/TestTRN01.h
+        cases/TestSPE01.h
+        cases/TestSPE02.h
+        cases/TestOIT01.h
+        cases/TestGC01.h
         cases/TestCommon.h
-        cases/TestGEO03.h
         ${IMGUI_DIR}/imgui.cpp
         ${IMGUI_DIR}/imgui_draw.cpp
         ${IMGUI_DIR}/imgui_widgets.cpp

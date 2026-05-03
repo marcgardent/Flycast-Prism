@@ -7,9 +7,8 @@ class TestSPE02 : public TestCase {
 public:
     std::string getId() const override { return "SPE-02"; }
     std::string getName() const override { return "Fog Corridor"; }
-    std::string getDescription() const override { 
-        return "A deep corridor with table fog to appreciate depth. Fog color is light gray."; 
-    }
+    std::string getDescription() const override { return "Fog rendering test using a lookup table (Table Fog). Simulates a deep corridor where colors fade into a gray fog based on depth."; }
+    std::string getExpected() const override { return "A 3D corridor extending from Z=1.0 (Near, clear) to Z=0.05 (Far, fogged). The end of the corridor should be blended with gray fog."; }
 
     void prepare(TestData& data) override {
         // Build a corridor using 4 quads (floor, ceiling, left wall, right wall)

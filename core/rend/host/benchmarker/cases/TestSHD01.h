@@ -5,7 +5,8 @@ class TestSHD01 : public TestCase {
 public:
     std::string getId() const override { return "SHD-01"; }
     std::string getName() const override { return "Interpolation (Gouraud)"; }
-    std::string getDescription() const override { return "A triangle with Red/Green/Blue vertices."; }
+    std::string getDescription() const override { return "Vertex color interpolation (Gouraud shading) test. A single triangle with different colors at each vertex."; }
+    std::string getExpected() const override { return "A large triangle (Z=0.5) with a smooth color gradient (Red-Green-Blue)."; }
 
     void prepare(TestData& data) override {
         DrawBatch batch;

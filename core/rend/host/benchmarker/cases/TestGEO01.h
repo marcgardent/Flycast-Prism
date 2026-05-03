@@ -6,7 +6,8 @@ class TestGEO01 : public TestCase {
 public:
     std::string getId() const override { return "GEO-01"; }
     std::string getName() const override { return "Simple Square"; }
-    std::string getDescription() const override { return "A simple opaque square (2 triangles)."; }
+    std::string getDescription() const override { return "Basic geometry rendering: a simple opaque square made of two triangles."; }
+    std::string getExpected() const override { return "A solid white square (Z=0.5) centered on the screen on a dark background."; }
 
     void prepare(TestData& data) override {
         DrawBatch batch;

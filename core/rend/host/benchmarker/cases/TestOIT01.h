@@ -12,9 +12,8 @@ class TestOIT01 : public TestCase {
 public:
     std::string getId() const override { return "OIT-01"; }
     std::string getName() const override { return "Order Independent Transparency"; }
-    std::string getDescription() const override {
-        return "Three overlapping quads (Red, Green, Blue) rendered front-to-back.";
-    }
+    std::string getDescription() const override { return "Order Independent Transparency (OIT) test. Three translucent quads (Red, Green, Blue) are submitted in front-to-back order."; }
+    std::string getExpected() const override { return "Quads should blend correctly despite front-to-back submission. Z-order: Red (0.8, Front) > Green (0.5, Middle) > Blue (0.2, Back). All colors should mix properly in overlap areas."; }
 
     void prepare(TestData& data) override {
         // Quad colors: Red (Front), Green (Middle), Blue (Back)

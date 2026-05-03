@@ -6,9 +6,8 @@ class TestSPE01 : public TestCase {
 public:
     std::string getId() const override { return "SPE-01"; }
     std::string getName() const override { return "Specular (Offset Color)"; }
-    std::string getDescription() const override { 
-        return "Verify additive Offset Color: Left=Blue (Black+Blue), Middle=Yellow (Green+Red), Right=Green (No Offset)."; 
-    }
+    std::string getDescription() const override { return "Specular (Offset Color) test. Validates the additive blending of the secondary color (Offset Color) onto the primary vertex color."; }
+    std::string getExpected() const override { return "Three triangles (all Z=0.5): Blue (Black+Blue offset), Yellow (Green+Red offset), and Green (No offset)."; }
 
     void prepare(TestData& data) override {
         // 1. Triangle GAUCHE : Noir + Offset Bleu = BLEU

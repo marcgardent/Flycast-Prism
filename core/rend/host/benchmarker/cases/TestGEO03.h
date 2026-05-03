@@ -4,7 +4,8 @@ class TestGEO03 : public TestCase {
 public:
     std::string getId() const override { return "GEO-03"; }
     std::string getName() const override { return "Clipping (Scissor)"; }
-    std::string getDescription() const override { return "A full-screen polygon with a 320x240 Scissor zone in the center."; }
+    std::string getDescription() const override { return "Scissor rectangle test. Clips rendering to a specific 2D rectangular region."; }
+    std::string getExpected() const override { return "A white rectangle (Z=0.5) in the center (320x240), clipping a full-screen quad."; }
 
     void prepare(TestData& data) override {
         DrawBatch batch;
