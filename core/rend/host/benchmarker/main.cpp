@@ -18,6 +18,7 @@
 #include "cases/TestSPE02.h"
 #include "cases/TestOIT01.h"
 #include "cases/TestGC01.h"
+#include "cases/TestEXTGEO03.h"
 #include "BenchUI.h"
 
 static BenchUI* g_ui = nullptr;
