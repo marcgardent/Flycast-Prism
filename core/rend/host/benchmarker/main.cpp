@@ -383,21 +383,13 @@ int main(int argc, char** argv) {
                 }
             }
 
-            for (auto& batch : testData.batches) {
-                PluginGeometryData geom = {};
-                geom.vertices = batch.vertices.data();
-                geom.vertex_count = (uint32_t)batch.vertices.size();
-                geom.indices = batch.indices.data();
-                geom.index_count = (uint32_t)batch.indices.size();
-                geom.scissor_enable = batch.scissorEnable;
-                geom.scissor_x = batch.scissorX;
-                geom.scissor_y = batch.scissorY;
-                geom.scissor_w = batch.scissorW;
-                geom.scissor_h = batch.scissorH;
-                geom.cull_mode = batch.cullMode;
+            // Check capabilities
+            bool use_mega_batch = false;
+            if (vtable->get_capabilities && vtable->process_mega_batch) {
+                use_mega_batch = (vtable->get_capabilities() & FLYCAST_CAP_MEGA_BATCH) != 0;
+            }
 
-                // --- v11 State Tracking ---
-
+            auto updateState = [&](DrawBatch& batch, uint32_t& texHandle) {
                 // 1. Palette
                 if (!batch.palette.empty()) {
                     uint32_t crc = 0;
@@ -423,7 +415,7 @@ int main(int argc, char** argv) {
                 }
 
                 // 3. Textures
-                geom.texture_handle = 0;
+                texHandle = 0;
                 if (!batch.texData.empty()) {
                     const void* tex_ptr = batch.texData.data();
                     if (bench_tex_cache.find(tex_ptr) == bench_tex_cache.end()) {
@@ -440,30 +432,102 @@ int main(int argc, char** argv) {
                         }
                     }
                     bench_tex_cache[tex_ptr].last_frame_used = frame_count;
-                    geom.texture_handle = bench_tex_cache[tex_ptr].handle;
+                    texHandle = bench_tex_cache[tex_ptr].handle;
+                }
+            };
+
+            if (use_mega_batch) {
+                std::map<FlycastListType, std::vector<DrawBatch*>> grouped;
+                for (auto& batch : testData.batches) {
+                    grouped[batch.listType].push_back(&batch);
                 }
 
-                geom.src_blend = batch.srcBlend;
-                geom.dst_blend = batch.dstBlend;
-                geom.depth_func = batch.depthFunc;
-                geom.depth_write = batch.depthWrite;
-                geom.offset_enable = batch.offsetEnable;
+                for (auto const& [listType, batches] : grouped) {
+                    std::vector<PluginVertex> allVertices;
+                    std::vector<uint32_t> allIndices;
+                    std::vector<FlycastDrawCommand> commands;
 
-                // Fog (SPE-02)
-                geom.fog_mode = batch.fogMode;
-                geom.fog_color = batch.fogColor;
-                geom.fog_vertex_color = batch.fogVertexColor;
-                geom.fog_density = batch.fogDensity;
-                geom.fog_clamp_min = batch.fogClampMin;
-                geom.fog_clamp_max = batch.fogClampMax;
+                    for (auto* batch : batches) {
+                        uint32_t texHandle = 0;
+                        updateState(*batch, texHandle);
 
-                // OIT (OIT-01)
-                geom.list_type = batch.listType;
+                        FlycastDrawCommand cmd = {};
+                        cmd.index_offset = (uint32_t)allIndices.size();
+                        cmd.index_count = (uint32_t)batch->indices.size();
+                        cmd.texture_handle = texHandle;
+                        cmd.src_blend = batch->srcBlend;
+                        cmd.dst_blend = batch->dstBlend;
+                        cmd.depth_func = batch->depthFunc;
+                        cmd.depth_write = batch->depthWrite;
+                        cmd.cull_mode = batch->cullMode;
+                        cmd.offset_enable = batch->offsetEnable;
+                        cmd.scissor_enable = batch->scissorEnable;
+                        cmd.scissor_x = batch->scissorX;
+                        cmd.scissor_y = batch->scissorY;
+                        cmd.scissor_w = batch->scissorW;
+                        cmd.scissor_h = batch->scissorH;
+                        cmd.fog_mode = batch->fogMode;
+                        cmd.fog_color = batch->fogColor;
+                        cmd.fog_vertex_color = batch->fogVertexColor;
+                        cmd.fog_density = batch->fogDensity;
+                        cmd.fog_clamp_min = batch->fogClampMin;
+                        cmd.fog_clamp_max = batch->fogClampMax;
 
-                if (vtable->process) {
+                        uint32_t vOffset = (uint32_t)allVertices.size();
+                        for (const auto& v : batch->vertices) allVertices.push_back(v);
+                        for (auto i : batch->indices) allIndices.push_back(i + vOffset);
+
+                        commands.push_back(cmd);
+                    }
+
+                    PluginMegaBatch mega = {};
+                    mega.vertices = allVertices.data();
+                    mega.vertex_count = allVertices.size();
+                    mega.indices = allIndices.data();
+                    mega.index_count = allIndices.size();
+                    mega.commands = commands.data();
+                    mega.command_count = commands.size();
+                    mega.list_type = listType;
+
                     auto start = std::chrono::high_resolution_clock::now();
-                    vtable->process(&geom);
+                    vtable->process_mega_batch(&mega);
                     perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
+                }
+            } else {
+                for (auto& batch : testData.batches) {
+                    uint32_t texHandle = 0;
+                    updateState(batch, texHandle);
+
+                    PluginGeometryData geom = {};
+                    geom.vertices = batch.vertices.data();
+                    geom.vertex_count = (uint32_t)batch.vertices.size();
+                    geom.indices = batch.indices.data();
+                    geom.index_count = (uint32_t)batch.indices.size();
+                    geom.scissor_enable = batch.scissorEnable;
+                    geom.scissor_x = batch.scissorX;
+                    geom.scissor_y = batch.scissorY;
+                    geom.scissor_w = batch.scissorW;
+                    geom.scissor_h = batch.scissorH;
+                    geom.cull_mode = batch.cullMode;
+                    geom.texture_handle = texHandle;
+                    geom.src_blend = batch.srcBlend;
+                    geom.dst_blend = batch.dstBlend;
+                    geom.depth_func = batch.depthFunc;
+                    geom.depth_write = batch.depthWrite;
+                    geom.offset_enable = batch.offsetEnable;
+                    geom.fog_mode = batch.fogMode;
+                    geom.fog_color = batch.fogColor;
+                    geom.fog_vertex_color = batch.fogVertexColor;
+                    geom.fog_density = batch.fogDensity;
+                    geom.fog_clamp_min = batch.fogClampMin;
+                    geom.fog_clamp_max = batch.fogClampMax;
+                    geom.list_type = batch.listType;
+
+                    if (vtable->process) {
+                        auto start = std::chrono::high_resolution_clock::now();
+                        vtable->process(&geom);
+                        perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
+                    }
                 }
             }
 

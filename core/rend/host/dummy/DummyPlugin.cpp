@@ -162,6 +162,35 @@ static void dummy_process(const PluginGeometryData* data) {
     }
 }
 
+static uint32_t dummy_get_capabilities() {
+    return FLYCAST_CAP_MEGA_BATCH;
+}
+
+static void dummy_process_mega_batch(const PluginMegaBatch* batch) {
+    if (host_if && host_handle) {
+        char buffer[512];
+        const char* list_str = "Unknown";
+        switch (batch->list_type) {
+            case FLYCAST_LIST_OPAQUE:        list_str = "OPAQUE"; break;
+            case FLYCAST_LIST_PUNCH_THROUGH: list_str = "PUNCH_THROUGH"; break;
+            case FLYCAST_LIST_TRANSLUCENT:   list_str = "TRANSLUCENT"; break;
+        }
+        
+        snprintf(buffer, sizeof(buffer), "[Process MegaBatch] Type: %s, %zu vertices, %zu indices, %zu commands", 
+                 list_str, batch->vertex_count, batch->index_count, batch->command_count);
+        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+
+        for (size_t i = 0; i < batch->command_count; i++) {
+            const auto& cmd = batch->commands[i];
+            snprintf(buffer, sizeof(buffer), "  Command %zu: offset=%u, count=%u, tex=%u, blend=%d/%d, depth=%d/%s, cull=%d",
+                     i, cmd.index_offset, cmd.index_count, cmd.texture_handle, 
+                     (int)cmd.src_blend, (int)cmd.dst_blend, (int)cmd.depth_func, 
+                     cmd.depth_write ? "true" : "false", (int)cmd.cull_mode);
+            host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+        }
+    }
+}
+
 static bool dummy_render() { 
     if (host_if && host_handle) {
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, "  [Render]");
@@ -215,14 +244,18 @@ static bool dummy_present() {
 
 static const FlycastPluginVTable vtable = {
     sizeof(FlycastPluginVTable),
-    11,
+    12,
     "Dummy Renderer",
-    "1.1.0",
+    "1.2.0",
     dummy_init_wrapper,
 
     dummy_term,
     dummy_resize,
+
+    dummy_get_capabilities,
     dummy_process,
+    dummy_process_mega_batch,
+
     dummy_render,
     dummy_render_framebuffer,
     dummy_present,
