@@ -59,4 +59,5 @@ public:
     virtual void prepare(TestData& data) = 0;
     virtual void update(float dt) {}
     virtual uint32_t getFrameCount() const { return 1; }
+    virtual uint32_t getTargetFPS() const { return 60; }
 };
