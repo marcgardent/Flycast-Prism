@@ -113,14 +113,20 @@ typedef enum {
     FLYCAST_LIST_TRANSLUCENT      = 2
 } FlycastListType;
 
+typedef enum {
+    FLYCAST_INDEX_UINT16 = 0,
+    FLYCAST_INDEX_UINT32 = 1
+} FlycastIndexFormat;
+
 /**
  * Legacy Structure (Retained for backwards compatibility)
  */
 typedef struct {
     const PluginVertex* vertices;
     size_t vertex_count;
-    const uint32_t* indices;
+    const uint16_t* indices;
     size_t index_count;
+
 
     bool scissor_enable;
     int32_t scissor_x;
@@ -196,8 +202,9 @@ typedef struct {
     const PluginVertex* vertices;
     size_t vertex_count;
 
-    const uint32_t* indices;
+    const void* indices;
     size_t index_count;
+    FlycastIndexFormat index_format;
 
     const FlycastDrawCommand* commands;
     size_t command_count;

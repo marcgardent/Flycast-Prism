@@ -172,6 +172,7 @@ void HostRenderer::Process(TA_context *ctx) {
                 mega.vertex_count = ctx->rend.verts.size();
                 mega.indices = ctx->rend.idx.data();
                 mega.index_count = ctx->rend.idx.size();
+                mega.index_format = FLYCAST_INDEX_UINT32;
                 mega.commands = mega_commands.data();
                 mega.command_count = mega_commands.size();
                 mega.list_type = listType;
@@ -185,10 +186,37 @@ void HostRenderer::Process(TA_context *ctx) {
                 if (poly.count == 0) continue;
 
                 PluginGeometryData data = {};
-                data.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
-                data.vertex_count = ctx->rend.verts.size();
-                data.indices = &ctx->rend.idx[poly.first];
-                data.index_count = poly.count;
+                // Convert indices to u16 for legacy API and make them relative to the vertex range
+                u32 min_vtx = 0xFFFFFFFF;
+                u32 max_vtx = 0;
+                for (u32 i = 0; i < poly.count; i++) {
+                    u32 v = ctx->rend.idx[poly.first + i];
+                    if (v == 0xFFFFFFFF) continue;
+                    if (v < min_vtx) min_vtx = v;
+                    if (v > max_vtx) max_vtx = v;
+                }
+
+                std::vector<u16> adjusted_indices;
+                if (min_vtx <= max_vtx) {
+                    // Adjust indices to be relative to the first vertex in the range
+                    adjusted_indices.reserve(poly.count);
+                    for (u32 i = 0; i < poly.count; ++i) {
+                        u32 v = ctx->rend.idx[poly.first + i];
+                        if (v == 0xFFFFFFFF) adjusted_indices.push_back(0xFFFF);
+                        else adjusted_indices.push_back((u16)(v - min_vtx));
+                    }
+
+                    data.vertices = reinterpret_cast<const PluginVertex*>(&ctx->rend.verts[min_vtx]);
+                    data.vertex_count = max_vtx - min_vtx + 1;
+
+                    data.indices = adjusted_indices.data();
+                    data.index_count = adjusted_indices.size();
+                } else {
+                    data.vertices = nullptr;
+                    data.vertex_count = 0;
+                    data.indices = nullptr;
+                    data.index_count = 0;
+                }
 
                 data.scissor_enable = true;
                 data.scissor_x = ctx->rend.fb_X_CLIP.min;
