@@ -18,6 +18,9 @@
 #include "cases/TestSPE02.h"
 #include "cases/TestOIT01.h"
 #include "cases/TestGC01.h"
+#include "BenchUI.h"
+
+static BenchUI* g_ui = nullptr;
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -36,6 +39,7 @@ const char* bench_get_host_name(FlycastHostHandle host) { return "FlycastBench";
 const char* bench_get_host_version(FlycastHostHandle host) { return "1.0-bench"; }
 void bench_log(FlycastHostHandle host, FlycastLogLevel level, const char* message) {
     std::cout << "[BenchLog] " << message << std::endl;
+    if (g_ui) g_ui->addLog(message);
 }
 
 static FlycastHostInterface bench_host_if = {
@@ -59,43 +63,48 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestGC01>());
 }
 
-void printHelp(const char* progName) {
-    std::cout << "Usage: " << progName << " <plugin_path> [options]" << std::endl;
+static void print_usage(const char* argv0) {
+    std::cout << "Usage: " << argv0 << " <plugin_path> [options]" << std::endl;
     std::cout << "Options:" << std::endl;
-    std::cout << "  --test <id>    Run specific test and exit when finished" << std::endl;
-    std::cout << "  --list         List available test cases" << std::endl;
-    std::cout << "  --continuous   Loop current test forever" << std::endl;
+    std::cout << "  --test <id>    Run a specific test and exit automatically" << std::endl;
+    std::cout << "  --continuous   Keep running tests after their defined duration" << std::endl;
+    std::cout << "  --help, -h     Show this help message" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Available Tests:" << std::endl;
+    auto& mgr = TestManager::instance();
+    for (const auto& test : mgr.getTests()) {
+        std::cout << "  " << test->getId() << ": " << test->getName() << std::endl;
+    }
 }
 
 int main(int argc, char** argv) {
     registerAllTests();
 
-    if (argc < 2) {
-        printHelp(argv[0]);
-        return 1;
-    }
-
-    const char* pluginPath = argv[1];
+    std::string pluginPath = "";
     std::string preSelectedTestId = "";
-
     bool continuousMode = false;
     bool singleTestMode = false;
     int currentTestIdx = 0;
 
-    for (int i = 2; i < argc; ++i) {
+    for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--test" && i + 1 < argc) {
+        if (arg == "--help" || arg == "-h") {
+            print_usage(argv[0]);
+            return 0;
+        } else if (arg == "--test" && i + 1 < argc) {
             preSelectedTestId = argv[++i];
             singleTestMode = true;
-        } else if (arg == "--list") {
-            std::cout << "Available tests:" << std::endl;
-            for (auto& t : TestManager::instance().getTests()) {
-                std::cout << "  " << t->getId() << ": " << t->getName() << " - " << t->getDescription() << std::endl;
-            }
-            return 0;
         } else if (arg == "--continuous") {
             continuousMode = true;
+        } else if (arg.rfind("--", 0) != 0 && pluginPath.empty()) {
+            pluginPath = arg;
         }
+    }
+
+    if (pluginPath.empty()) {
+        std::cerr << "Error: No plugin path provided." << std::endl;
+        print_usage(argv[0]);
+        return 1;
     }
 
     TestCase* activeTest = nullptr;
@@ -129,6 +138,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Enable MSAA for the main rendering window
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+
     SDL_Window* window = SDL_CreateWindow("Flycast Benchmarker",
                                            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                            1280, 720, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
@@ -138,7 +151,12 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    void* lib = LIB_LOAD(pluginPath);
+    BenchUI ui;
+    if (!singleTestMode && ui.init("Flycast Benchmarker Controller", 600, 400)) {
+        g_ui = &ui;
+    }
+
+    void* lib = LIB_LOAD(pluginPath.c_str());
     if (!lib) {
 #if !defined(_WIN32)
         std::cerr << "Could not load plugin: " << dlerror() << std::endl;
@@ -248,15 +266,18 @@ int main(int argc, char** argv) {
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
                 running = false;
-            } else if (event.type == SDL_WINDOWEVENT && 
-                       (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || 
-                        event.window.event == SDL_WINDOWEVENT_RESIZED)) {
-                lastW = event.window.data1;
-                lastH = event.window.data2;
-                if (vtable->resize) {
-                    vtable->resize(lastW, lastH);
+            } else if (event.type == SDL_WINDOWEVENT) {
+                if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
+                    running = false;
+                } else if (event.window.windowID == SDL_GetWindowID(window)) {
+                    if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || 
+                        event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                        lastW = event.window.data1;
+                        lastH = event.window.data2;
+                        if (vtable->resize) vtable->resize(lastW, lastH);
+                        needsRender = true;
+                    }
                 }
-                needsRender = true;
             } else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_ESCAPE) {
                     running = false;
@@ -278,8 +299,23 @@ int main(int argc, char** argv) {
                     }
                 }
             }
+            if (g_ui) ui.handleEvent(event);
         }
 
+        if (g_ui) {
+            int nextIdx = ui.render(allTests, currentTestIdx, frame_count, activeTest->getFrameCount());
+            if (nextIdx == -1) {
+                running = false;
+            } else if (nextIdx != currentTestIdx) {
+                currentTestIdx = nextIdx;
+                activeTest = allTests[currentTestIdx].get();
+                frame_count = 0;
+                needsRender = true;
+                std::cout << "Starting test: " << activeTest->getId() << " - " << activeTest->getName() << std::endl;
+                SDL_SetWindowTitle(window, ("Flycast Benchmarker - " + activeTest->getId()).c_str());
+            }
+        }
+        
         if (continuousMode || needsRender || (frame_count < activeTest->getFrameCount())) {
             {
                 if (frame_count == 0) {
@@ -296,16 +332,22 @@ int main(int argc, char** argv) {
 
             static uint32_t last_palette_crc = 0;
             static uint32_t last_fog_crc = 0;
+            if (frame_count == 0) {
+                last_palette_crc = 0;
+                last_fog_crc = 0;
+            }
             
             struct BenchTextureInfo {
                 uint32_t handle;
                 uint32_t last_frame_used;
             };
             static std::map<const void*, BenchTextureInfo> bench_tex_cache;
-            frame_count++;
+            if (frame_count < activeTest->getFrameCount()) {
+                frame_count++;
+            }
 
             // Auto-exit in single test mode
-            if (singleTestMode && !continuousMode && frame_count > activeTest->getFrameCount()) {
+            if (singleTestMode && !continuousMode && frame_count >= activeTest->getFrameCount()) {
                 running = false;
                 break;
             }
@@ -416,6 +458,9 @@ int main(int argc, char** argv) {
 
         SDL_Delay(16);
     }
+
+    g_ui = nullptr;
+    ui.shutdown();
 
     if (vtable->term) {
         vtable->term();
