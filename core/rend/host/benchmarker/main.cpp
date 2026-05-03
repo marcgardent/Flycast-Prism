@@ -43,7 +43,7 @@ uint32_t FOG_TABLE[128];
 #define LIB_CLOSE(lib) dlclose(lib)
 #endif
 
-// Simulation des registres PVR pour la logique de rendu
+// PVR Register simulation for rendering logic
 struct PVR_Regs {
     uint32_t fb_x_clip_max = 1279;
     uint32_t fb_y_clip_max = 719;
@@ -216,7 +216,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        // --- Phase de Rendu ---
+        // --- Rendering Phase ---
         auto frameStart = std::chrono::high_resolution_clock::now();
         if (continuousMode || (frame_count < activeTest->getFrameCount())) {
             perf.pluginTimeMs = 0;
@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
             TestData testData;
             activeTest->prepare(testData);
 
-            // 1. Mise à jour de la Palette (Global state)
+            // 1. Palette Update (Global state)
             if (!testData.batches.empty() && !testData.batches[0].palette.empty()) {
                 uint32_t crc = 0;
                 const auto& pal = testData.batches[0].palette;
@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
                 }
             }
 
-            // 2. Mise à jour de la Table de Fog
+            // 2. Fog Table Update
             if (!testData.batches.empty() && !testData.batches[0].fogTable.empty()) {
                 uint32_t crc = 0;
                 const auto& fog = testData.batches[0].fogTable;
@@ -251,7 +251,7 @@ int main(int argc, char** argv) {
                 }
             }
 
-            // 3. Traitement de la Géométrie
+            // 3. Geometry Processing
             bool use_mega_batch = false;
             if (vtable->get_capabilities && vtable->process_mega_batch) {
                 use_mega_batch = (vtable->get_capabilities() & FLYCAST_CAP_MEGA_BATCH) != 0;
@@ -285,7 +285,7 @@ int main(int argc, char** argv) {
                     cmd.index_offset = (uint32_t)allIdx.size();
                     cmd.index_count = (uint32_t)batch.indices.size();
 
-                    // Mapping des états (Idem HostRenderer)
+                    // State Mapping (Same as HostRenderer)
                     cmd.src_blend = batch.srcBlend;
                     cmd.dst_blend = batch.dstBlend;
                     cmd.depth_func = batch.depthFunc;
@@ -338,7 +338,7 @@ int main(int argc, char** argv) {
                 }
             }
 
-            // 4. Render Framebuffer (Simule la sortie vers la RAM vidéo/écran)
+            // 4. Render Framebuffer (Simulates output to VRAM/screen)
             PluginFramebufferInfo fbInfo = {};
             fbInfo.width = g_pvr.fb_x_clip_max + 1;
             if (g_pvr.stride != 0) fbInfo.width = std::min(g_pvr.stride * 4, fbInfo.width);
@@ -365,7 +365,7 @@ int main(int argc, char** argv) {
                 perf.pluginTimeMs += perf.presentTimeMs;
             }
 
-            // --- Garbage Collection (Toutes les 120 frames, comme HostRenderer) ---
+            // --- Garbage Collection (Every 120 frames, like HostRenderer) ---
             if (frame_count % 120 == 0) {
                 for (auto it = bench_tex_cache.begin(); it != bench_tex_cache.end(); ) {
                     if (frame_count - it->second.last_frame_used > 120) {
@@ -381,7 +381,7 @@ int main(int argc, char** argv) {
 
         if (singleTestMode && !continuousMode && frame_count >= activeTest->getFrameCount()) running = false;
         
-        // Frame Limiter (déclaré par le test)
+        // Frame Limiter (declared by test)
         uint32_t targetFPS = activeTest->getTargetFPS();
         uint32_t targetMs = 1000 / targetFPS;
         auto frameEnd = std::chrono::high_resolution_clock::now();

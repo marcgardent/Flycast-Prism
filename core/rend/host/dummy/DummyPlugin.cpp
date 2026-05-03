@@ -27,7 +27,7 @@ static bool dummy_init(FlycastHostHandle host, const FlycastWindowHandle* window
     }
 
     if (window->os_type == FLYCAST_OS_X11) {
-        // Sur Linux/X11, on va utiliser Xlib directement pour éviter les conflits SDL/Vulkan
+        // On Linux/X11, we use Xlib directly to avoid SDL/Vulkan conflicts
         return true;
     }
 
@@ -211,7 +211,7 @@ static bool dummy_present_callback(const FlycastWindowHandle* window) {
         Window win = (Window)window->window;
         if (dpy && win) {
             GC gc = XCreateGC(dpy, win, 0, NULL);
-            XSetForeground(dpy, gc, 0x0000FF); // Bleu (format peut varier selon le visual, mais 0x0000FF est souvent bleu)
+            XSetForeground(dpy, gc, 0x0000FF); // Blue (format may vary by visual, but 0x0000FF is often blue)
             XFillRectangle(dpy, win, gc, 0, 0, 4000, 4000);
             XFreeGC(dpy, gc);
             XFlush(dpy);
@@ -227,7 +227,7 @@ static bool dummy_present_callback(const FlycastWindowHandle* window) {
     return true;
 }
 
-// On a besoin de garder une trace du window handle pour le present
+// We need to keep track of the window handle for present
 static FlycastWindowHandle last_window;
 static bool dummy_init_wrapper(FlycastHostHandle host, const FlycastWindowHandle* window, const FlycastHostInterface* host_if) {
     last_window = *window;
