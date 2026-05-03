@@ -176,10 +176,8 @@ static void dummy_process_mega_batch(const PluginMegaBatch* batch) {
             case FLYCAST_LIST_TRANSLUCENT:   list_str = "TRANSLUCENT"; break;
         }
         
-        snprintf(buffer, sizeof(buffer), "[Process MegaBatch] Type: %s, %zu vertices, %zu indices (%s), %zu commands", 
-                 list_str, batch->vertex_count, batch->index_count, 
-                 batch->index_format == FLYCAST_INDEX_UINT16 ? "u16" : "u32",
-                 batch->command_count);
+        snprintf(buffer, 512, "[Dummy] MegaBatch: %zu vertices, %zu indices, %zu commands, list=%d\n",
+                 batch->vertex_count, batch->index_count, batch->command_count, batch->list_type);
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
 
         for (size_t i = 0; i < batch->command_count; i++) {

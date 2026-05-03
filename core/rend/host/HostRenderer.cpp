@@ -172,7 +172,6 @@ void HostRenderer::Process(TA_context *ctx) {
                 mega.vertex_count = ctx->rend.verts.size();
                 mega.indices = ctx->rend.idx.data();
                 mega.index_count = ctx->rend.idx.size();
-                mega.index_format = FLYCAST_INDEX_UINT32;
                 mega.commands = mega_commands.data();
                 mega.command_count = mega_commands.size();
                 mega.list_type = listType;
@@ -196,19 +195,18 @@ void HostRenderer::Process(TA_context *ctx) {
                     if (v > max_vtx) max_vtx = v;
                 }
 
-                std::vector<u16> adjusted_indices;
+                std::vector<u32> adjusted_indices;
+
                 if (min_vtx <= max_vtx) {
-                    // Adjust indices to be relative to the first vertex in the range
                     adjusted_indices.reserve(poly.count);
                     for (u32 i = 0; i < poly.count; ++i) {
                         u32 v = ctx->rend.idx[poly.first + i];
-                        if (v == 0xFFFFFFFF) adjusted_indices.push_back(0xFFFF);
-                        else adjusted_indices.push_back((u16)(v - min_vtx));
+                        if (v == 0xFFFFFFFF) adjusted_indices.push_back(0xFFFFFFFF);
+                        else adjusted_indices.push_back(v - min_vtx);
                     }
 
                     data.vertices = reinterpret_cast<const PluginVertex*>(&ctx->rend.verts[min_vtx]);
                     data.vertex_count = max_vtx - min_vtx + 1;
-
                     data.indices = adjusted_indices.data();
                     data.index_count = adjusted_indices.size();
                 } else {
