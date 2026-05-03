@@ -145,6 +145,10 @@ int main(int argc, char** argv) {
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) return 1;
 
+    // Enable MSAA
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+
     SDL_Window* window = SDL_CreateWindow("Flycast Benchmarker", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                            1280, 720, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 
@@ -200,7 +204,36 @@ int main(int argc, char** argv) {
     while (running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) running = false;
+            if (event.type == SDL_QUIT) {
+                running = false;
+            } else if (event.type == SDL_WINDOWEVENT) {
+                if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
+                    running = false;
+                } else if (event.window.windowID == SDL_GetWindowID(window)) {
+                    if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || 
+                        event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                        lastW = event.window.data1;
+                        lastH = event.window.data2;
+                        if (vtable->resize) vtable->resize(lastW, lastH);
+                    }
+                }
+            } else if (event.type == SDL_KEYDOWN) {
+                if (event.key.keysym.sym == SDLK_ESCAPE) {
+                    running = false;
+                } else if (!singleTestMode) {
+                    if (event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_SPACE) {
+                        currentTestIdx = (currentTestIdx + 1) % allTests.size();
+                        activeTest = allTests[currentTestIdx].get();
+                        frame_count = 0; last_palette_crc = 0; last_fog_crc = 0;
+                        SDL_SetWindowTitle(window, ("Flycast Benchmarker - " + activeTest->getId()).c_str());
+                    } else if (event.key.keysym.sym == SDLK_LEFT) {
+                        currentTestIdx = (currentTestIdx + (int)allTests.size() - 1) % allTests.size();
+                        activeTest = allTests[currentTestIdx].get();
+                        frame_count = 0; last_palette_crc = 0; last_fog_crc = 0;
+                        SDL_SetWindowTitle(window, ("Flycast Benchmarker - " + activeTest->getId()).c_str());
+                    }
+                }
+            }
             if (g_ui) ui.handleEvent(event);
         }
 
@@ -220,6 +253,12 @@ int main(int argc, char** argv) {
         auto frameStart = std::chrono::high_resolution_clock::now();
         if (continuousMode || (frame_count < activeTest->getFrameCount())) {
             perf.pluginTimeMs = 0;
+
+            if (frame_count == 0) {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[Frame Render] Starting Test: %s", activeTest->getId().c_str());
+                bench_log((FlycastHostHandle)0xCAFE, FLYCAST_LOG_INFO, buf);
+            }
 
             activeTest->update(1.0f / activeTest->getTargetFPS());
             TestData testData;
