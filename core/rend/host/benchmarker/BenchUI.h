@@ -4,6 +4,12 @@
 #include <vector>
 #include <string>
 
+struct PerfMetrics {
+    double pluginTimeMs = 0;
+    double buildTimeMs = 0;
+    double presentTimeMs = 0;
+};
+
 class BenchUI {
 public:
     BenchUI() : window(nullptr), renderer(nullptr), fontTexture(nullptr), uiScale(1.0f) {}
@@ -95,7 +101,7 @@ public:
         if (logs.size() > 500) logs.erase(logs.begin());
     }
 
-    int render(const std::vector<std::unique_ptr<TestCase>>& allTests, int currentIdx, uint32_t frameCount, uint32_t totalFrames) {
+    int render(const std::vector<std::unique_ptr<TestCase>>& allTests, int currentIdx, uint32_t frameCount, uint32_t totalFrames, const PerfMetrics& perf) {
         ImGuiIO& io = ImGui::GetIO();
         int w, h;
         SDL_GetWindowSize(window, &w, &h);
@@ -104,7 +110,7 @@ public:
         ImGui::NewFrame();
 
         float padding = 10.0f * uiScale;
-        float infoHeight = 250.0f * uiScale; // Increased for extra text
+        float infoHeight = 320.0f * uiScale; // Increased for performance metrics
 
         // UI Definition
         ImGui::SetNextWindowPos(ImVec2(padding, padding), ImGuiCond_Always);
@@ -130,6 +136,19 @@ public:
         ImGui::Spacing();
         ImGui::TextColored(ImVec4(0, 1, 0, 1), "Expected Result:");
         ImGui::TextWrapped("%s", allTests[currentIdx]->getExpected().c_str());
+        ImGui::Separator();
+        
+        // Performance Metrics
+        ImGui::TextColored(ImVec4(1, 1, 0, 1), "Performance:");
+        ImGui::Columns(2, "perf_columns", false);
+        ImGui::Text("Plugin Total:"); ImGui::NextColumn();
+        ImGui::Text("%.3f ms", perf.pluginTimeMs); ImGui::NextColumn();
+        ImGui::Text("Build Frame:"); ImGui::NextColumn();
+        ImGui::Text("%.3f ms", perf.buildTimeMs); ImGui::NextColumn();
+        ImGui::Text("Present Frame:"); ImGui::NextColumn();
+        ImGui::Text("%.3f ms", perf.presentTimeMs); ImGui::NextColumn();
+        ImGui::Columns(1);
+        
         ImGui::Separator();
         ImGui::Text("Frames: %u / %u", frameCount, totalFrames);
         ImGui::SameLine(ImGui::GetWindowWidth() - 80 * uiScale);

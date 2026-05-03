@@ -1,8 +1,8 @@
 #pragma once
 
-class TestEXTGEO03 : public TestCase {
+class TestGEO04 : public TestCase {
 public:
-    std::string getId() const override { return "EXT-GEO-03"; }
+    std::string getId() const override { return "GEO-04"; }
     std::string getName() const override { return "Multi-Batch State Leak (Tile Counters)"; }
     std::string getDescription() const override { 
         return "Draws multiple distinct batches in the same area. "
@@ -20,10 +20,10 @@ public:
         {
             DrawBatch batch;
             batch.vertices.resize(4);
-            batch.vertices[0] = { 0.0f, 0.0f, 0.8f, {255, 0, 0, 255} };
-            batch.vertices[1] = { 640.0f, 0.0f, 0.8f, {255, 0, 0, 255} };
-            batch.vertices[2] = { 0.0f, 480.0f, 0.8f, {255, 0, 0, 255} };
-            batch.vertices[3] = { 640.0f, 480.0f, 0.8f, {255, 0, 0, 255} };
+            batch.vertices[0] = { 0.0f, 0.0f, 0.2f, {255, 0, 0, 255} };
+            batch.vertices[1] = { 640.0f, 0.0f, 0.2f, {255, 0, 0, 255} };
+            batch.vertices[2] = { 0.0f, 480.0f, 0.2f, {255, 0, 0, 255} };
+            batch.vertices[3] = { 640.0f, 480.0f, 0.2f, {255, 0, 0, 255} };
             batch.indices = { 0, 1, 2, 2, 1, 3 }; // 2 Triangles
             batch.cullMode = FLYCAST_CULL_NONE;
             data.batches.push_back(batch);

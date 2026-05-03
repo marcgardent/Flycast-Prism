@@ -5,12 +5,16 @@
 #include <string>
 #include <map>
 #include <algorithm>
+#include <chrono>
+
 #include "../flycast_plugin_api.h"
 #include "TestCase.h"
 #include "TestManager.h"
 #include "cases/TestGEO01.h"
 #include "cases/TestGEO02.h"
 #include "cases/TestGEO03.h"
+#include "cases/TestGEO04.h"
+#include "cases/TestTRN02.h"
 #include "cases/TestSHD01.h"
 #include "cases/TestTEX01.h"
 #include "cases/TestTRN01.h"
@@ -18,8 +22,10 @@
 #include "cases/TestSPE02.h"
 #include "cases/TestOIT01.h"
 #include "cases/TestGC01.h"
-#include "cases/TestEXTGEO03.h"
+
 #include "BenchUI.h"
+#include "cases/TestGEO06.h"
+#include "cases/TestGEO07.h"
 
 static BenchUI* g_ui = nullptr;
 uint32_t palette32_ram[1024];
@@ -57,14 +63,19 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestGEO01>());
     mgr.registerTest(std::make_unique<TestGEO02>());
     mgr.registerTest(std::make_unique<TestGEO03>());
+    mgr.registerTest(std::make_unique<TestGEO04>());
+    mgr.registerTest(std::make_unique<TestGEO06>());
+    mgr.registerTest(std::make_unique<TestGEO07>());
+
     mgr.registerTest(std::make_unique<TestSHD01>());
     mgr.registerTest(std::make_unique<TestTEX01>());
     mgr.registerTest(std::make_unique<TestTRN01>());
+    mgr.registerTest(std::make_unique<TestTRN02>());
     mgr.registerTest(std::make_unique<TestSPE01>());
     mgr.registerTest(std::make_unique<TestSPE02>());
     mgr.registerTest(std::make_unique<TestOIT01>());
     mgr.registerTest(std::make_unique<TestGC01>());
-    mgr.registerTest(std::make_unique<TestEXTGEO03>());
+
 }
 
 static void print_usage(const char* argv0) {
@@ -260,6 +271,8 @@ int main(int argc, char** argv) {
     bool needsRender = true;
     uint32_t lastTicks = SDL_GetTicks();
     uint32_t frame_count = 0;
+    PerfMetrics perf;
+
 
     while (running) {
         uint32_t currentTicks = SDL_GetTicks();
@@ -307,8 +320,9 @@ int main(int argc, char** argv) {
         }
 
         if (g_ui) {
-            int nextIdx = ui.render(allTests, currentTestIdx, frame_count, activeTest->getFrameCount());
+            int nextIdx = ui.render(allTests, currentTestIdx, frame_count, activeTest->getFrameCount(), perf);
             if (nextIdx == -1) {
+
                 running = false;
             } else if (nextIdx != currentTestIdx) {
                 currentTestIdx = nextIdx;
@@ -321,6 +335,9 @@ int main(int argc, char** argv) {
         }
         
         if (continuousMode || needsRender || (frame_count < activeTest->getFrameCount())) {
+            perf.pluginTimeMs = 0;
+            auto buildStart = std::chrono::high_resolution_clock::now();
+
             {
                 if (frame_count == 0) {
                     char buf[128];
@@ -350,14 +367,14 @@ int main(int argc, char** argv) {
                 frame_count++;
             }
 
-
-
             // --- GC: Cleanup unused textures every 120 frames ---
             if (frame_count % 120 == 0) {
                 for (auto it = bench_tex_cache.begin(); it != bench_tex_cache.end(); ) {
                     if (frame_count - it->second.last_frame_used > 120) {
                         if (vtable->destroy_texture) {
+                            auto start = std::chrono::high_resolution_clock::now();
                             vtable->destroy_texture(it->second.handle);
+                            perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
                         }
                         it = bench_tex_cache.erase(it);
                     } else {
@@ -386,7 +403,9 @@ int main(int argc, char** argv) {
                     uint32_t crc = 0;
                     for (size_t i = 0; i < batch.palette.size(); ++i) crc ^= batch.palette[i] + i;
                     if (crc != last_palette_crc && vtable->update_palette) {
+                        auto start = std::chrono::high_resolution_clock::now();
                         vtable->update_palette(batch.palette.data());
+                        perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
                         last_palette_crc = crc;
                     }
                 }
@@ -396,7 +415,9 @@ int main(int argc, char** argv) {
                     uint32_t crc = 0;
                     for (auto c : batch.fogTable) crc ^= c;
                     if (crc != last_fog_crc && vtable->update_fog_table) {
+                        auto start = std::chrono::high_resolution_clock::now();
                         vtable->update_fog_table(batch.fogTable.data());
+                        perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
                         last_fog_crc = crc;
                     }
                 }
@@ -407,9 +428,13 @@ int main(int argc, char** argv) {
                     const void* tex_ptr = batch.texData.data();
                     if (bench_tex_cache.find(tex_ptr) == bench_tex_cache.end()) {
                         if (vtable->create_texture) {
+                            auto start = std::chrono::high_resolution_clock::now();
                             uint32_t h = vtable->create_texture(batch.texWidth, batch.texHeight, batch.texMode);
+                            perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
                             if (vtable->update_texture) {
+                                start = std::chrono::high_resolution_clock::now();
                                 vtable->update_texture(h, batch.texData.data());
+                                perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
                             }
                             bench_tex_cache[tex_ptr] = { h, frame_count };
                         }
@@ -436,24 +461,38 @@ int main(int argc, char** argv) {
                 geom.list_type = batch.listType;
 
                 if (vtable->process) {
+                    auto start = std::chrono::high_resolution_clock::now();
                     vtable->process(&geom);
+                    perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
                 }
             }
 
             PluginFramebufferInfo fbInfo = { 0, 0, (uint32_t)lastW, (uint32_t)lastH };
             
             if (vtable->render_framebuffer) {
+                auto start = std::chrono::high_resolution_clock::now();
                 vtable->render_framebuffer(&fbInfo);
+                perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
             }
 
             if (vtable->render) {
+                auto start = std::chrono::high_resolution_clock::now();
                 vtable->render();
+                perf.pluginTimeMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
             }
 
+            auto buildEnd = std::chrono::high_resolution_clock::now();
+            perf.buildTimeMs = std::chrono::duration<double, std::milli>(buildEnd - buildStart).count();
+
             if (vtable->present) {
+                auto start = std::chrono::high_resolution_clock::now();
                 vtable->present();
+                auto end = std::chrono::high_resolution_clock::now();
+                perf.presentTimeMs = std::chrono::duration<double, std::milli>(end - start).count();
+                perf.pluginTimeMs += perf.presentTimeMs;
             }
             needsRender = false;
+
 
             // Auto-exit in single test mode
             if (singleTestMode && !continuousMode && frame_count >= activeTest->getFrameCount()) {
