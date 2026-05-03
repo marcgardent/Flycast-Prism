@@ -9,6 +9,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE GTest::gtest_main)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
 target_sources(${PROJECT_NAME} PRIVATE
         src/CheatManagerTest.cpp
+        src/rend/TestPluginAssetCache.cpp
         src/ConfigFileTest.cpp
         src/div32_test.cpp
         src/test_stubs.cpp

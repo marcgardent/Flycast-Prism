@@ -28,7 +28,7 @@ Renderer* rend_HostRenderer() {
 
 namespace rend {
 
-HostRenderer::HostRenderer() {
+HostRenderer::HostRenderer() : asset_cache(vtable) {
     host_interface.get_game_id = GetGameId;
     host_interface.get_host_name = GetHostName;
     host_interface.get_host_version = GetHostVersion;
@@ -66,12 +66,7 @@ void HostRenderer::Term() {
     }
     
     // v11: Destroy all remaining textures in the plugin
-    if (vtable && vtable->destroy_texture) {
-        for (auto const& [addr, info] : texture_cache) {
-            vtable->destroy_texture(info.handle);
-        }
-    }
-    texture_cache.clear();
+    asset_cache.Clear();
 
     unloadPlugin();
 }
@@ -147,43 +142,12 @@ void HostRenderer::Process(TA_context *ctx) {
             data.texture_handle = 0;
             if (poly.pcw.Texture && poly.texture) {
                 uint32_t vram_addr = poly.tcw.TexAddr << 3;
-                auto it = texture_cache.find(vram_addr);
-                
                 uint32_t width = 8u << poly.tsp.TexU;
                 uint32_t height = 8u << poly.tsp.TexV;
                 FlycastTexMode mode = (poly.tcw.PixelFmt == PixelPal8) ? FLYCAST_TEX_PAL8 : FLYCAST_TEX_NONE;
 
-                bool needs_push = false;
-
-                if (it == texture_cache.end() || it->second.width != width || it->second.height != height || it->second.mode != mode) {
-                    // New or changed texture parameters
-                    if (it != texture_cache.end() && vtable->destroy_texture) {
-                        vtable->destroy_texture(it->second.handle);
-                    }
-
-                    if (vtable->create_texture) {
-                        uint32_t handle = vtable->create_texture(width, height, mode);
-                        texture_cache[vram_addr] = { handle, width, height, mode, 0, FrameCount };
-                        it = texture_cache.find(vram_addr);
-                        needs_push = true;
-                    }
-                } else {
-                    // Texture already exists, check for content update (Dirty Tracking)
-                    if (poly.texture->Updates > it->second.last_updates_count) {
-                        needs_push = true;
-                    }
-                    it->second.last_frame_used = FrameCount;
-                }
-
-                if (needs_push && it != texture_cache.end()) {
-                    if (vtable->update_texture) {
-                        vtable->update_texture(it->second.handle, &vram[vram_addr]);
-                    }
-                    it->second.last_updates_count = poly.texture->Updates;
-                    data.texture_handle = it->second.handle;
-                } else if (it != texture_cache.end()) {
-                    data.texture_handle = it->second.handle;
-                }
+                data.texture_handle = asset_cache.GetTexture(vram_addr, width, height, mode, 
+                                                            poly.texture->Updates, FrameCount, &vram[vram_addr]);
             }
 
             data.src_blend = MapBlendFactor(poly.tsp.SrcInstr);
@@ -241,7 +205,7 @@ void HostRenderer::RenderFramebuffer(const FramebufferInfo& info) {
 bool HostRenderer::Present() {
     // v11: Periodic cleanup of unused textures
     if (FrameCount % 120 == 0) {
-        CleanupTextures();
+        asset_cache.CollectGarbage(FrameCount);
     }
 
     if (vtable && vtable->present) {
@@ -250,19 +214,6 @@ bool HostRenderer::Present() {
     return true;
 }
 
-void HostRenderer::CleanupTextures() {
-    if (!vtable || !vtable->destroy_texture) return;
-
-    // Remove textures that haven't been used for 120 frames
-    for (auto it = texture_cache.begin(); it != texture_cache.end(); ) {
-        if (FrameCount - it->second.last_frame_used > 120) {
-            vtable->destroy_texture(it->second.handle);
-            it = texture_cache.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
 
 bool HostRenderer::loadPlugin() {
     std::string pluginPath = config::PluginPath.get();

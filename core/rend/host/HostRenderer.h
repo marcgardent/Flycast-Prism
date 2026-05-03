@@ -2,6 +2,7 @@
 
 #include "hw/pvr/Renderer_if.h"
 #include "flycast_plugin_api.h"
+#include "PluginAssetCache.h"
 #include <map>
 #include <vector>
 #include <stdint.h>
@@ -43,18 +44,8 @@ private:
     uint32_t last_palette_crc = 0;
     uint32_t last_fog_crc = 0;
     
-    struct TextureInfo {
-        uint32_t handle;
-        uint32_t width;
-        uint32_t height;
-        FlycastTexMode mode;
-        uint32_t last_updates_count; // Tracks poly.texture->Updates
-        uint32_t last_frame_used;    // Tracks FrameCount
-    };
-    std::map<uint32_t, TextureInfo> texture_cache; // VRAM Address -> TextureInfo
+    PluginAssetCache asset_cache;
     uint32_t next_texture_handle = 1;
-
-    void CleanupTextures();
 };
 
 } // namespace rend
