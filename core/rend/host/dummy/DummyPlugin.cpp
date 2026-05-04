@@ -107,22 +107,14 @@ static void dummy_process_mega_batch(const PluginMegaBatch* batch) {
             case FLYCAST_LIST_TRANSLUCENT:   list_str = "TRANSLUCENT"; break;
         }
         
-        snprintf(buffer, 512, "[Dummy] MegaBatch: %zu vertices, %zu indices, %zu commands, list=%d\n",
-                 batch->vertex_count, batch->index_count, batch->command_count, batch->list_type);
+        snprintf(buffer, 512, "[Dummy] MegaBatch: %zu vertices, %zu commands, list=%d (%s)\n",
+                 batch->vertex_count, batch->command_count, batch->list_type, list_str);
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-
-        // NOTE: With primRestart=true in ta_parse, indices are Triangle Strips.
-        // Strips are separated by the 0xFFFFFFFF (~0) marker.
-        for (size_t i = 0; i < batch->index_count; i++) {
-            if (batch->indices[i] == 0xFFFFFFFF) {
-                // host_if->log(host_handle, FLYCAST_LOG_DEBUG, "[Dummy] Primitive restart detected.");
-            }
-        }
 
         for (size_t i = 0; i < batch->command_count; i++) {
             const auto& cmd = batch->commands[i];
             snprintf(buffer, sizeof(buffer), "  Command %zu: offset=%u, count=%u, tex=%u, blend=%d/%d, depth=%d/%s, cull=%d",
-                     i, cmd.index_offset, cmd.index_count, cmd.texture_handle, 
+                     i, cmd.vertex_offset, cmd.vertex_count, cmd.texture_handle, 
                      (int)cmd.src_blend, (int)cmd.dst_blend, (int)cmd.depth_func, 
                      cmd.depth_write ? "true" : "false", (int)cmd.cull_mode);
             host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
@@ -183,7 +175,7 @@ static bool dummy_present() {
 
 static const FlycastPluginVTable vtable = {
     sizeof(FlycastPluginVTable),
-    13,
+    FLYCAST_PLUGIN_API_VERSION,
     "Dummy Renderer",
     "1.2.0",
     dummy_init_wrapper,
