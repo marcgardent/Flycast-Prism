@@ -341,7 +341,12 @@ int main(int argc, char** argv) {
 
                 uint32_t vBase = (uint32_t)allVerts.size();
                 for (auto& v : batch.vertices) allVerts.push_back(v);
-                for (auto i : batch.indices) allIdx.push_back(i + vBase);
+                for (auto i : batch.indices) {
+                    if (i == 0xFFFFFFFF)
+                        allIdx.push_back(0xFFFFFFFF);
+                    else
+                        allIdx.push_back(i + vBase);
+                }
 
                 listCmds[batch.listType].push_back(cmd);
             }

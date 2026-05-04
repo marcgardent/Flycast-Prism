@@ -21,7 +21,7 @@ public:
         batch.vertices[2] = { centerX + size, centerY + size, 0.5f, {255, 255, 255, 255} };
         batch.vertices[3] = { centerX - size, centerY + size, 0.5f, {255, 255, 255, 255} };
 
-        batch.indices = { 0, 1, 2, 0, 2, 3 };
+        batch.indices = { 0, 1, 2, 0xFFFFFFFF, 0, 2, 3 };
         data.batches.push_back(batch);
     }
 };

@@ -115,13 +115,8 @@ typedef enum {
 
 
 // ============================================================================
-// V12 MEGA-BATCHING & SUB-ALLOCATION
+// MEGA-BATCHING & SUB-ALLOCATION
 // ============================================================================
-
-typedef enum {
-    FLYCAST_CAP_NONE = 0,
-    FLYCAST_CAP_MEGA_BATCH = (1 << 0) // Plugin requests full Mega-Batches with DrawCommands
-} PluginCapabilities;
 
 /**
  * A single draw command (Lot) inside a Mega-Batch.
@@ -163,6 +158,12 @@ typedef struct {
     const PluginVertex* vertices;
     size_t vertex_count;
 
+    /**
+     * Array of 32-bit indices.
+     * Geometry is provided as Triangle Strips. Individual strips are separated
+     * by the primitive restart marker 0xFFFFFFFF (4294967295).
+     * The plugin is responsible for expanding these strips into lists if needed.
+     */
     const uint32_t* indices;
     size_t index_count;
 
@@ -215,11 +216,36 @@ typedef struct {
     void (*term)(void);
     void (*resize)(uint32_t width, uint32_t height);
 
-    // Rendering capabilities (Added v12)
-    uint32_t (*get_capabilities)(void);
 
-
-    // Mega-Batch render (v12)
+    /*
+     * ==============================================================================
+     * MEGA-BATCH INDEX BUFFER USAGE
+     * ==============================================================================
+     *
+     * OVERVIEW:
+     * The raw index buffer (`mb.indices`) provided by the Mega-Batch structure
+     * contains the geometry data formatted as Triangle Strips. However, this
+     * buffer is non-contiguous and contains memory gaps between individual draw
+     * commands.
+     *
+     * PARSING PROCEDURE:
+     * To extract valid geometry for rendering, the buffer must be parsed per-command.
+     * Do not upload the entire `mb.indices` buffer directly to the GPU.
+     *
+     * 1. Iterate through `mb.commands`.
+     * 2. For each command, the valid index range is defined by:
+     *      start = command.index_offset
+     *      end   = command.index_offset + command.index_count
+     * 3. Extract the slice `mb.indices[start..end]` and append it to a compacted
+     *    buffer for GPU upload.
+     * 4. For Triangle Strips, the number of triangles is variable due to the 
+     *    Primitive Restart markers.
+     *
+     * TOPOLOGY:
+     * The extracted geometry is formatted as a Triangle Strip. Individual strips
+     * are separated by the Primitive Restart marker (0xFFFFFFFF).
+     * ==============================================================================
+     */
     void (*process_mega_batch)(const PluginMegaBatch* batch);
 
     bool (*render)(void);

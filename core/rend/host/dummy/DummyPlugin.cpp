@@ -96,9 +96,6 @@ static void dummy_destroy_texture(uint32_t handle) {
 }
 
 
-static uint32_t dummy_get_capabilities() {
-    return FLYCAST_CAP_MEGA_BATCH;
-}
 
 static void dummy_process_mega_batch(const PluginMegaBatch* batch) {
     if (host_if && host_handle) {
@@ -113,6 +110,14 @@ static void dummy_process_mega_batch(const PluginMegaBatch* batch) {
         snprintf(buffer, 512, "[Dummy] MegaBatch: %zu vertices, %zu indices, %zu commands, list=%d\n",
                  batch->vertex_count, batch->index_count, batch->command_count, batch->list_type);
         host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
+
+        // NOTE: With primRestart=true in ta_parse, indices are Triangle Strips.
+        // Strips are separated by the 0xFFFFFFFF (~0) marker.
+        for (size_t i = 0; i < batch->index_count; i++) {
+            if (batch->indices[i] == 0xFFFFFFFF) {
+                // host_if->log(host_handle, FLYCAST_LOG_DEBUG, "[Dummy] Primitive restart detected.");
+            }
+        }
 
         for (size_t i = 0; i < batch->command_count; i++) {
             const auto& cmd = batch->commands[i];
@@ -186,7 +191,6 @@ static const FlycastPluginVTable vtable = {
     dummy_term,
     dummy_resize,
 
-    dummy_get_capabilities,
     dummy_process_mega_batch,
 
     dummy_render,

@@ -5,7 +5,7 @@
 
 struct DrawBatch {
     std::vector<PluginVertex> vertices;
-    std::vector<uint16_t> indices;
+    std::vector<uint32_t> indices;
 
     bool scissorEnable = false;
     int32_t scissorX = 0;

@@ -60,6 +60,7 @@ public:
         // 2. Green (Middle, Depth 0.5)
         // 3. Blue (Back, Depth 0.2)
         addQuad(220.0f, 140.0f, 0.8f, 255, 0, 0, 128);   // Red
+
         addQuad(270.0f, 190.0f, 0.5f, 0, 255, 0, 128);   // Green
         addQuad(320.0f, 240.0f, 0.2f, 0, 0, 255, 128);   // Blue
     }

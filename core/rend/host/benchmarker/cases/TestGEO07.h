@@ -29,7 +29,7 @@ public:
             batch.vertices[4] = { 500.0f, 200.0f, 0.4f, {255, 0, 0, 128} };
             batch.vertices[5] = { 400.0f, 400.0f, 0.4f, {255, 0, 0, 128} };
             
-            batch.indices = { 0, 1, 2, 3, 4, 5 };
+            batch.indices = { 0, 1, 2, 0xFFFFFFFF, 3, 4, 5 };
             batch.cullMode = FLYCAST_CULL_NONE;
             
             data.batches.push_back(batch);

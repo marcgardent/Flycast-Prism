@@ -30,7 +30,7 @@ public:
             batch.vertices[3] = { 390.0f, 100.0f, 0.1f, {255, 255, 0, 255} }; // Yellow
             
             // Draw as a Quad (2 Triangles)
-            batch.indices = { 0, 1, 2, 2, 1, 3 }; 
+            batch.indices = { 0, 1, 2, 0xFFFFFFFF, 2, 1, 3 }; 
             batch.cullMode = FLYCAST_CULL_NONE;
             
             data.batches.push_back(batch);
