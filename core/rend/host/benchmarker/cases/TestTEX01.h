@@ -1,19 +1,9 @@
 #pragma once
-
 #include "TestCommon.h"
 #include <cstring>
 
-// Simulated hardware RAM for palette, monitored by the host
 extern uint32_t palette32_ram[1024];
 
-
-// ============================================================================
-// TEX-01 : Palette Lookup (8BPP)
-// A full-screen quad textured with a 256x256 8BPP indexed texture.
-// Each texel index = (x + y) & 0xFF -> 256 diagonal rainbow bands.
-// Palette: 1024 entries (Hardware standard), using the first 256 for HSL rainbow (hue = i/256 * 360 degrees).
-// Expected: smooth diagonal rainbow gradient across the screen.
-// ============================================================================
 class TestTEX01 : public TestCase {
 public:
     std::string getId() const override { return "TEX-01"; }
@@ -25,18 +15,13 @@ public:
         constexpr uint32_t TEX_W = 256;
         constexpr uint32_t TEX_H = 256;
 
-        // ---- Build rainbow palette (1024 ARGB32 entries to match hardware) ----
         std::vector<uint32_t> pal(1024, 0);
         for (int i = 0; i < 256; ++i) {
             float hue = (float)i / 256.0f * 360.0f;
             pal[i] = hsl_to_argb32(hue, 1.0f, 0.5f);
         }
-
-        // Write to simulated hardware RAM so the host detects the update
         memcpy(palette32_ram, pal.data(), 1024 * sizeof(uint32_t));
 
-        // ---- Build 8BPP texture: index = (x + y) & 0xFF ----
-        // Produces 256 diagonal bands, each mapped to a distinct palette color.
         std::vector<uint8_t> tex(TEX_W * TEX_H);
         for (uint32_t y = 0; y < TEX_H; ++y) {
             for (uint32_t x = 0; x < TEX_W; ++x) {
@@ -44,42 +29,18 @@ public:
             }
         }
 
-        // ---- Full-screen quad with UV (0,0) -> (1,1) ----
         DrawBatch batch;
-        batch.vertices.resize(4);
-
-        // Top-left
-        batch.vertices[0].x = 0.0f;   batch.vertices[0].y = 0.0f;   batch.vertices[0].z = 0.5f;
-        batch.vertices[0].col[0] = 255; batch.vertices[0].col[1] = 255;
-        batch.vertices[0].col[2] = 255; batch.vertices[0].col[3] = 255;
-        batch.vertices[0].u = 0.0f;    batch.vertices[0].v = 0.0f;
-
-        // Top-right
-        batch.vertices[1].x = 640.0f; batch.vertices[1].y = 0.0f;   batch.vertices[1].z = 0.5f;
-        batch.vertices[1].col[0] = 255; batch.vertices[1].col[1] = 255;
-        batch.vertices[1].col[2] = 255; batch.vertices[1].col[3] = 255;
-        batch.vertices[1].u = 1.0f;    batch.vertices[1].v = 0.0f;
-
-        // Bottom-right
-        batch.vertices[2].x = 640.0f; batch.vertices[2].y = 480.0f; batch.vertices[2].z = 0.5f;
-        batch.vertices[2].col[0] = 255; batch.vertices[2].col[1] = 255;
-        batch.vertices[2].col[2] = 255; batch.vertices[2].col[3] = 255;
-        batch.vertices[2].u = 1.0f;    batch.vertices[2].v = 1.0f;
-
-        // Bottom-left
-        batch.vertices[3].x = 0.0f;   batch.vertices[3].y = 480.0f; batch.vertices[3].z = 0.5f;
-        batch.vertices[3].col[0] = 255; batch.vertices[3].col[1] = 255;
-        batch.vertices[3].col[2] = 255; batch.vertices[3].col[3] = 255;
-        batch.vertices[3].u = 0.0f;    batch.vertices[3].v = 1.0f;
-
-        batch.indices = { 0, 1, 2, 0, 2, 3 };
-
         batch.texMode   = FLYCAST_TEX_PAL8;
         batch.texWidth  = TEX_W;
         batch.texHeight = TEX_H;
         batch.texData   = std::move(tex);
         batch.palette   = std::move(pal);
 
-        data.batches.push_back(std::move(batch));
+        data.addStrip({
+            { 0.0f,   0.0f,   0.5f, {255, 255, 255, 255}, {0,0,0,0}, 0.0f, 0.0f }, // TL
+            { 640.0f, 0.0f,   0.5f, {255, 255, 255, 255}, {0,0,0,0}, 1.0f, 0.0f }, // TR
+            { 0.0f,   480.0f, 0.5f, {255, 255, 255, 255}, {0,0,0,0}, 0.0f, 1.0f }, // BL
+            { 640.0f, 480.0f, 0.5f, {255, 255, 255, 255}, {0,0,0,0}, 1.0f, 1.0f }  // BR
+        }, batch);
     }
 };

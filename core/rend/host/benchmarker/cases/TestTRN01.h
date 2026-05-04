@@ -19,71 +19,33 @@ public:
         // 1. Background quad (Red, Opaque)
         {
             DrawBatch batch;
-            batch.vertices.resize(4);
-            
-            // Top-left
-            batch.vertices[0] = {};
-            batch.vertices[0].x = 0.0f; batch.vertices[0].y = 0.0f; batch.vertices[0].z = 0.5f;
-            batch.vertices[0].col[0] = 255; batch.vertices[0].col[1] = 0; batch.vertices[0].col[2] = 0; batch.vertices[0].col[3] = 255;
-
-            // Top-right
-            batch.vertices[1] = {};
-            batch.vertices[1].x = 640.0f; batch.vertices[1].y = 0.0f; batch.vertices[1].z = 0.5f;
-            batch.vertices[1].col[0] = 255; batch.vertices[1].col[1] = 0; batch.vertices[1].col[2] = 0; batch.vertices[1].col[3] = 255;
-
-            // Bottom-right
-            batch.vertices[2] = {};
-            batch.vertices[2].x = 640.0f; batch.vertices[2].y = 480.0f; batch.vertices[2].z = 0.5f;
-            batch.vertices[2].col[0] = 255; batch.vertices[2].col[1] = 0; batch.vertices[2].col[2] = 0; batch.vertices[2].col[3] = 255;
-
-            // Bottom-left
-            batch.vertices[3] = {};
-            batch.vertices[3].x = 0.0f; batch.vertices[3].y = 480.0f; batch.vertices[3].z = 0.5f;
-            batch.vertices[3].col[0] = 255; batch.vertices[3].col[1] = 0; batch.vertices[3].col[2] = 0; batch.vertices[3].col[3] = 255;
-
-            batch.indices = { 0, 1, 2, 0, 2, 3 };
-            
             batch.srcBlend = FLYCAST_BLEND_ONE;
             batch.dstBlend = FLYCAST_BLEND_ZERO;
             batch.depthWrite = true;
-            batch.depthFunc = FLYCAST_DEPTH_ALWAYS; // Background quad
+            batch.depthFunc = FLYCAST_DEPTH_ALWAYS; 
             
-            data.batches.push_back(std::move(batch));
+            data.addStrip({
+                { 0.0f, 0.0f, 0.5f, {255, 0, 0, 255} }, // TL
+                { 640.0f, 0.0f, 0.5f, {255, 0, 0, 255} }, // TR
+                { 0.0f, 480.0f, 0.5f, {255, 0, 0, 255} }, // BL
+                { 640.0f, 480.0f, 0.5f, {255, 0, 0, 255} }  // BR
+            }, batch);
         }
 
         // 2. Foreground quad (Blue, 50% Alpha)
         {
             DrawBatch batch;
-            batch.vertices.resize(4);
-            
-            // Top-left
-            batch.vertices[0] = {};
-            batch.vertices[0].x = 160.0f; batch.vertices[0].y = 120.0f; batch.vertices[0].z = 0.6f;
-            batch.vertices[0].col[0] = 0; batch.vertices[0].col[1] = 0; batch.vertices[0].col[2] = 255; batch.vertices[0].col[3] = 128;
-
-            // Top-right
-            batch.vertices[1] = {};
-            batch.vertices[1].x = 480.0f; batch.vertices[1].y = 120.0f; batch.vertices[1].z = 0.6f;
-            batch.vertices[1].col[0] = 0; batch.vertices[1].col[1] = 0; batch.vertices[1].col[2] = 255; batch.vertices[1].col[3] = 128;
-
-            // Bottom-right
-            batch.vertices[2] = {};
-            batch.vertices[2].x = 480.0f; batch.vertices[2].y = 360.0f; batch.vertices[2].z = 0.6f;
-            batch.vertices[2].col[0] = 0; batch.vertices[2].col[1] = 0; batch.vertices[2].col[2] = 255; batch.vertices[2].col[3] = 128;
-
-            // Bottom-left
-            batch.vertices[3] = {};
-            batch.vertices[3].x = 160.0f; batch.vertices[3].y = 360.0f; batch.vertices[3].z = 0.6f;
-            batch.vertices[3].col[0] = 0; batch.vertices[3].col[1] = 0; batch.vertices[3].col[2] = 255; batch.vertices[3].col[3] = 128;
-
-            batch.indices = { 0, 1, 2, 0, 2, 3 };
-
             batch.srcBlend = FLYCAST_BLEND_SRC_ALPHA;
             batch.dstBlend = FLYCAST_BLEND_INV_SRC_ALPHA;
             batch.depthWrite = false;
-            batch.depthFunc = FLYCAST_DEPTH_GEQUAL; // Should pass over 0.5 background
+            batch.depthFunc = FLYCAST_DEPTH_GEQUAL;
             
-            data.batches.push_back(std::move(batch));
+            data.addStrip({
+                { 160.0f, 120.0f, 0.6f, {0, 0, 255, 128} }, // TL
+                { 480.0f, 120.0f, 0.6f, {0, 0, 255, 128} }, // TR
+                { 160.0f, 360.0f, 0.6f, {0, 0, 255, 128} }, // BL
+                { 480.0f, 360.0f, 0.6f, {0, 0, 255, 128} }  // BR
+            }, batch);
         }
     }
 };

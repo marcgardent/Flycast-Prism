@@ -19,32 +19,26 @@ public:
         frame++;
     }
 
-
     void prepare(TestData& data) override {
-        // Only render the texture during the first 10 frames
         if (frame < 10) {
             DrawBatch batch;
-            batch.vertices.resize(3);
-            batch.vertices[0] = { 0, 0, 0.5f, {255, 255, 255, 255}, {0,0,0,0}, 0, 0 };
-            batch.vertices[1] = { 100, 0, 0.5f, {255, 255, 255, 255}, {0,0,0,0}, 1, 0 };
-            batch.vertices[2] = { 0, 100, 0.5f, {255, 255, 255, 255}, {0,0,0,0}, 0, 1 };
-            batch.indices = { 0, 1, 2 };
-
             batch.texMode = FLYCAST_TEX_PAL8;
             batch.texWidth = 8;
             batch.texHeight = 8;
             batch.texData.assign(64, 1); // 8x8 texture filled with index 1
             
-            data.batches.push_back(std::move(batch));
+            data.addStrip({
+                { 0, 0, 0.5f, {255, 255, 255, 255}, {0,0,0,0}, 0, 0 },
+                { 100, 0, 0.5f, {255, 255, 255, 255}, {0,0,0,0}, 1, 0 },
+                { 0, 100, 0.5f, {255, 255, 255, 255}, {0,0,0,0}, 0, 1 }
+            }, batch);
         } else {
-            // After frame 10, we submit an empty batch or a batch without texture
             DrawBatch batch;
-            batch.vertices.resize(3);
-            batch.vertices[0] = { 0, 0, 0.5f, {255, 0, 0, 255}, {0,0,0,0}, 0, 0 }; // Red triangle
-            batch.vertices[1] = { 10, 0, 0.5f, {255, 0, 0, 255}, {0,0,0,0}, 0, 0 };
-            batch.vertices[2] = { 0, 10, 0.5f, {255, 0, 0, 255}, {0,0,0,0}, 0, 0 };
-            batch.indices = { 0, 1, 2 };
-            data.batches.push_back(std::move(batch));
+            data.addStrip({
+                { 0, 0, 0.5f, {255, 0, 0, 255}, {0,0,0,0}, 0, 0 },
+                { 10, 0, 0.5f, {255, 0, 0, 255}, {0,0,0,0}, 0, 0 },
+                { 0, 10, 0.5f, {255, 0, 0, 255}, {0,0,0,0}, 0, 0 }
+            }, batch);
         }
     }
 };

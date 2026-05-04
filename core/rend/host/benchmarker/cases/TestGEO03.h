@@ -1,4 +1,5 @@
 #pragma once
+#include "benchmarker/TestCase.h"
 
 class TestGEO03 : public TestCase {
 public:
@@ -9,18 +10,17 @@ public:
 
     void prepare(TestData& data) override {
         DrawBatch batch;
-        batch.vertices.resize(4);
-        batch.vertices[0] = { 0.0f,   0.0f,   0.5f, {255, 255, 255, 255} };
-        batch.vertices[1] = { 640.0f, 0.0f,   0.5f, {255, 255, 255, 255} };
-        batch.vertices[2] = { 640.0f, 480.0f, 0.5f, {255, 255, 255, 255} };
-        batch.vertices[3] = { 0.0f,   480.0f, 0.5f, {255, 255, 255, 255} };
-
-        batch.indices = { 0, 1, 2, 0, 2, 3 };
         batch.scissorEnable = true;
         batch.scissorX = 160;
         batch.scissorY = 120;
         batch.scissorW = 320;
         batch.scissorH = 240;
-        data.batches.push_back(batch);
+
+        data.addStrip({
+            { 0.0f,   0.0f,   0.5f, {255, 255, 255, 255} }, // TL
+            { 640.0f, 0.0f,   0.5f, {255, 255, 255, 255} }, // TR
+            { 0.0f,   480.0f, 0.5f, {255, 255, 255, 255} }, // BL
+            { 640.0f, 480.0f, 0.5f, {255, 255, 255, 255} }  // BR
+        }, batch);
     }
 };

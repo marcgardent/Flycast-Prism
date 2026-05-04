@@ -312,13 +312,14 @@ int main(int argc, char** argv) {
                 return bench_tex_cache[ptr].handle;
             };
 
-            std::vector<PluginVertex> allVerts;
+            const std::vector<PluginVertex>& allVerts = testData.vertices;
             std::map<FlycastListType, std::vector<FlycastDrawCommand>> listCmds;
 
             for (auto& batch : testData.batches) {
                 FlycastDrawCommand cmd = {};
                 cmd.texture_handle = resolveTexture(batch);
-                cmd.vertex_offset = (uint32_t)allVerts.size();
+                cmd.vertex_offset = batch.vertexOffset;
+                cmd.vertex_count = batch.vertexCount;
                 
                 // State Mapping (Same as HostRenderer)
                 cmd.src_blend = batch.srcBlend;
@@ -333,25 +334,6 @@ int main(int argc, char** argv) {
                 cmd.fog_mode = batch.fogMode;
                 cmd.fog_color = batch.fogColor;
                 cmd.fog_density = batch.fogDensity;
-
-                // Unroll indices into sequential vertices if indices are provided, 
-                // otherwise just copy the vertices.
-                if (batch.indices.empty()) {
-                    for (auto& v : batch.vertices) allVerts.push_back(v);
-                    cmd.vertex_count = (uint32_t)batch.vertices.size();
-                } else {
-                    for (auto idx : batch.indices) {
-                        if (idx != 0xFFFFFFFF) {
-                            allVerts.push_back(batch.vertices[idx]);
-                        } else {
-                            // If we hit a restart, we should ideally split the command.
-                            // But for simple benchmarker cases, we just skip it or 
-                            // assume the user knows what they're doing.
-                            // In the new API, we prefer one command per strip.
-                        }
-                    }
-                    cmd.vertex_count = (uint32_t)allVerts.size() - cmd.vertex_offset;
-                }
 
                 listCmds[batch.listType].push_back(cmd);
             }

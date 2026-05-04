@@ -11,42 +11,36 @@ public:
 
     void prepare(TestData& data) override {
         // 1. Triangle GAUCHE : Noir + Offset Bleu = BLEU
-        // Prouve que l'offset est ajouté même si la base est noire
         {
-            DrawBatch batch;
-            batch.offsetEnable = true;
-            PluginVertex v1 = { 200, 100, 0.5f, {0, 0, 0, 255}, {0, 0, 255, 255}, 0, 0 };
-            PluginVertex v2 = { 350, 400, 0.5f, {0, 0, 0, 255}, {0, 0, 255, 255}, 0, 0 };
-            PluginVertex v3 = {  50, 400, 0.5f, {0, 0, 0, 255}, {0, 0, 255, 255}, 0, 0 };
-            batch.vertices = { v1, v2, v3 };
-            batch.indices = { 0, 1, 2 };
-            data.batches.push_back(batch);
+            DrawBatch b;
+            b.offsetEnable = true;
+            data.addStrip({
+                { 200, 100, 0.5f, {0, 0, 0, 255}, {0, 0, 255, 255}, 0, 0 },
+                { 350, 400, 0.5f, {0, 0, 0, 255}, {0, 0, 255, 255}, 0, 0 },
+                {  50, 400, 0.5f, {0, 0, 0, 255}, {0, 0, 255, 255}, 0, 0 }
+            }, b);
         }
 
         // 2. Triangle MILIEU : Vert + Offset Rouge = JAUNE
-        // Prouve le mélange additif (0,255,0) + (255,0,0) = (255,255,0)
         {
-            DrawBatch batch;
-            batch.offsetEnable = true;
-            PluginVertex v1 = { 640, 100, 0.5f, {0, 255, 0, 255}, {255, 0, 0, 255}, 0, 0 };
-            PluginVertex v2 = { 790, 400, 0.5f, {0, 255, 0, 255}, {255, 0, 0, 255}, 0, 0 };
-            PluginVertex v3 = { 490, 400, 0.5f, {0, 255, 0, 255}, {255, 0, 0, 255}, 0, 0 };
-            batch.vertices = { v1, v2, v3 };
-            batch.indices = { 0, 1, 2 };
-            data.batches.push_back(batch);
+            DrawBatch b;
+            b.offsetEnable = true;
+            data.addStrip({
+                { 640, 100, 0.5f, {0, 255, 0, 255}, {255, 0, 0, 255}, 0, 0 },
+                { 790, 400, 0.5f, {0, 255, 0, 255}, {255, 0, 0, 255}, 0, 0 },
+                { 490, 400, 0.5f, {0, 255, 0, 255}, {255, 0, 0, 255}, 0, 0 }
+            }, b);
         }
 
         // 3. Triangle DROITE : Vert simple (Offset désactivé) = VERT
-        // Sert de témoin
         {
-            DrawBatch batch;
-            batch.offsetEnable = false;
-            PluginVertex v1 = { 1080, 100, 0.5f, {0, 255, 0, 255}, {255, 255, 255, 255}, 0, 0 };
-            PluginVertex v2 = { 1230, 400, 0.5f, {0, 255, 0, 255}, {255, 255, 255, 255}, 0, 0 };
-            PluginVertex v3 = {  930, 400, 0.5f, {0, 255, 0, 255}, {255, 255, 255, 255}, 0, 0 };
-            batch.vertices = { v1, v2, v3 };
-            batch.indices = { 0, 1, 2 };
-            data.batches.push_back(batch);
+            DrawBatch b;
+            b.offsetEnable = false;
+            data.addStrip({
+                { 1080, 100, 0.5f, {0, 255, 0, 255}, {255, 255, 255, 255}, 0, 0 },
+                { 1230, 400, 0.5f, {0, 255, 0, 255}, {255, 255, 255, 255}, 0, 0 },
+                {  930, 400, 0.5f, {0, 255, 0, 255}, {255, 255, 255, 255}, 0, 0 }
+            }, b);
         }
     }
 };

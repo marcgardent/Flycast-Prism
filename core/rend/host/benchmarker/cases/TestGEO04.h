@@ -1,4 +1,5 @@
 #pragma once
+#include "benchmarker/TestCase.h"
 
 class TestGEO04 : public TestCase {
 public:
@@ -15,33 +16,23 @@ public:
     uint32_t getFrameCount() const override { return 10; }
 
     void prepare(TestData& data) override {
-        // Batch 1: Large Red Triangles (fills many tiles)
-        // This will increment the compute shader's tile_counters significantly.
-        {
-            DrawBatch batch;
-            batch.vertices.resize(4);
-            batch.vertices[0] = { 0.0f, 0.0f, 0.2f, {255, 0, 0, 255} };
-            batch.vertices[1] = { 640.0f, 0.0f, 0.2f, {255, 0, 0, 255} };
-            batch.vertices[2] = { 0.0f, 480.0f, 0.2f, {255, 0, 0, 255} };
-            batch.vertices[3] = { 640.0f, 480.0f, 0.2f, {255, 0, 0, 255} };
-            batch.indices = { 0, 1, 2, 2, 1, 3 }; // 2 Triangles
-            batch.cullMode = FLYCAST_CULL_NONE;
-            data.batches.push_back(batch);
-        }
+        // Batch 1: Large Red Quad
+        DrawBatch b1;
+        b1.cullMode = FLYCAST_CULL_NONE;
+        data.addStrip({
+            { 0.0f, 0.0f, 0.2f, {255, 0, 0, 255} }, // TL
+            { 640.0f, 0.0f, 0.2f, {255, 0, 0, 255} }, // TR
+            { 0.0f, 480.0f, 0.2f, {255, 0, 0, 255} }, // BL
+            { 640.0f, 480.0f, 0.2f, {255, 0, 0, 255} }  // BR
+        }, b1);
 
-        // Batch 2: Small Green Triangle (in the same tiles)
-        // If tile_counters wasn't cleared, this batch starts appending at count > 0.
-        // The rasterizer will loop over the old tri_idx from Batch 1, 
-        // causing out-of-bounds reads in Batch 2's smaller index buffer -> Spider Web !
-        {
-            DrawBatch batch;
-            batch.vertices.resize(3);
-            batch.vertices[0] = { 300.0f, 200.0f, 0.5f, {0, 255, 0, 255} };
-            batch.vertices[1] = { 340.0f, 200.0f, 0.5f, {0, 255, 0, 255} };
-            batch.vertices[2] = { 320.0f, 240.0f, 0.5f, {0, 255, 0, 255} };
-            batch.indices = { 0, 1, 2 }; // 1 Triangle
-            batch.cullMode = FLYCAST_CULL_NONE;
-            data.batches.push_back(batch);
-        }
+        // Batch 2: Small Green Triangle
+        DrawBatch b2;
+        b2.cullMode = FLYCAST_CULL_NONE;
+        data.addStrip({
+            { 300.0f, 200.0f, 0.5f, {0, 255, 0, 255} },
+            { 340.0f, 200.0f, 0.5f, {0, 255, 0, 255} },
+            { 320.0f, 240.0f, 0.5f, {0, 255, 0, 255} }
+        }, b2);
     }
 };

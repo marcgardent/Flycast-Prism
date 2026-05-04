@@ -1,4 +1,5 @@
 #pragma once
+#include "benchmarker/TestCase.h"
 
 class TestTRN02 : public TestCase {
 public:
@@ -17,29 +18,23 @@ public:
         // Background: Solid Red Triangle (Z = 0.2, Far)
         {
             DrawBatch batch;
-            batch.vertices.resize(3);
-            batch.vertices[0] = { 200.0f, 100.0f, 0.2f, {255, 0, 0, 255} };
-            batch.vertices[1] = { 400.0f, 100.0f, 0.2f, {255, 0, 0, 255} };
-            batch.vertices[2] = { 300.0f, 300.0f, 0.2f, {255, 0, 0, 255} };
-            batch.indices = { 0, 1, 2 };
             batch.cullMode = FLYCAST_CULL_NONE;
-            // Mode: Opaque
-            data.batches.push_back(batch);
+            data.addStrip({
+                { 200.0f, 100.0f, 0.2f, {255, 0, 0, 255} },
+                { 400.0f, 100.0f, 0.2f, {255, 0, 0, 255} },
+                { 300.0f, 300.0f, 0.2f, {255, 0, 0, 255} }
+            }, batch);
         }
 
         // Foreground: Invisible Green Triangle (Z = 0.8, Near, Alpha = 0)
-        // With current rasterizer.wgsl, this will win the max_z test during ISP,
-        // then render with 0 alpha during TSP, effectively erasing the red triangle behind it!
         {
             DrawBatch batch;
-            batch.vertices.resize(3);
-            batch.vertices[0] = { 250.0f, 150.0f, 0.8f, {0, 255, 0, 0} }; // Alpha = 0
-            batch.vertices[1] = { 450.0f, 150.0f, 0.8f, {0, 255, 0, 0} }; // Alpha = 0
-            batch.vertices[2] = { 350.0f, 350.0f, 0.8f, {0, 255, 0, 0} }; // Alpha = 0
-            batch.indices = { 0, 1, 2 };
             batch.cullMode = FLYCAST_CULL_NONE;
-            // Mode: Punch-Through / Translucent
-            data.batches.push_back(batch);
+            data.addStrip({
+                { 250.0f, 150.0f, 0.8f, {0, 255, 0, 0} }, // Alpha = 0
+                { 450.0f, 150.0f, 0.8f, {0, 255, 0, 0} }, // Alpha = 0
+                { 350.0f, 350.0f, 0.8f, {0, 255, 0, 0} }  // Alpha = 0
+            }, batch);
         }
     }
 };

@@ -4,8 +4,8 @@
 #include "../flycast_plugin_api.h"
 
 struct DrawBatch {
-    std::vector<PluginVertex> vertices;
-    std::vector<uint32_t> indices;
+    uint32_t vertexOffset = 0;
+    uint32_t vertexCount = 0;
 
     bool scissorEnable = false;
     int32_t scissorX = 0;
@@ -45,7 +45,16 @@ struct DrawBatch {
 };
 
 struct TestData {
+    std::vector<PluginVertex> vertices;
     std::vector<DrawBatch> batches;
+
+    void addStrip(const std::vector<PluginVertex>& stripVerts, const DrawBatch& state = {}) {
+        DrawBatch b = state;
+        b.vertexOffset = (uint32_t)vertices.size();
+        b.vertexCount = (uint32_t)stripVerts.size();
+        vertices.insert(vertices.end(), stripVerts.begin(), stripVerts.end());
+        batches.push_back(b);
+    }
 };
 
 class TestCase {
