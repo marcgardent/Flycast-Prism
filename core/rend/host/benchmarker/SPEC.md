@@ -22,15 +22,19 @@ Textures processed by the host follow the `opengl::pvrTexInfo` conversion tables
 *   **Benchmarker Action**: Sampled texture colors will have Red in the first component (`.r`) and Blue in the third (`.b`).
 
 ## 3. Texture Coordinates (UV)
-Flycast exports **raw PVR-native** UV coordinates.
+Flycast exports UV coordinates in their **binned PVR-native** format, which means they are **pre-multiplied by depth (1/W)**.
 
+*   **Perspective Correction**: To achieve perspective-correct texture mapping in a screen-space rasterizer, the plugin MUST:
+    1.  Interpolate the provided `u`, `v` (which are $U/W, V/W$) and `z` (which is $1/W$) linearly.
+    2.  In the fragment shader, calculate the final coordinates: `final_u = u / z` and `final_v = v / z`.
+    3.  **IMPORTANT**: Do NOT multiply UVs by `z` in the vertex shader, as they are already pre-multiplied.
 *   **Orientation**:
     *   `U = 0.0` (Left), `U = 1.0` (Right)
     *   `V = 0.0` (**TOP**), `V = 1.0` (**BOTTOM**)
 *   **`isOpenGL` Implication**: While standard OpenGL textures are often Y-bottom-up, Flycast does **not** flip the V coordinate in the `PluginVertex` buffer.
 *   **Benchmarker Action**:
-    *   If using a PVR-style texture upload (Top-Down), use UVs as-is.
-    *   If using a standard OpenGL Y-up coordinate system, apply `v = 1.0 - v` in the vertex or fragment shader.
+    *   If using a PVR-style texture upload (Top-Down), use UVs as-is (after the division by `z`).
+    *   If using a standard OpenGL Y-up coordinate system, apply `v = 1.0 - v` in the fragment shader **after** the division by `z`.
 
 ## 4. Geometric Positions (X, Y, Z)
 *   **Screen Space**: Coordinates are provided in absolute pixels (e.g., 0-640 for X, 0-480 for Y).
@@ -45,7 +49,7 @@ Flycast exports **raw PVR-native** UV coordinates.
 | Attribute | `isOpenGL` Standard | Implementation Note |
 | :--- | :--- | :--- |
 | **Vertex Color** | **RGBA8** | `layout(location = 1) in vec4 aColor;` |
-| **Texture Sample** | **RGBA8** | `texture(tex, uv).rgba` |
+| **Texture Sample** | **RGBA8** | `texture(tex, v_uv / v_z).rgba` |
 | **UV Orientation** | **V=0 at TOP** | Matches VRAM layout. |
-| **Winding Order** | **Triangle Strip** | Follow PVR parity rules for index generation. |
+| **Winding Order** | **Triangle Strip** | Follow PVR parity rules. |
 | **Normals** | **Standard Float** | (Naomi 2 only) |

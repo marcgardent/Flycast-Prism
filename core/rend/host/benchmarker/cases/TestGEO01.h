@@ -15,10 +15,10 @@ public:
         float size = 100.0f;
 
         data.addStrip({
-            { centerX - size, centerY - size, 0.5f, {255, 255, 255, 255} }, // TL
-            { centerX + size, centerY - size, 0.5f, {255, 255, 255, 255} }, // TR
-            { centerX - size, centerY + size, 0.5f, {255, 255, 255, 255} }, // BL
-            { centerX + size, centerY + size, 0.5f, {255, 255, 255, 255} }  // BR
+            { .x = centerX - size, .y = centerY - size, .z_inv = 0.5f, .col = {255, 255, 255, 255} }, // TL
+            { .x = centerX + size, .y = centerY - size, .z_inv = 0.5f, .col = {255, 255, 255, 255} }, // TR
+            { .x = centerX - size, .y = centerY + size, .z_inv = 0.5f, .col = {255, 255, 255, 255} }, // BL
+            { .x = centerX + size, .y = centerY + size, .z_inv = 0.5f, .col = {255, 255, 255, 255} }  // BR
         });
     }
 };

@@ -1,7 +1,17 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <cstring>
 #include "../flycast_plugin_api.h"
+
+// Structure simplifiée pour écrire les tests plus rapidement
+struct TestVertex {
+    float x, y, z_inv;
+    uint8_t col[4] = {255, 255, 255, 255};
+    uint8_t spc[4] = {0, 0, 0, 0};
+    float u = 0.0f;
+    float v = 0.0f;
+};
 
 struct DrawBatch {
     uint32_t vertexOffset = 0;
@@ -48,11 +58,28 @@ struct TestData {
     std::vector<PluginVertex> vertices;
     std::vector<DrawBatch> batches;
 
-    void addStrip(const std::vector<PluginVertex>& stripVerts, const DrawBatch& state = {}) {
+    // Nouvelle version qui accepte les TestVertex et fait la conversion hardware
+    void addStrip(const std::vector<TestVertex>& stripVerts, const DrawBatch& state = {}) {
         DrawBatch b = state;
         b.vertexOffset = (uint32_t)vertices.size();
         b.vertexCount = (uint32_t)stripVerts.size();
-        vertices.insert(vertices.end(), stripVerts.begin(), stripVerts.end());
+
+        for (const auto& v : stripVerts) {
+            PluginVertex pv;
+            pv.x = v.x;
+            pv.y = v.y;
+            pv.z = v.z_inv;
+            std::memcpy(pv.col, v.col, 4);
+            std::memcpy(pv.spc, v.spc, 4);
+
+            // LA CORRECTION EST ICI : Pré-multiplication des UVs par 1/W (z_inv)
+            // comme l'exige l'architecture matérielle PVR émulée
+            pv.u = v.u * v.z_inv;
+            pv.v = v.v * v.z_inv;
+
+            vertices.push_back(pv);
+        }
+
         batches.push_back(b);
     }
 };
@@ -64,7 +91,7 @@ public:
     virtual std::string getName() const = 0;
     virtual std::string getDescription() const = 0;
     virtual std::string getExpected() const = 0;
-    
+
     virtual void prepare(TestData& data) = 0;
     virtual void update(float dt) {}
     virtual uint32_t getFrameCount() const { return 1; }

@@ -27,6 +27,7 @@
 #include "cases/TestSHD02.h"
 #include "cases/TestGEO07.h"
 #include "cases/TestTEX02.h"
+#include "cases/TestTEX03.h"
 
 static BenchUI* g_ui = nullptr;
 uint32_t palette32_ram[1024];
@@ -84,6 +85,7 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestOIT01>());
     mgr.registerTest(std::make_unique<TestGC01>());
     mgr.registerTest(std::make_unique<TestTEX02>());
+    mgr.registerTest(std::make_unique<TestTEX03>());
 }
 
 static void print_usage(const char* argv0) {

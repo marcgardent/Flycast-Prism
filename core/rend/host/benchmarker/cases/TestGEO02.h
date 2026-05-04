@@ -22,18 +22,18 @@ public:
             b1.cullMode = FLYCAST_CULL_NONE;
             b1.depthFunc = FLYCAST_DEPTH_GREATER;
             data.addStrip({
-                { 150.0f, 150.0f, 0.8f, {0, 255, 0, 255} },
-                { 350.0f, 150.0f, 0.8f, {0, 255, 0, 255} },
-                { 250.0f, 350.0f, 0.8f, {0, 255, 0, 255} }
+                { .x = 150.0f, .y = 150.0f, .z_inv = 0.8f, .col = {0, 255, 0, 255} },
+                { .x = 350.0f, .y = 150.0f, .z_inv = 0.8f, .col = {0, 255, 0, 255} },
+                { .x = 250.0f, .y = 350.0f, .z_inv = 0.8f, .col = {0, 255, 0, 255} }
             }, b1);
 
             DrawBatch b2; // Red (Far, drawn 2nd)
             b2.cullMode = FLYCAST_CULL_NONE;
             b2.depthFunc = FLYCAST_DEPTH_GREATER;
             data.addStrip({
-                { 100.0f, 100.0f, 0.2f, {255, 0, 0, 255} },
-                { 300.0f, 100.0f, 0.2f, {255, 0, 0, 255} },
-                { 200.0f, 300.0f, 0.2f, {255, 0, 0, 255} }
+                { .x = 100.0f, .y = 100.0f, .z_inv = 0.2f, .col = {255, 0, 0, 255} },
+                { .x = 300.0f, .y = 100.0f, .z_inv = 0.2f, .col = {255, 0, 0, 255} },
+                { .x = 200.0f, .y = 300.0f, .z_inv = 0.2f, .col = {255, 0, 0, 255} }
             }, b2);
         }
 
@@ -42,17 +42,17 @@ public:
             DrawBatch b3; // Blue (CCW)
             b3.cullMode = FLYCAST_CULL_BACK;
             data.addStrip({
-                { 400.0f, 100.0f, 0.5f, {0, 0, 255, 255} },
-                { 300.0f, 300.0f, 0.5f, {0, 0, 255, 255} },
-                { 500.0f, 300.0f, 0.5f, {0, 0, 255, 255} }
+                { .x = 400.0f, .y = 100.0f, .z_inv = 0.5f, .col = {0, 0, 255, 255} },
+                { .x = 300.0f, .y = 300.0f, .z_inv = 0.5f, .col = {0, 0, 255, 255} },
+                { .x = 500.0f, .y = 300.0f, .z_inv = 0.5f, .col = {0, 0, 255, 255} }
             }, b3);
 
             DrawBatch b4; // Yellow (CW)
             b4.cullMode = FLYCAST_CULL_BACK;
             data.addStrip({
-                { 400.0f, 200.0f, 0.5f, {255, 255, 0, 255} },
-                { 500.0f, 400.0f, 0.5f, {255, 255, 0, 255} },
-                { 300.0f, 400.0f, 0.5f, {255, 255, 0, 255} }
+                { .x = 400.0f, .y = 200.0f, .z_inv = 0.5f, .col = {255, 255, 0, 255} },
+                { .x = 500.0f, .y = 400.0f, .z_inv = 0.5f, .col = {255, 255, 0, 255} },
+                { .x = 300.0f, .y = 400.0f, .z_inv = 0.5f, .col = {255, 255, 0, 255} }
             }, b4);
         }
     }
