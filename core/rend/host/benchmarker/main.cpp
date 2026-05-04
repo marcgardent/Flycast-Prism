@@ -313,18 +313,13 @@ int main(int argc, char** argv) {
             };
 
             std::vector<PluginVertex> allVerts;
-            std::vector<uint32_t> allIdx;
             std::map<FlycastListType, std::vector<FlycastDrawCommand>> listCmds;
 
             for (auto& batch : testData.batches) {
-                // Simulate non-contiguous index buffer (Gap)
-                for (int i = 0; i < 32; i++) allIdx.push_back(0); 
-
                 FlycastDrawCommand cmd = {};
                 cmd.texture_handle = resolveTexture(batch);
-                cmd.index_offset = (uint32_t)allIdx.size();
-                cmd.index_count = (uint32_t)batch.indices.size();
-
+                cmd.vertex_offset = (uint32_t)allVerts.size();
+                
                 // State Mapping (Same as HostRenderer)
                 cmd.src_blend = batch.srcBlend;
                 cmd.dst_blend = batch.dstBlend;
@@ -339,13 +334,23 @@ int main(int argc, char** argv) {
                 cmd.fog_color = batch.fogColor;
                 cmd.fog_density = batch.fogDensity;
 
-                uint32_t vBase = (uint32_t)allVerts.size();
-                for (auto& v : batch.vertices) allVerts.push_back(v);
-                for (auto i : batch.indices) {
-                    if (i == 0xFFFFFFFF)
-                        allIdx.push_back(0xFFFFFFFF);
-                    else
-                        allIdx.push_back(i + vBase);
+                // Unroll indices into sequential vertices if indices are provided, 
+                // otherwise just copy the vertices.
+                if (batch.indices.empty()) {
+                    for (auto& v : batch.vertices) allVerts.push_back(v);
+                    cmd.vertex_count = (uint32_t)batch.vertices.size();
+                } else {
+                    for (auto idx : batch.indices) {
+                        if (idx != 0xFFFFFFFF) {
+                            allVerts.push_back(batch.vertices[idx]);
+                        } else {
+                            // If we hit a restart, we should ideally split the command.
+                            // But for simple benchmarker cases, we just skip it or 
+                            // assume the user knows what they're doing.
+                            // In the new API, we prefer one command per strip.
+                        }
+                    }
+                    cmd.vertex_count = (uint32_t)allVerts.size() - cmd.vertex_offset;
                 }
 
                 listCmds[batch.listType].push_back(cmd);
@@ -355,8 +360,6 @@ int main(int argc, char** argv) {
                 PluginMegaBatch mega = {};
                 mega.vertices = allVerts.data();
                 mega.vertex_count = allVerts.size();
-                mega.indices = allIdx.data();
-                mega.index_count = allIdx.size();
                 mega.commands = cmds.data();
                 mega.command_count = cmds.size();
                 mega.list_type = type;

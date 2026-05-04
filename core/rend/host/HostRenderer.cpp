@@ -90,7 +90,7 @@ static FlycastDepthFunc MapDepthFunc(u32 pvrDepthFunc) {
 void HostRenderer::Process(TA_context *ctx) {
     if (!vtable) return;
 
-    ta_parse(ctx, true);
+    ta_parse_strips(ctx);
 
     // 1. Palette Update
     uint32_t palette_hash = 0;
@@ -124,8 +124,8 @@ void HostRenderer::Process(TA_context *ctx) {
             if (poly.count == 0) continue;
 
             FlycastDrawCommand cmd = {};
-            cmd.index_offset = poly.first; // Direct offset into ctx->rend.idx
-            cmd.index_count = poly.count;
+            cmd.vertex_offset = poly.first; // Direct offset into ctx->rend.verts
+            cmd.vertex_count = poly.count;
 
             cmd.scissor_enable = true;
             cmd.scissor_x = ctx->rend.fb_X_CLIP.min;
@@ -165,11 +165,8 @@ void HostRenderer::Process(TA_context *ctx) {
 
         if (!mega_commands.empty()) {
             PluginMegaBatch mega = {};
-            // Zero copy: Direct pointers to the global TA buffers
             mega.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
             mega.vertex_count = ctx->rend.verts.size();
-            mega.indices = ctx->rend.idx.data();
-            mega.index_count = ctx->rend.idx.size();
             mega.commands = mega_commands.data();
             mega.command_count = mega_commands.size();
             mega.list_type = listType;

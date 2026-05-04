@@ -14,7 +14,18 @@ void ta_vtx_SoftReset();
 void DYNACALL ta_vtx_data32(const SQBuffer *data);
 void ta_vtx_data(const SQBuffer *data, u32 size);
 
-void ta_parse(TA_context *ctx, bool primRestart);
+void ta_parse_indexed(TA_context *ctx);
+void ta_parse_indexed_restart(TA_context *ctx);
+void ta_parse_strips(TA_context *ctx);
+
+// Backward compatibility
+[[deprecated("Use ta_parse_indexed/restart/strips instead")]]
+inline void ta_parse(TA_context *ctx, bool primRestart) {
+	if (primRestart)
+		ta_parse_indexed_restart(ctx);
+	else
+		ta_parse_indexed(ctx);
+}
 
 class TaTypeLut
 {

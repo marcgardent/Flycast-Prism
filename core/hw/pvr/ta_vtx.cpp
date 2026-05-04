@@ -1155,7 +1155,14 @@ private:
 static void getRegionTileClipping(u32& xmin, u32& xmax, u32& ymin, u32& ymax);
 static void getRegionSettings(int passNumber, RenderPass& pass);
 
-static void parseRenderPass(RenderPass& pass, const RenderPass& previousPass, rend_context& ctx, bool primRestart)
+enum class InternalParseMode
+{
+	Indexed,
+	IndexedPrimRestart,
+	Strips
+};
+
+static void parseRenderPass(RenderPass& pass, const RenderPass& previousPass, rend_context& ctx, InternalParseMode mode)
 {
 	const bool perPixel = config::RendererType == RenderType::OpenGL_OIT
 			|| config::RendererType == RenderType::DirectX11_OIT
@@ -1168,15 +1175,18 @@ static void parseRenderPass(RenderPass& pass, const RenderPass& previousPass, re
 		fix_texture_bleeding(ctx.global_param_pt, previousPass.pt_count, pass.pt_count, ctx);
 		fix_texture_bleeding(ctx.global_param_tr, previousPass.tr_count, pass.tr_count, ctx);
 	}
-	if (primRestart)
+	if (mode != InternalParseMode::Strips)
 	{
-		makePrimRestartIndex(ctx.global_param_op, previousPass.op_count, pass.op_count, true, ctx);
-		makePrimRestartIndex(ctx.global_param_pt, previousPass.pt_count, pass.pt_count, true, ctx);
-	}
-	else
-	{
-		makeIndex(ctx.global_param_op, previousPass.op_count, pass.op_count, true, ctx);
-		makeIndex(ctx.global_param_pt, previousPass.pt_count, pass.pt_count, true, ctx);
+		if (mode == InternalParseMode::IndexedPrimRestart)
+		{
+			makePrimRestartIndex(ctx.global_param_op, previousPass.op_count, pass.op_count, true, ctx);
+			makePrimRestartIndex(ctx.global_param_pt, previousPass.pt_count, pass.pt_count, true, ctx);
+		}
+		else
+		{
+			makeIndex(ctx.global_param_op, previousPass.op_count, pass.op_count, true, ctx);
+			makeIndex(ctx.global_param_pt, previousPass.pt_count, pass.pt_count, true, ctx);
+		}
 	}
 	pass.sorted_tr_count = previousPass.sorted_tr_count;
 	if (pass.autosort && !perPixel)
@@ -1187,16 +1197,16 @@ static void parseRenderPass(RenderPass& pass, const RenderPass& previousPass, re
 			sortTriangles(ctx, pass, previousPass);
 	}
 	// sortTriangles already created the index
-	if (!pass.autosort || perPixel || config::PerStripSorting)
+	if (mode != InternalParseMode::Strips && (!pass.autosort || perPixel || config::PerStripSorting))
 	{
-		if (primRestart)
+		if (mode == InternalParseMode::IndexedPrimRestart)
 			makePrimRestartIndex(ctx.global_param_tr, previousPass.tr_count, pass.tr_count, mergeTranslucent, ctx);
 		else
 			makeIndex(ctx.global_param_tr, previousPass.tr_count, pass.tr_count, mergeTranslucent, ctx);
 	}
 }
 
-static void ta_parse_vdrc(TA_context* ctx, bool primRestart)
+static void ta_parse_vdrc(TA_context* ctx, InternalParseMode mode)
 {
 	verify(vd_ctx == nullptr);
 	vd_ctx = ctx;
@@ -1248,7 +1258,7 @@ static void ta_parse_vdrc(TA_context* ctx, bool primRestart)
 			render_pass.mvo_count = vd_rc.global_param_mvo.size();
 			render_pass.mvo_tr_count = vd_rc.global_param_mvo_tr.size();
 
-			parseRenderPass(render_pass, previousPass, vd_rc, primRestart);
+			parseRenderPass(render_pass, previousPass, vd_rc, mode);
 			previousPass = render_pass;
 		}
 		childCtx = childCtx->nextContext;
@@ -1265,7 +1275,7 @@ static void ta_parse_vdrc(TA_context* ctx, bool primRestart)
 	vd_ctx = nullptr;
 }
 
-static void ta_parse_naomi2(TA_context* ctx, bool primRestart)
+static void ta_parse_naomi2(TA_context* ctx, InternalParseMode mode)
 {
 	for (PolyParam& pp : ctx->rend.global_param_op)
 	{
@@ -1294,7 +1304,7 @@ static void ta_parse_naomi2(TA_context* ctx, bool primRestart)
 
 	for (RenderPass& pass : ctx->rend.render_passes)
 	{
-		parseRenderPass(pass, previousPass, ctx->rend, primRestart);
+		parseRenderPass(pass, previousPass, ctx->rend, mode);
 		// Disable blending for opaque polys of the first pass
 		if (&pass == &ctx->rend.render_passes[0])
 		{
@@ -1314,12 +1324,24 @@ static void ta_parse_naomi2(TA_context* ctx, bool primRestart)
 	ctx->rend.fb_Y_CLIP.max = std::min(ctx->rend.fb_Y_CLIP.max, ymax + 31);
 }
 
-void ta_parse(TA_context *ctx, bool primRestart)
+static void ta_parse(TA_context *ctx, InternalParseMode mode)
 {
 	if (settings.platform.isNaomi2())
-		ta_parse_naomi2(ctx, primRestart);
+		ta_parse_naomi2(ctx, mode);
 	else
-		ta_parse_vdrc(ctx, primRestart);
+		ta_parse_vdrc(ctx, mode);
+}
+
+void ta_parse_indexed(TA_context *ctx) {
+	ta_parse(ctx, InternalParseMode::Indexed);
+}
+
+void ta_parse_indexed_restart(TA_context *ctx) {
+	ta_parse(ctx, InternalParseMode::IndexedPrimRestart);
+}
+
+void ta_parse_strips(TA_context *ctx) {
+	ta_parse(ctx, InternalParseMode::Strips);
 }
 
 //

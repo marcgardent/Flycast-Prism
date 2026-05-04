@@ -8,9 +8,7 @@
 extern "C" {
 #endif
 
-
-#define FLYCAST_PLUGIN_API_VERSION 13
-
+#define FLYCAST_PLUGIN_API_VERSION 14
 
 // ============================================================================
 // OPAQUE TYPES & HOST INTERFACE
@@ -122,8 +120,8 @@ typedef enum {
  * A single draw command (Lot) inside a Mega-Batch.
  */
 typedef struct {
-    uint32_t index_offset; // Offset within the global MegaBatch indices array
-    uint32_t index_count;  // Number of indices to draw
+    uint32_t vertex_offset; // Start index in the global MegaBatch vertices array
+    uint32_t vertex_count;  // Number of sequential vertices to read
 
     // Material & State
     uint32_t texture_handle;
@@ -152,20 +150,11 @@ typedef struct {
 
 /**
  * A full list of geometry (e.g., all Opaque polygons for the frame).
- * Zero-copy: points directly to the emulator's global vertex/index buffers.
+ * Zero-copy: points directly to the emulator's global vertex buffer.
  */
 typedef struct {
     const PluginVertex* vertices;
     size_t vertex_count;
-
-    /**
-     * Array of 32-bit indices.
-     * Geometry is provided as Triangle Strips. Individual strips are separated
-     * by the primitive restart marker 0xFFFFFFFF (4294967295).
-     * The plugin is responsible for expanding these strips into lists if needed.
-     */
-    const uint32_t* indices;
-    size_t index_count;
 
     const FlycastDrawCommand* commands;
     size_t command_count;
@@ -216,34 +205,47 @@ typedef struct {
     void (*term)(void);
     void (*resize)(uint32_t width, uint32_t height);
 
-
     /*
      * ==============================================================================
-     * MEGA-BATCH INDEX BUFFER USAGE
+     * GEOMETRY PROCESSING & TOPOLOGY RULES
      * ==============================================================================
      *
      * OVERVIEW:
-     * The raw index buffer (`mb.indices`) provided by the Mega-Batch structure
-     * contains the geometry data formatted as Triangle Strips. However, this
-     * buffer is non-contiguous and contains memory gaps between individual draw
-     * commands.
+     * To ensure maximum compatibility with modern graphics APIs (Vulkan, Metal, WGPU),
+     * the host engine does NOT provide a pre-computed hardware index buffer.
+     * Instead, the `PluginMegaBatch` provides a flat array of unique vertices and
+     * a series of draw commands.
      *
-     * PARSING PROCEDURE:
-     * To extract valid geometry for rendering, the buffer must be parsed per-command.
-     * Do not upload the entire `mb.indices` buffer directly to the GPU.
+     * The plugin is responsible for generating its own index buffer (a Triangle List)
+     * natively from the vertex offsets provided in each `FlycastDrawCommand`.
      *
-     * 1. Iterate through `mb.commands`.
-     * 2. For each command, the valid index range is defined by:
-     *      start = command.index_offset
-     *      end   = command.index_offset + command.index_count
-     * 3. Extract the slice `mb.indices[start..end]` and append it to a compacted
-     *    buffer for GPU upload.
-     * 4. For Triangle Strips, the number of triangles is variable due to the 
-     *    Primitive Restart markers.
+     * THE UNROLLING ALGORITHM:
+     * The original console hardware implicitly processes connected Triangle Strips.
+     * To convert a command's vertices into a pure, disconnected `TriangleList`,
+     * you MUST iterate through the vertices and apply an Even/Odd winding rule to
+     * maintain correct face orientation (Front-Face).
      *
-     * TOPOLOGY:
-     * The extracted geometry is formatted as a Triangle Strip. Individual strips
-     * are separated by the Primitive Restart marker (0xFFFFFFFF).
+     * For each command in the MegaBatch:
+     *
+     * 1. Check if `vertex_count >= 3`. If not, skip the command.
+     * 2. Loop `i` from 0 to `vertex_count - 3`.
+     * 3. Construct a triangle using the base `vertex_offset`:
+     *
+     *      If `i` is EVEN (i % 2 == 0):
+     *          Index 0: vertex_offset + i
+     *          Index 1: vertex_offset + i + 1
+     *          Index 2: vertex_offset + i + 2
+     *
+     *      If `i` is ODD (i % 2 != 0):
+     *          Index 0: vertex_offset + i + 1
+     *          Index 1: vertex_offset + i
+     *          Index 2: vertex_offset + i + 2
+     *
+     * NOTE ON DEGENERATE TRIANGLES:
+     * The host may occasionally emit duplicate adjacent vertices to link shapes.
+     * You may safely ignore/discard generated triangles where any two computed
+     * indices are identical (e.g., Index 0 == Index 1), as these result in
+     * invisible zero-area triangles.
      * ==============================================================================
      */
     void (*process_mega_batch)(const PluginMegaBatch* batch);
