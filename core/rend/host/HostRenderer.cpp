@@ -109,147 +109,72 @@ void HostRenderer::Process(TA_context *ctx) {
         last_fog_crc = fog_hash;
     }
 
-    // Determine capabilities
-    bool use_mega_batch = false;
-    if (vtable->get_capabilities && vtable->process_mega_batch) {
-        use_mega_batch = (vtable->get_capabilities() & FLYCAST_CAP_MEGA_BATCH) != 0;
+    if (!vtable->process_mega_batch) {
+        ERROR_LOG(RENDERER, "Plugin does not support Mega-Batch API (v13 mandatory)");
+        return;
     }
 
     auto processList = [&](const std::vector<PolyParam>& polys, FlycastListType listType) {
         if (polys.empty()) return;
 
-        if (use_mega_batch) {
-            mega_commands.clear();
-            mega_commands.reserve(polys.size());
+        mega_commands.clear();
+        mega_commands.reserve(polys.size());
 
-            for (const auto& poly : polys) {
-                if (poly.count == 0) continue;
+        for (const auto& poly : polys) {
+            if (poly.count == 0) continue;
 
-                FlycastDrawCommand cmd = {};
-                cmd.index_offset = poly.first; // Direct offset into ctx->rend.idx
-                cmd.index_count = poly.count;
+            FlycastDrawCommand cmd = {};
+            cmd.index_offset = poly.first; // Direct offset into ctx->rend.idx
+            cmd.index_count = poly.count;
 
-                cmd.scissor_enable = true;
-                cmd.scissor_x = ctx->rend.fb_X_CLIP.min;
-                cmd.scissor_y = ctx->rend.fb_Y_CLIP.min;
-                cmd.scissor_w = (int32_t)ctx->rend.fb_X_CLIP.max - (int32_t)ctx->rend.fb_X_CLIP.min + 1;
-                cmd.scissor_h = (int32_t)ctx->rend.fb_Y_CLIP.max - (int32_t)ctx->rend.fb_Y_CLIP.min + 1;
-                if (cmd.scissor_w < 0) cmd.scissor_w = 0;
-                if (cmd.scissor_h < 0) cmd.scissor_h = 0;
+            cmd.scissor_enable = true;
+            cmd.scissor_x = ctx->rend.fb_X_CLIP.min;
+            cmd.scissor_y = ctx->rend.fb_Y_CLIP.min;
+            cmd.scissor_w = (int32_t)ctx->rend.fb_X_CLIP.max - (int32_t)ctx->rend.fb_X_CLIP.min + 1;
+            cmd.scissor_h = (int32_t)ctx->rend.fb_Y_CLIP.max - (int32_t)ctx->rend.fb_Y_CLIP.min + 1;
+            if (cmd.scissor_w < 0) cmd.scissor_w = 0;
+            if (cmd.scissor_h < 0) cmd.scissor_h = 0;
 
-                cmd.cull_mode = MapCullMode(poly.isp.CullMode);
+            cmd.cull_mode = MapCullMode(poly.isp.CullMode);
 
-                cmd.texture_handle = 0;
-                if (poly.pcw.Texture && poly.texture) {
-                    uint32_t vram_addr = poly.tcw.TexAddr << 3;
-                    uint32_t width = 8u << poly.tsp.TexU;
-                    uint32_t height = 8u << poly.tsp.TexV;
-                    FlycastTexMode mode = (poly.tcw.PixelFmt == PixelPal8) ? FLYCAST_TEX_PAL8 : FLYCAST_TEX_NONE;
-                    cmd.texture_handle = asset_cache.GetTexture(vram_addr, width, height, mode,
-                                                                poly.texture->Updates, FrameCount, &vram[vram_addr]);
-                }
-
-                cmd.src_blend = MapBlendFactor(poly.tsp.SrcInstr);
-                cmd.dst_blend = MapBlendFactor(poly.tsp.DstInstr);
-                cmd.depth_func = MapDepthFunc(poly.isp.DepthMode);
-                cmd.depth_write = !poly.isp.ZWriteDis;
-                cmd.offset_enable = poly.pcw.Offset;
-
-                cmd.fog_mode = config::Fog ? poly.tsp.FogCtrl : 2;
-                cmd.fog_color = FOG_COL_RAM.full;
-                cmd.fog_vertex_color = FOG_COL_VERT.full;
-                cmd.fog_density = FOG_DENSITY.get();
-                cmd.fog_clamp_min = ctx->rend.fog_clamp_min.full;
-                cmd.fog_clamp_max = ctx->rend.fog_clamp_max.full;
-
-                mega_commands.push_back(cmd);
+            cmd.texture_handle = 0;
+            if (poly.pcw.Texture && poly.texture) {
+                uint32_t vram_addr = poly.tcw.TexAddr << 3;
+                uint32_t width = 8u << poly.tsp.TexU;
+                uint32_t height = 8u << poly.tsp.TexV;
+                FlycastTexMode mode = (poly.tcw.PixelFmt == PixelPal8) ? FLYCAST_TEX_PAL8 : FLYCAST_TEX_NONE;
+                cmd.texture_handle = asset_cache.GetTexture(vram_addr, width, height, mode,
+                                                            poly.texture->Updates, FrameCount, &vram[vram_addr]);
             }
 
-            if (!mega_commands.empty()) {
-                PluginMegaBatch mega = {};
-                // Zero copy: Direct pointers to the global TA buffers
-                mega.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
-                mega.vertex_count = ctx->rend.verts.size();
-                mega.indices = ctx->rend.idx.data();
-                mega.index_count = ctx->rend.idx.size();
-                mega.commands = mega_commands.data();
-                mega.command_count = mega_commands.size();
-                mega.list_type = listType;
+            cmd.src_blend = MapBlendFactor(poly.tsp.SrcInstr);
+            cmd.dst_blend = MapBlendFactor(poly.tsp.DstInstr);
+            cmd.depth_func = MapDepthFunc(poly.isp.DepthMode);
+            cmd.depth_write = !poly.isp.ZWriteDis;
+            cmd.offset_enable = poly.pcw.Offset;
 
-                vtable->process_mega_batch(&mega);
-            }
+            cmd.fog_mode = config::Fog ? poly.tsp.FogCtrl : 2;
+            cmd.fog_color = FOG_COL_RAM.full;
+            cmd.fog_vertex_color = FOG_COL_VERT.full;
+            cmd.fog_density = FOG_DENSITY.get();
+            cmd.fog_clamp_min = ctx->rend.fog_clamp_min.full;
+            cmd.fog_clamp_max = ctx->rend.fog_clamp_max.full;
 
-        } else if (vtable->process) {
-            // Legacy Path (Draw-Call per Batch)
-            for (const auto& poly : polys) {
-                if (poly.count == 0) continue;
+            mega_commands.push_back(cmd);
+        }
 
-                PluginGeometryData data = {};
-                // Convert indices to u16 for legacy API and make them relative to the vertex range
-                u32 min_vtx = 0xFFFFFFFF;
-                u32 max_vtx = 0;
-                for (u32 i = 0; i < poly.count; i++) {
-                    u32 v = ctx->rend.idx[poly.first + i];
-                    if (v == 0xFFFFFFFF) continue;
-                    if (v < min_vtx) min_vtx = v;
-                    if (v > max_vtx) max_vtx = v;
-                }
+        if (!mega_commands.empty()) {
+            PluginMegaBatch mega = {};
+            // Zero copy: Direct pointers to the global TA buffers
+            mega.vertices = reinterpret_cast<const PluginVertex*>(ctx->rend.verts.data());
+            mega.vertex_count = ctx->rend.verts.size();
+            mega.indices = ctx->rend.idx.data();
+            mega.index_count = ctx->rend.idx.size();
+            mega.commands = mega_commands.data();
+            mega.command_count = mega_commands.size();
+            mega.list_type = listType;
 
-                std::vector<u32> adjusted_indices;
-
-                if (min_vtx <= max_vtx) {
-                    adjusted_indices.reserve(poly.count);
-                    for (u32 i = 0; i < poly.count; ++i) {
-                        u32 v = ctx->rend.idx[poly.first + i];
-                        if (v == 0xFFFFFFFF) adjusted_indices.push_back(0xFFFFFFFF);
-                        else adjusted_indices.push_back(v - min_vtx);
-                    }
-
-                    data.vertices = reinterpret_cast<const PluginVertex*>(&ctx->rend.verts[min_vtx]);
-                    data.vertex_count = max_vtx - min_vtx + 1;
-                    data.indices = adjusted_indices.data();
-                    data.index_count = adjusted_indices.size();
-                } else {
-                    data.vertices = nullptr;
-                    data.vertex_count = 0;
-                    data.indices = nullptr;
-                    data.index_count = 0;
-                }
-
-                data.scissor_enable = true;
-                data.scissor_x = ctx->rend.fb_X_CLIP.min;
-                data.scissor_y = ctx->rend.fb_Y_CLIP.min;
-                data.scissor_w = (int32_t)ctx->rend.fb_X_CLIP.max - (int32_t)ctx->rend.fb_X_CLIP.min + 1;
-                data.scissor_h = (int32_t)ctx->rend.fb_Y_CLIP.max - (int32_t)ctx->rend.fb_Y_CLIP.min + 1;
-
-                data.cull_mode = MapCullMode(poly.isp.CullMode);
-
-                data.texture_handle = 0;
-                if (poly.pcw.Texture && poly.texture) {
-                    uint32_t vram_addr = poly.tcw.TexAddr << 3;
-                    uint32_t width = 8u << poly.tsp.TexU;
-                    uint32_t height = 8u << poly.tsp.TexV;
-                    FlycastTexMode mode = (poly.tcw.PixelFmt == PixelPal8) ? FLYCAST_TEX_PAL8 : FLYCAST_TEX_NONE;
-                    data.texture_handle = asset_cache.GetTexture(vram_addr, width, height, mode,
-                                                                poly.texture->Updates, FrameCount, &vram[vram_addr]);
-                }
-
-                data.src_blend = MapBlendFactor(poly.tsp.SrcInstr);
-                data.dst_blend = MapBlendFactor(poly.tsp.DstInstr);
-                data.depth_func = MapDepthFunc(poly.isp.DepthMode);
-                data.depth_write = !poly.isp.ZWriteDis;
-                data.offset_enable = poly.pcw.Offset;
-
-                data.fog_mode = config::Fog ? poly.tsp.FogCtrl : 2;
-                data.fog_color = FOG_COL_RAM.full;
-                data.fog_vertex_color = FOG_COL_VERT.full;
-                data.fog_density = FOG_DENSITY.get();
-                data.fog_clamp_min = ctx->rend.fog_clamp_min.full;
-                data.fog_clamp_max = ctx->rend.fog_clamp_max.full;
-                data.list_type = listType;
-
-                vtable->process(&data);
-            }
+            vtable->process_mega_batch(&mega);
         }
     };
 
@@ -323,6 +248,12 @@ bool HostRenderer::loadPlugin() {
     vtable = get_vtable();
     if (!vtable || vtable->api_version != FLYCAST_PLUGIN_API_VERSION) {
         ERROR_LOG(RENDERER, "Invalid plugin API version. Expected %d, got %d", FLYCAST_PLUGIN_API_VERSION, vtable ? vtable->api_version : 0);
+        unloadPlugin();
+        return false;
+    }
+
+    if (!vtable->process_mega_batch) {
+        ERROR_LOG(RENDERER, "Plugin does not support mandatory Mega-Batch API");
         unloadPlugin();
         return false;
     }

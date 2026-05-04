@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 
-#define FLYCAST_PLUGIN_API_VERSION 12
+#define FLYCAST_PLUGIN_API_VERSION 13
 
 
 // ============================================================================
@@ -113,39 +113,6 @@ typedef enum {
     FLYCAST_LIST_TRANSLUCENT      = 2
 } FlycastListType;
 
-/**
- * Legacy Structure (Retained for backwards compatibility)
- */
-typedef struct {
-    const PluginVertex* vertices;
-    size_t vertex_count;
-    const uint32_t* indices;
-    size_t index_count;
-
-    bool scissor_enable;
-    int32_t scissor_x;
-    int32_t scissor_y;
-    int32_t scissor_w;
-    int32_t scissor_h;
-
-    FlycastCullMode cull_mode;
-    uint32_t        texture_handle;
-
-    FlycastBlendFactor src_blend;
-    FlycastBlendFactor dst_blend;
-    FlycastDepthFunc   depth_func;
-    bool               depth_write;
-    bool               offset_enable;
-
-    uint32_t           fog_mode;
-    uint32_t           fog_color;
-    uint32_t           fog_vertex_color;
-    float              fog_density;
-    uint32_t           fog_clamp_min;
-    uint32_t           fog_clamp_max;
-
-    FlycastListType    list_type;
-} PluginGeometryData;
 
 // ============================================================================
 // V12 MEGA-BATCHING & SUB-ALLOCATION
@@ -251,8 +218,6 @@ typedef struct {
     // Rendering capabilities (Added v12)
     uint32_t (*get_capabilities)(void);
 
-    // Legacy render (fallback if MEGA_BATCH is not supported)
-    void (*process)(const PluginGeometryData* data);
 
     // Mega-Batch render (v12)
     void (*process_mega_batch)(const PluginMegaBatch* batch);

@@ -95,72 +95,6 @@ static void dummy_destroy_texture(uint32_t handle) {
     }
 }
 
-static void dummy_process(const PluginGeometryData* data) {
-    if (host_if && host_handle) {
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, "  [Process Batch]");
-        
-        char buffer[512];
-        
-        // Scissor
-        if (data->scissor_enable) {
-            snprintf(buffer, sizeof(buffer), "    - Scissor: %d,%d %dx%d", 
-                     data->scissor_x, data->scissor_y, data->scissor_w, data->scissor_h);
-        } else {
-            snprintf(buffer, sizeof(buffer), "    - Scissor: DISABLED");
-        }
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-
-        // Cull
-        const char* cull_str = "Unknown";
-        switch(data->cull_mode) {
-            case FLYCAST_CULL_NONE:  cull_str = "NONE";  break;
-            case FLYCAST_CULL_FRONT: cull_str = "FRONT"; break;
-            case FLYCAST_CULL_BACK:  cull_str = "BACK";  break;
-        }
-        snprintf(buffer, sizeof(buffer), "    - Cull Mode: %s", cull_str);
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-
-        // Texture (Updated in v11)
-        if (data->texture_handle != 0) {
-            snprintf(buffer, sizeof(buffer), "    - Texture Handle: %u", data->texture_handle);
-        } else {
-            snprintf(buffer, sizeof(buffer), "    - Texture: NONE");
-        }
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-
-        // Blend
-        snprintf(buffer, sizeof(buffer), "    - Blend State: src=%d, dst=%d", (int)data->src_blend, (int)data->dst_blend);
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-
-        // Depth
-        snprintf(buffer, sizeof(buffer), "    - Depth State: func=%d, write=%s", (int)data->depth_func, data->depth_write ? "true" : "false");
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-
-        // Offset Color
-        snprintf(buffer, sizeof(buffer), "    - Offset Enable: %s", data->offset_enable ? "true" : "false");
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-
-        // Vertices/Indices
-        snprintf(buffer, sizeof(buffer), "    - Geometry: %zu vertices, %zu indices", data->vertex_count, data->index_count);
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-
-        // Fog (Updated in v11)
-        snprintf(buffer, sizeof(buffer), "    - Fog: mode=%u, color=0x%08X, vtx_color=0x%08X, density=%f, clamp=0x%08X..0x%08X",
-                 data->fog_mode, data->fog_color, data->fog_vertex_color, data->fog_density, 
-                 data->fog_clamp_min, data->fog_clamp_max);
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-
-        // List Type (Added in v10)
-        const char* list_str = "Unknown";
-        switch (data->list_type) {
-            case FLYCAST_LIST_OPAQUE:        list_str = "OPAQUE"; break;
-            case FLYCAST_LIST_PUNCH_THROUGH: list_str = "PUNCH_THROUGH"; break;
-            case FLYCAST_LIST_TRANSLUCENT:   list_str = "TRANSLUCENT"; break;
-        }
-        snprintf(buffer, sizeof(buffer), "    - List Type: %s", list_str);
-        host_if->log(host_handle, FLYCAST_LOG_DEBUG, buffer);
-    }
-}
 
 static uint32_t dummy_get_capabilities() {
     return FLYCAST_CAP_MEGA_BATCH;
@@ -244,7 +178,7 @@ static bool dummy_present() {
 
 static const FlycastPluginVTable vtable = {
     sizeof(FlycastPluginVTable),
-    12,
+    13,
     "Dummy Renderer",
     "1.2.0",
     dummy_init_wrapper,
@@ -253,7 +187,6 @@ static const FlycastPluginVTable vtable = {
     dummy_resize,
 
     dummy_get_capabilities,
-    dummy_process,
     dummy_process_mega_batch,
 
     dummy_render,

@@ -48,7 +48,6 @@ namespace rend {
 
         // Mega-batch command buffer reused per list to avoid allocations
         std::vector<FlycastDrawCommand> mega_commands;
-        std::vector<u16> legacy_indices;
     };
 
 } // namespace rend
