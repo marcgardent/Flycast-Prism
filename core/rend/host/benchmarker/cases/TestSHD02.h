@@ -1,9 +1,9 @@
 #pragma once
 #include "benchmarker/TestCase.h"
 
-class TestGEO06 : public TestCase {
+class TestSHD02 : public TestCase {
 public:
-    std::string getId() const override { return "GEO-06"; }
+    std::string getId() const override { return "SHD-02"; }
     std::string getName() const override { return "Perspective-Correct Interpolation"; }
     std::string getDescription() const override { 
         return "Draws a large quad (2 triangles) tilted deeply into the Z-axis. "

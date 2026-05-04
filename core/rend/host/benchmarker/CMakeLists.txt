@@ -25,8 +25,8 @@ add_executable(benchmarker main.cpp TestCase.h TestManager.h
         cases/TestSPE02.h
         cases/TestOIT01.h
         cases/TestGC01.h
+        cases/TestTEX02.h
         cases/TestCommon.h
-        cases/TestGEO06.h
         cases/TestGEO07.h
         ${IMGUI_DIR}/imgui.cpp
         ${IMGUI_DIR}/imgui_draw.cpp

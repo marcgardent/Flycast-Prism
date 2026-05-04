@@ -18,7 +18,7 @@ public:
         std::vector<uint32_t> pal(1024, 0);
         for (int i = 0; i < 256; ++i) {
             float hue = (float)i / 256.0f * 360.0f;
-            pal[i] = hsl_to_argb32(hue, 1.0f, 0.5f);
+            pal[i] = hsl_to_rgba32(hue, 1.0f, 0.5f);
         }
         memcpy(palette32_ram, pal.data(), 1024 * sizeof(uint32_t));
 

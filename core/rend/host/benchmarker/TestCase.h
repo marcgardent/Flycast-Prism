@@ -20,7 +20,7 @@ struct DrawBatch {
     uint32_t texWidth = 0;
     uint32_t texHeight = 0;
     std::vector<uint8_t> texData;      // texWidth * texHeight bytes (8BPP indices)
-    std::vector<uint32_t> palette;     // 256 ARGB32 entries
+    std::vector<uint32_t> palette;     // 256 RGBA8 entries (R, G, B, A in memory)
 
     // Transparency (TRN-01)
     FlycastBlendFactor srcBlend = FLYCAST_BLEND_ONE;

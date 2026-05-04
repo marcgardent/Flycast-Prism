@@ -24,8 +24,9 @@
 #include "cases/TestGC01.h"
 
 #include "BenchUI.h"
-#include "cases/TestGEO06.h"
+#include "cases/TestSHD02.h"
 #include "cases/TestGEO07.h"
+#include "cases/TestTEX02.h"
 
 static BenchUI* g_ui = nullptr;
 uint32_t palette32_ram[1024];
@@ -72,7 +73,7 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestGEO02>());
     mgr.registerTest(std::make_unique<TestGEO03>());
     mgr.registerTest(std::make_unique<TestGEO04>());
-    mgr.registerTest(std::make_unique<TestGEO06>());
+    mgr.registerTest(std::make_unique<TestSHD02>());
     mgr.registerTest(std::make_unique<TestGEO07>());
     mgr.registerTest(std::make_unique<TestSHD01>());
     mgr.registerTest(std::make_unique<TestTEX01>());
@@ -82,7 +83,7 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestSPE02>());
     mgr.registerTest(std::make_unique<TestOIT01>());
     mgr.registerTest(std::make_unique<TestGC01>());
-
+    mgr.registerTest(std::make_unique<TestTEX02>());
 }
 
 static void print_usage(const char* argv0) {

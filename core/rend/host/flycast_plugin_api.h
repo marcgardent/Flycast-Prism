@@ -51,11 +51,11 @@ typedef struct {
  */
 typedef struct {
     float x, y, z;
-    uint8_t col[4];
-    uint8_t spc[4];
+    uint8_t col[4];  // RGBA8 (R, G, B, A in memory)
+    uint8_t spc[4];  // RGBA8 (R, G, B, A in memory)
     float u, v;
-    uint8_t col1[4];
-    uint8_t spc1[4];
+    uint8_t col1[4]; // RGBA8 (R, G, B, A in memory)
+    uint8_t spc1[4]; // RGBA8 (R, G, B, A in memory)
     float u1, v1;
     float nx, ny, nz;
 } PluginVertex;
@@ -71,7 +71,7 @@ typedef enum {
  */
 typedef enum {
     FLYCAST_TEX_NONE = 0, // No texture, use vertex color (Gouraud)
-    FLYCAST_TEX_PAL8 = 1  // 8BPP indexed texture with 256-entry ARGB32 palette
+    FLYCAST_TEX_PAL8 = 1  // 8BPP indexed texture with 256-entry RGBA8 palette (isOpenGL: [R,G,B,A] in memory)
 } FlycastTexMode;
 
 /**
@@ -255,7 +255,7 @@ typedef struct {
     bool (*present)(void);
 
     // State Management
-    void (*update_palette)(const uint32_t* palette_data);
+    void (*update_palette)(const uint32_t* palette_data); // palette_data is 256 entries in RGBA8 format
     void (*update_fog_table)(const uint32_t* fog_table_data);
 
     // Texture Management

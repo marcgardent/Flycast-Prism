@@ -2,9 +2,32 @@
 #include <cmath>
 
 // ============================================================================
-// Helper : HSL to ARGB32
-// h in [0,360), s and l in [0,1]. Returns 0xAARRGGBB with A=0xFF.
+// Helper : HSL to RGBA8 (R, G, B, A in memory)
+// h in [0,360), s and l in [0,1]. Returns 0xAABBGGRR (LE) for [R, G, B, A] memory order.
 // ============================================================================
+static inline uint32_t hsl_to_rgba32(float h, float s, float l) {
+    auto hue2rgb = [](float p, float q, float t) -> float {
+        if (t < 0.0f) t += 1.0f;
+        if (t > 1.0f) t -= 1.0f;
+        if (t < 1.0f/6.0f) return p + (q - p) * 6.0f * t;
+        if (t < 1.0f/2.0f) return q;
+        if (t < 2.0f/3.0f) return p + (q - p) * (2.0f/3.0f - t) * 6.0f;
+        return p;
+    };
+    float q = l < 0.5f ? l * (1.0f + s) : l + s - l * s;
+    float p = 2.0f * l - q;
+    float hn = h / 360.0f;
+    uint8_t r = (uint8_t)(hue2rgb(p, q, hn + 1.0f/3.0f) * 255.0f + 0.5f);
+    uint8_t g = (uint8_t)(hue2rgb(p, q, hn)              * 255.0f + 0.5f);
+    uint8_t b = (uint8_t)(hue2rgb(p, q, hn - 1.0f/3.0f) * 255.0f + 0.5f);
+    // RGBA8: R at byte 0, G at byte 1, B at byte 2, A at byte 3
+    // On LE: (A << 24) | (B << 16) | (G << 8) | R
+    return (0xFFu << 24) | (uint32_t(b) << 16) | (uint32_t(g) << 8) | uint32_t(r);
+}
+
+// ============================================================================
+// Helper : HSL to ARGB32 (B, G, R, A in memory)
+// @deprecated Use hsl_to_rgba32 for isOpenGL mode.
 static inline uint32_t hsl_to_argb32(float h, float s, float l) {
     auto hue2rgb = [](float p, float q, float t) -> float {
         if (t < 0.0f) t += 1.0f;
