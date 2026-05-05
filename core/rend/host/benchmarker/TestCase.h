@@ -30,7 +30,7 @@ struct DrawBatch {
     uint32_t texWidth = 0;
     uint32_t texHeight = 0;
     std::vector<uint8_t> texData;      // texWidth * texHeight bytes (8BPP indices)
-    std::vector<uint32_t> palette;     // 256 RGBA8 entries (R, G, B, A in memory)
+    std::vector<uint32_t> palette;     // 1024 RGBA8 entries (R, G, B, A in memory)
 
     // Transparency (TRN-01)
     FlycastBlendFactor srcBlend = FLYCAST_BLEND_ONE;
@@ -72,10 +72,10 @@ struct TestData {
             std::memcpy(pv.col, v.col, 4);
             std::memcpy(pv.spc, v.spc, 4);
 
-            // LA CORRECTION EST ICI : Pré-multiplication des UVs par 1/W (z_inv)
-            // comme l'exige l'architecture matérielle PVR émulée
-            pv.u = v.u * v.z_inv;
-            pv.v = v.v * v.z_inv;
+            // UVs are exported as RAW (not pre-multiplied) to match
+            // the data provided by ta_parser and the internal renderer.
+            pv.u = v.u;
+            pv.v = v.v;
 
             vertices.push_back(pv);
         }

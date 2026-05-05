@@ -50,14 +50,22 @@ typedef struct {
  * (Memory representation must match internal C++ Vertex)
  */
 typedef struct {
-    float x, y, z;
+    float x, y;      // Screen space coordinates (pixels)
+    float z;         // PVR depth: 1/W for perspective-correct interpolation
     uint8_t col[4];  // RGBA8 (R, G, B, A in memory)
     uint8_t spc[4];  // RGBA8 (R, G, B, A in memory)
+    
+    /** 
+     * Perspective-Correct Texture Coordinates.
+     * These are RAW (NOT pre-multiplied).
+     * Vertex shader MUST compute: vtx_uv = vec3(u * z, v * z, z)
+     */
     float u, v;
-    uint8_t col1[4]; // RGBA8 (R, G, B, A in memory)
-    uint8_t spc1[4]; // RGBA8 (R, G, B, A in memory)
-    float u1, v1;
-    float nx, ny, nz;
+    
+    uint8_t col1[4]; // Two volumes: RGBA8
+    uint8_t spc1[4]; // Two volumes: RGBA8
+    float u1, v1;    // Two volumes UV (also RAW)
+    float nx, ny, nz; // Naomi 2 normals
 } PluginVertex;
 
 typedef enum {
@@ -246,6 +254,13 @@ typedef struct {
      * You may safely ignore/discard generated triangles where any two computed
      * indices are identical (e.g., Index 0 == Index 1), as these result in
      * invisible zero-area triangles.
+     *
+     * PERSPECTIVE CORRECT TEXTURING:
+     * Flycast exports UVs as RAW (NOT pre-multiplied).
+     * To sample textures correctly, you MUST:
+     *   1. Vertex Shader: Pass vtx_uv = vec3(u * z, v * z, z)
+     *   2. Fragment Shader: Sample using vtx_uv.xy / vtx_uv.z
+     * where 'z' is the depth field (1/W).
      * ==============================================================================
      */
     void (*process_mega_batch)(const PluginMegaBatch* batch);
@@ -255,7 +270,7 @@ typedef struct {
     bool (*present)(void);
 
     // State Management
-    void (*update_palette)(const uint32_t* palette_data); // palette_data is 256 entries in RGBA8 format
+    void (*update_palette)(const uint32_t* palette_data); // palette_data is 1024 entries in RGBA8 format
     void (*update_fog_table)(const uint32_t* fog_table_data);
 
     // Texture Management
