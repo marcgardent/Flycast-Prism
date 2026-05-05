@@ -13,6 +13,8 @@ This document provides a detailed breakdown of the diagnostic tests implemented 
 | **GEO-05** | **Strip Winding** | Single Triangle Strip (4 vertices). Verifies Even/Odd strip winding unrolling. | A solid red square. If unrolling is wrong, one triangle will be culled and only half will appear. |
 | **GEO-06** | **NaN & Inf Safety** | Triangles with quiet NaN and Infinity coordinates. Verifies renderer robustness. | Two green squares. Invalid triangles in the middle must be invisible and not cause artifacts. |
 | **GEO-08** | **Front Culling** | CCW triangle with Front-Face culling. Verifies PVR Front-Face (CCW) mode. | A Yellow triangle (CW) is visible. A Blue triangle (CCW) is culled. |
+| **GEO-09** | **Z-Fighting** | Multiple passes at identical depths. Verifies precision and GEQUAL stability. | Stable red/green quad. No flickering. |
+| **GEO-10** | **HUD Precision** | Extreme depth (Z≈1.0) with microscopic sweep. Simulates HUD flickering. | Stable magenta quad over white background. |
 | **GEO-07** | **Overdraw Logic** | Draws two overlapping translucent triangles within the SAME batch. | A purple intersection. If bugged, the blue triangle will have a 'hole' where the red one is. |
 
 ## 2. Shading & Interpolation (SHD)
@@ -37,6 +39,7 @@ This document provides a detailed breakdown of the diagnostic tests implemented 
 | **TRN-01** | **Alpha Blending** | Standard Alpha Blending (SrcAlpha / InvSrcAlpha). Overlaps Blue (50% Alpha) on Red. | A purple rectangle in the center where quads overlap. |
 | **TRN-02** | **Punch-Through Bug** | Invisible foreground triangle (Alpha=0) in front of an opaque background. | A solid red triangle. The invisible triangle must NOT update depth or discard background pixels. |
 | **OIT-01** | **Order Independent Trans.**| Three translucent quads (R, G, B) submitted in **Front-to-Back** order. | Quads should blend correctly. If sorting is missing, only the front quad will be visible. |
+| **OIT-02** | **Translucent Z-Fight**| Translucent quads at identical depths. Tests OIT sorting stability. | Stable blended color mixture. No sorting artifacts. |
 
 ## 5. Special Effects (SPE)
 

@@ -13,35 +13,16 @@ find_package(OpenGL REQUIRED)
 
 set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../deps/imgui)
 
-add_executable(benchmarker main.cpp TestCase.h TestManager.h
-        cases/TestGEO01.h
-        cases/TestGEO02.h
-        cases/TestGEO03.h
-        cases/TestGEO04.h
-        cases/TestSHD01.h
-        cases/TestTEX01.h
-        cases/TestTRN01.h
-        cases/TestSPE01.h
-        cases/TestSPE02.h
-        cases/TestOIT01.h
-        cases/TestGC01.h
-        cases/TestTEX02.h
-        cases/TestTEX03.h
-        cases/TestCommon.h
-        cases/TestGEO05.h
-        cases/TestGEO06.h
-        cases/TestGEO07.h
-        cases/TestGEO08.h
-        cases/TestSHD02.h
-        cases/TestTRN02.h
+add_executable(benchmarker main.cpp
         ${IMGUI_DIR}/imgui.cpp
         ${IMGUI_DIR}/imgui_draw.cpp
         ${IMGUI_DIR}/imgui_widgets.cpp
         ${IMGUI_DIR}/imgui_tables.cpp
         ${IMGUI_DIR}/imgui_demo.cpp
         ${IMGUI_DIR}/imgui_cjk.cpp
-
 )
+
+set_target_properties(benchmarker PROPERTIES OUTPUT_NAME "flycast-benchmarker")
 
 # flycast_plugin_api.h is in the parent directory
 target_include_directories(benchmarker PRIVATE 
