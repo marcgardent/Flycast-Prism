@@ -28,6 +28,9 @@
 #include "cases/TestGEO07.h"
 #include "cases/TestTEX02.h"
 #include "cases/TestTEX03.h"
+#include "cases/TestGEO05.h"
+#include "cases/TestGEO06.h"
+#include "cases/TestGEO08.h"
 
 static BenchUI* g_ui = nullptr;
 uint32_t palette32_ram[1024];
@@ -86,6 +89,9 @@ void registerAllTests() {
     mgr.registerTest(std::make_unique<TestGC01>());
     mgr.registerTest(std::make_unique<TestTEX02>());
     mgr.registerTest(std::make_unique<TestTEX03>());
+    mgr.registerTest(std::make_unique<TestGEO05>());
+    mgr.registerTest(std::make_unique<TestGEO06>());
+    mgr.registerTest(std::make_unique<TestGEO08>());
 }
 
 static void print_usage(const char* argv0) {
@@ -336,7 +342,12 @@ int main(int argc, char** argv) {
 
                 cmd.fog_mode = batch.fogMode;
                 cmd.fog_color = batch.fogColor;
+                cmd.fog_vertex_color = batch.fogVertexColor;
                 cmd.fog_density = batch.fogDensity;
+                cmd.fog_clamp_min = batch.fogClampMin;
+                cmd.fog_clamp_max = batch.fogClampMax;
+
+                cmd.offset_enable = batch.offsetEnable;
 
                 listCmds[batch.listType].push_back(cmd);
             }

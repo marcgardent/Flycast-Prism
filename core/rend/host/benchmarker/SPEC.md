@@ -38,10 +38,36 @@ Flycast exports UV coordinates in their **RAW PVR-native** format, which means t
     *   If using a standard OpenGL Y-up coordinate system, apply `v = 1.0 - v` in the fragment shader **after** perspective correction.
 
 ## 4. Geometric Positions (X, Y, Z)
-*   **Screen Space**: Coordinates are provided in absolute pixels (e.g., 0-640 for X, 0-480 for Y).
-*   **Y-Axis**: `Y = 0` is at the **TOP** of the screen.
-*   **Depth (Z)**: Native PVR depth is exported as **`1/W`**.
+*   **Coordinate System**: Coordinates are provided in absolute pixels (0-640). `Y = 0` is at the **TOP**.
+*   **Winding Convention**: In this Y-Down system, a **Clockwise (CW)** triangle has a **positive** cross-product area, while **Counter-Clockwise (CCW)** is **negative**.
+*   **Depth (Z)**: Native PVR depth is exported as **`1/W`**. Higher values are closer.
 *   **Precision**: No "half-pixel" offsets (typical of DirectX 9) are applied.
+
+## 5. Geometric Topology & Indexing
+The Mega-Batch API (v14) exports geometry in its native **Triangle Strip** format to preserve the original PVR submission order.
+
+*   **Topology**: Each `FlycastDrawCommand` represents a single triangle strip starting at `vertex_offset` with `vertex_count` vertices.
+*   **Unrolling Algorithm**: For plugins requiring `TriangleList` (e.g., WGPU, Vulkan), you MUST apply the **Even/Odd winding rule** during index buffer generation:
+    *   **Even Index (`i % 2 == 0`)**: Triangle = `(i, i+1, i+2)`
+    *   **Odd Index (`i % 2 != 0`)**: Triangle = `(i+1, i, i+2)` (Flipped to maintain front-face orientation).
+*   **Degenerate Triangles**: The host may emit duplicate adjacent vertices to link discontinuous strips. These zero-area triangles (where any two indices are identical) should be discarded.
+
+## 6. Face Culling
+Culling is controlled by the 2-bit PVR CullMode found in the `ISP_TSP` instruction:
+
+| PVR Mode | Value | Interpretation | `FlycastCullMode` |
+| :--- | :--- | :--- | :--- |
+| **None** | `0` | No culling. | `FLYCAST_CULL_NONE` |
+| **Small** | `1` | Area < threshold. | `FLYCAST_CULL_NONE` (Safe Fallback) |
+| **CCW** | `2` | Front-Face. | `FLYCAST_CULL_FRONT` |
+| **CW** | `3` | Back-Face. | `FLYCAST_CULL_BACK` |
+
+*   **Winding Inversion (`DCalcCtrl`)**: If the `DCalcCtrl` bit is set in the `ISP_TSP` word, the winding is inverted. The `FlycastDrawCommand`'s `cull_mode` already accounts for this by swapping `FRONT` and `BACK`.
+
+## 7. Clipping (Scissor & User Clip)
+The `FlycastDrawCommand` provides a pre-computed `scissor` rectangle.
+*   **Global Clip**: Always applied to keep rendering within the valid framebuffer region.
+*   **User Clip**: If `User_Clip` (PCW bits 22-23) is enabled (Mode 2: Inside), the host intersects the global clip with the `USER_CLIP` register coordinates.
 
 ---
 
@@ -49,9 +75,10 @@ Flycast exports UV coordinates in their **RAW PVR-native** format, which means t
 
 | Attribute | `isOpenGL` Standard | Implementation Note |
 | :--- | :--- | :--- |
-| **Vertex Color** | **RGBA8** | `v_color / v_z` (if manual perspective) |
-| **Texture Sample** | **RGBA8** | `texture(tex, v_uv / v_z).rgba` |
+| **Vertex Color** | **RGBA8** | `v_color * v_z / interpolated_z` (Persp. Correction) |
+| **Texture Sample** | **RGBA8** | `(v_uv * v_z) / interpolated_z` (Persp. Correction) |
+| **Topology** | **Triangle Strip** | Use Even/Odd rule for Triangle List conversion. |
+| **Winding Order** | **Alternating** | Flip Odd triangles to maintain Front-Face. |
+| **Cull Mode** | **PVR 2-bit** | 0=None, 1=Small, 2=Front(CCW), 3=Back(CW). |
 | **UV Orientation** | **V=0 at TOP** | Matches VRAM layout. |
-| **Winding Order** | **Triangle Strip** | Follow PVR parity rules. |
-| **Normals** | **Standard Float** | (Naomi 2 only) |
-| **Depth (Z)** | **1/W** | Higher values are closer. |
+| **Depth (Z)** | **1/W** | Higher values are closer (Z-Greater). |

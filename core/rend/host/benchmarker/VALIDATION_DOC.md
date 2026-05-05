@@ -10,6 +10,9 @@ This document provides a detailed breakdown of the diagnostic tests implemented 
 | **GEO-02** | **PVR Conformity** | Validates Y-Down axis, Z-Inverse depth (`Greater` function) and PVR culling (Back = CW). | Three triangles: Green in front of Red (Left), and Blue alone (Right). Yellow must be culled. |
 | **GEO-03** | **Clipping (Scissor)** | Scissor rectangle test. Clips rendering to a specific 2D rectangular region. | A white rectangle in the center (320x240), clipping a full-screen quad. |
 | **GEO-04** | **Multi-Batch Leak** | Validates that 'tile_counters' are cleared between batches. Prevents "spider web" corruption. | A large red background with a smaller green triangle strictly in the center. |
+| **GEO-05** | **Strip Winding** | Single Triangle Strip (4 vertices). Verifies Even/Odd strip winding unrolling. | A solid red square. If unrolling is wrong, one triangle will be culled and only half will appear. |
+| **GEO-06** | **NaN & Inf Safety** | Triangles with quiet NaN and Infinity coordinates. Verifies renderer robustness. | Two green squares. Invalid triangles in the middle must be invisible and not cause artifacts. |
+| **GEO-08** | **Front Culling** | CCW triangle with Front-Face culling. Verifies PVR Front-Face (CCW) mode. | A Yellow triangle (CW) is visible. A Blue triangle (CCW) is culled. |
 | **GEO-07** | **Overdraw Logic** | Draws two overlapping translucent triangles within the SAME batch. | A purple intersection. If bugged, the blue triangle will have a 'hole' where the red one is. |
 
 ## 2. Shading & Interpolation (SHD)
@@ -56,5 +59,4 @@ The following tests are planned but not yet implemented in the current C++ test 
 
 - **MOD-01 (Opaque Modifier)**: Stencil-based masking for opaque volumes.
 - **MOD-02 (Translucent Modifier)**: Separate stencil pass for translucent volume clipping.
-- **EXT-GEO (Degenerate Polys)**: Stability test for zero-area triangles.
 - **EXT-TEX (Palette Thrash)**: Rapid palette updates between draw calls in a single frame.

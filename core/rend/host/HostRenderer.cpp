@@ -70,11 +70,20 @@ void HostRenderer::Term() {
     unloadPlugin();
 }
 
-static FlycastCullMode MapCullMode(u32 pvrCullMode) {
+static FlycastCullMode MapCullMode(u32 pvrCullMode, bool dCalcCtrl) {
+    if (dCalcCtrl) {
+        // XOR with 1 flips between CCW (2) and CW (3)
+        if (pvrCullMode >= 2) pvrCullMode ^= 1;
+    }
+
     switch (pvrCullMode) {
-        case 0: return FLYCAST_CULL_NONE;
-        case 1: return FLYCAST_CULL_BACK;
-        case 2: return FLYCAST_CULL_FRONT;
+        case 0: // None
+        case 1: // Small (Cull if area < threshold, maps best to None in plugins)
+            return FLYCAST_CULL_NONE;
+        case 2: // CCW
+            return FLYCAST_CULL_FRONT;
+        case 3: // CW
+            return FLYCAST_CULL_BACK;
         default: return FLYCAST_CULL_NONE;
     }
 }
@@ -127,15 +136,29 @@ void HostRenderer::Process(TA_context *ctx) {
             cmd.vertex_offset = poly.first; // Direct offset into ctx->rend.verts
             cmd.vertex_count = poly.count;
 
-            cmd.scissor_enable = true;
-            cmd.scissor_x = ctx->rend.fb_X_CLIP.min;
-            cmd.scissor_y = ctx->rend.fb_Y_CLIP.min;
-            cmd.scissor_w = (int32_t)ctx->rend.fb_X_CLIP.max - (int32_t)ctx->rend.fb_X_CLIP.min + 1;
-            cmd.scissor_h = (int32_t)ctx->rend.fb_Y_CLIP.max - (int32_t)ctx->rend.fb_Y_CLIP.min + 1;
-            if (cmd.scissor_w < 0) cmd.scissor_w = 0;
-            if (cmd.scissor_h < 0) cmd.scissor_h = 0;
+            // Scissor calculation (Global Clip + Optional User Clip)
+            int32_t clip_xmin = ctx->rend.fb_X_CLIP.min;
+            int32_t clip_xmax = ctx->rend.fb_X_CLIP.max;
+            int32_t clip_ymin = ctx->rend.fb_Y_CLIP.min;
+            int32_t clip_ymax = ctx->rend.fb_Y_CLIP.max;
 
-            cmd.cull_mode = MapCullMode(poly.isp.CullMode);
+            u32 clipMode = (poly.tileclip >> 28) & 3;
+            if (clipMode == 2) { // Inside User Clip
+                clip_xmin = std::max(clip_xmin, (int32_t)(poly.tileclip & 63) * 32);
+                clip_xmax = std::min(clip_xmax, (int32_t)((poly.tileclip >> 6) & 63) * 32 + 31);
+                clip_ymin = std::max(clip_ymin, (int32_t)((poly.tileclip >> 12) & 31) * 32);
+                clip_ymax = std::min(clip_ymax, (int32_t)((poly.tileclip >> 17) & 31) * 32 + 31);
+            }
+            // Note: Outside User Clip (mode 3) is not easily supported by hardware scissor
+            // and is rarely used by games for standard geometry.
+
+            cmd.scissor_enable = true;
+            cmd.scissor_x = clip_xmin;
+            cmd.scissor_y = clip_ymin;
+            cmd.scissor_w = std::max(0, clip_xmax - clip_xmin + 1);
+            cmd.scissor_h = std::max(0, clip_ymax - clip_ymin + 1);
+
+            cmd.cull_mode = MapCullMode(poly.isp.CullMode, poly.isp.DCalcCtrl);
 
             cmd.texture_handle = 0;
             if (poly.pcw.Texture && poly.texture) {
